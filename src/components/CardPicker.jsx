@@ -18,7 +18,7 @@ export default function CardPicker({ selectedVote, onVote, disabled, label, acce
             disabled={disabled}
             style={{
               ...styles.card,
-              ...(selectedVote === value ? { ...styles.selected, borderColor: accentColor || '#d4a853' } : {}),
+              ...(selectedVote === value ? { ...styles.selected, border: `3px solid ${accentColor || '#d4a853'}` } : {}),
               ...(disabled ? styles.disabled : {}),
             }}
           >
@@ -44,7 +44,7 @@ export function SplitCardPicker({ voteFe, voteBe, onVoteFe, onVoteBe, disabled, 
               disabled={disabled}
               style={{
                 ...styles.splitCard,
-                ...(voteFe === value ? { ...styles.selected, borderColor: '#3498db' } : {}),
+                ...(voteFe === value ? { ...styles.selected, border: '3px solid #3498db' } : {}),
                 ...(disabled ? styles.disabled : {}),
               }}
             >
@@ -63,7 +63,7 @@ export function SplitCardPicker({ voteFe, voteBe, onVoteFe, onVoteBe, disabled, 
               disabled={disabled}
               style={{
                 ...styles.splitCard,
-                ...(voteBe === value ? { ...styles.selected, borderColor: '#27ae60' } : {}),
+                ...(voteBe === value ? { ...styles.selected, border: '3px solid #27ae60' } : {}),
                 ...(disabled ? styles.disabled : {}),
               }}
             >
