@@ -5,6 +5,8 @@ import PlayerList from './PlayerList';
 import ResultModal from './ResultModal';
 import Wizard from './Wizard';
 import RevealBackground from './RevealBackground';
+import Chicken from './Chicken';
+import Sheep from './Sheep';
 
 export default function Room({ roomCode, playerName, role = 'player' }) {
   const {
@@ -15,6 +17,10 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
     specialRound,
     pmQuote,
     setPmQuote,
+    oktaEvent,
+    triggerOkta,
+    syncedEvent,
+    fireSyncedEvent,
     isLeader,
     connected,
     castVote,
@@ -48,8 +54,29 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
 
   const handleReveal = async () => {
     await revealCards();
+    // 1% chance chicken easter egg — synced via Firebase
+    if (Math.random() < 0.01) {
+      fireSyncedEvent({ type: 'chicken' }, 3500);
+    }
     setTimeout(() => setShowResult(true), 300);
   };
+
+  // OKTA easter egg — only for "Honza", detect O+K+T+A keys held together
+  useEffect(() => {
+    if (playerName.toLowerCase() !== 'honza') return;
+    const pressed = new Set();
+    const check = () => {
+      if (pressed.has('o') && pressed.has('k') && pressed.has('t') && pressed.has('a')) {
+        triggerOkta();
+        pressed.clear();
+      }
+    };
+    const down = (e) => { pressed.add(e.key.toLowerCase()); check(); };
+    const up = (e) => { pressed.delete(e.key.toLowerCase()); };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
+  }, [playerName, triggerOkta]);
 
   const handleNewRound = () => {
     setShowResult(false);
@@ -173,6 +200,9 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
         phase={phase}
         currentPlayer={playerName}
         splitMode={splitMode}
+        syncedEvent={syncedEvent}
+        fireSyncedEvent={fireSyncedEvent}
+        isLeader={isLeader}
       />
 
       {/* Card picker — only for players, not PM */}
@@ -224,6 +254,10 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
           </div>
         </div>
       )}
+
+      {/* Easter eggs — all synced via Firebase */}
+      {syncedEvent?.type === 'chicken' && <Chicken />}
+      {oktaEvent && <Sheep />}
 
       {/* Reveal background numbers */}
       {phase === 'revealed' && (

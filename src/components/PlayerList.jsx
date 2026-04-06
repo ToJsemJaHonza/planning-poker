@@ -1,7 +1,46 @@
 import { useRef, useState, useEffect } from 'react';
 import PlayerFigure from './PlayerFigure';
+import Train from './Train';
 
 const pixel = "'Press Start 2P', monospace";
+
+function isRichardName(name) {
+  const clean = name.toLowerCase().replace(/\./g, '');
+  return ['richard', 'ricardo', 'ricardino', 'ricardito', 'ricardinho'].includes(clean);
+}
+
+const DEV_QUOTES = [
+  "It works on my machine",
+  "It's not a bug, it's a feature",
+  "Have you tried turning it off and on?",
+  "// TODO: fix this later",
+  "99 bugs in the code... fix one... 127 bugs in the code",
+  "There's no place like 127.0.0.1",
+  "I don't always test my code, but when I do, I do it in production",
+  "git commit -m 'fixed stuff'",
+  "Stackoverflow said so",
+  "Works on my machine ¯\\_(ツ)_/¯",
+  "sudo make me a sandwich",
+  "!false — it's funny because it's true",
+  "There are 10 types of people...",
+  "It compiled! Ship it!",
+  "My code doesn't have bugs, it has features",
+  "Sleep is for the weak. We have coffee",
+  "Real programmers count from 0",
+  "The code is self-documenting",
+  "I'll refactor this later...",
+  "Who needs tests anyway?",
+  "Tabs > Spaces. Fight me",
+  "In my defense, it passed CI",
+  "Can't reproduce. Closing ticket",
+  "That's a layer 8 problem",
+  "rm -rf node_modules && npm i",
+  "Hello world!",
+  "null pointer? I barely know her!",
+  "Merge conflict. Again.",
+  "LGTM 👍",
+  "This should be a 2-pointer, right?",
+];
 
 // Direction + speed based on name hash
 const ENTER_DIRECTIONS = ['left', 'right'];
@@ -16,7 +55,9 @@ function hashDir(name) {
   };
 }
 
-export default function PlayerList({ players, phase, currentPlayer, splitMode }) {
+const FUKNAMES = ['františek', 'fanda'];
+
+export default function PlayerList({ players, phase, currentPlayer, splitMode, syncedEvent, fireSyncedEvent, isLeader }) {
   const playerEntries = Object.entries(players)
     .filter(([_, data]) => data.role !== 'pm')
     .sort((a, b) => a[1].joinedAt - b[1].joinedAt);
@@ -24,6 +65,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode })
   // Track known players to detect new joins
   const knownRef = useRef(new Set());
   const [enteringPlayers, setEnteringPlayers] = useState({});
+  const trainTriggeredRef = useRef(new Set());
 
   useEffect(() => {
     const currentNames = playerEntries.map(([name]) => name);
@@ -32,9 +74,16 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode })
     let maxDuration = 0;
     for (const name of currentNames) {
       if (!knownRef.current.has(name)) {
-        const info = hashDir(name);
-        newPlayers[name] = info;
-        if (info.duration > maxDuration) maxDuration = info.duration;
+        // Richard variants: 10% chance of train entrance — leader fires via Firebase
+        if (isLeader && isRichardName(name) && Math.random() < 0.1 && !syncedEvent && !trainTriggeredRef.current.has(name)) {
+          trainTriggeredRef.current.add(name);
+          const fromRight = Math.random() > 0.5;
+          fireSyncedEvent?.({ type: 'train', playerName: name, fromRight }, 12000);
+        } else if (!isRichardName(name) || !syncedEvent || syncedEvent.type !== 'train' || syncedEvent.playerName !== name) {
+          const info = hashDir(name);
+          newPlayers[name] = info;
+          if (info.duration > maxDuration) maxDuration = info.duration;
+        }
       }
     }
 
@@ -52,14 +101,93 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode })
     knownRef.current = new Set(currentNames);
   }, [playerEntries.map(([n]) => n).join(',')]);
 
+  // === ALL EVENTS SYNCED VIA FIREBASE (leader decides, all clients render) ===
+
+  // Fuk eyes — leader decides on phase change, writes to Firebase
+  const fukEyesSet = new Set(syncedEvent?.type === 'fukEyes' ? syncedEvent.names : []);
+  useEffect(() => {
+    if (!isLeader) return;
+    const fuk = [];
+    playerEntries.forEach(([name]) => {
+      if (FUKNAMES.includes(name.toLowerCase()) && Math.random() < 0.1) {
+        fuk.push(name);
+      }
+    });
+    if (fuk.length > 0) {
+      fireSyncedEvent?.({ type: 'fukEyes', names: fuk }, 60000); // lasts until next round
+    }
+  }, [phase, isLeader]);
+
+  // Train — leader decides when Richard joins
+  const trainFromEvent = syncedEvent?.type === 'train' ? syncedEvent : null;
+  const [hiddenByTrain, setHiddenByTrain] = useState(new Set());
+
+  useEffect(() => {
+    if (trainFromEvent) {
+      setHiddenByTrain(new Set([trainFromEvent.playerName]));
+    }
+  }, [trainFromEvent?.playerName]);
+
+  const handleTrainPlayerExit = () => {
+    if (!trainFromEvent) return;
+    const name = trainFromEvent.playerName;
+    setHiddenByTrain(new Set());
+    const info = { dir: trainFromEvent.fromRight ? 'right' : 'left', duration: 1.5 };
+    setEnteringPlayers(prev => ({ ...prev, [name]: info }));
+    setTimeout(() => {
+      setEnteringPlayers(prev => { const next = { ...prev }; delete next[name]; return next; });
+    }, 1700);
+  };
+
+  // Alan coffee — leader fires on reveal
+  useEffect(() => {
+    if (!isLeader || phase !== 'revealed') return;
+    playerEntries.forEach(([name, data]) => {
+      if (name.toLowerCase() === 'alan' && data.vote === '☕' && Math.random() < 0.1) {
+        setTimeout(() => {
+          fireSyncedEvent?.({ type: 'devQuote', name, text: 'Fullstack FE developer' }, 4000);
+        }, 1500);
+      }
+    });
+  }, [phase, isLeader]);
+
+  // Dev quotes — leader triggers, 2% chance every 3s
+  const activeQuote = syncedEvent?.type === 'devQuote' ? syncedEvent : null;
+  useEffect(() => {
+    if (!isLeader) return;
+    const names = playerEntries.map(([n]) => n);
+    if (names.length === 0) return;
+    const interval = setInterval(() => {
+      if (syncedEvent) return; // something already showing
+      if (Math.random() < 0.02) {
+        const name = names[Math.floor(Math.random() * names.length)];
+        const text = DEV_QUOTES[Math.floor(Math.random() * DEV_QUOTES.length)];
+        fireSyncedEvent?.({ type: 'devQuote', name, text }, 3000);
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [playerEntries.length, isLeader, syncedEvent]);
+
   return (
     <div style={styles.container}>
+      {/* Richard's train — synced via Firebase */}
+      {trainFromEvent && (
+        <Train
+          fromRight={trainFromEvent.fromRight}
+          onPlayerExit={handleTrainPlayerExit}
+        />
+      )}
+
       <div style={styles.grid}>
         {playerEntries.map(([name, data]) => {
+          // Hide player during train sequence
+          if (hiddenByTrain.has(name)) return null;
+
           const isMe = name === currentPlayer;
           const enterInfo = enteringPlayers[name];
           const enterClass = enterInfo ? `player-enter-${enterInfo.dir}` : '';
           const enterStyle = enterInfo ? { '--enter-duration': `${enterInfo.duration}s` } : {};
+          const isSpeaking = activeQuote && activeQuote.name === name;
 
           if (splitMode) {
             const hasVotedFe = data.voteFe != null;
@@ -100,7 +228,10 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode })
                   </div>
                 </div>
 
-                <PlayerFigure name={name} holdingCard={false} />
+                <div style={{ position: 'relative' }}>
+                  <PlayerFigure name={name} holdingCard={false} fukEyes={fukEyesSet.has(name)} />
+                  {isSpeaking && <div style={styles.devBubble}>{activeQuote.text}</div>}
+                </div>
 
                 <div style={{
                   ...styles.nameTag,
@@ -128,7 +259,10 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode })
                 )}
               </div>
 
-              <PlayerFigure name={name} holdingCard={false} />
+              <div style={{ position: 'relative' }}>
+                <PlayerFigure name={name} holdingCard={false} fukEyes={fukEyesSet.has(name)} />
+                {isSpeaking && <div style={styles.devBubble}>{activeQuote.text}</div>}
+              </div>
 
               <div style={{
                 ...styles.nameTag,
@@ -151,6 +285,24 @@ const cardBase = {
   borderRadius: '0',
   fontFamily: pixel,
   fontWeight: 'bold',
+};
+
+const devBubbleStyle = {
+  position: 'absolute',
+  bottom: '100%',
+  left: '50%',
+  transform: 'translateX(-50%)',
+  background: '#fff',
+  border: '2px solid #3498db',
+  borderRadius: '6px',
+  padding: '4px 8px',
+  fontSize: '0.45rem',
+  fontFamily: pixel,
+  color: '#2a2a3a',
+  whiteSpace: 'nowrap',
+  boxShadow: '2px 2px 0 #2074a8',
+  zIndex: 10,
+  marginBottom: '4px',
 };
 
 const hiddenPattern = {
@@ -264,4 +416,5 @@ const styles = {
     background: '#d4a853',
     color: '#2a2a3a',
   },
+  devBubble: devBubbleStyle,
 };

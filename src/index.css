@@ -127,6 +127,53 @@ body {
   100% { margin-top: 0; }
 }
 
+/* Chicken easter egg */
+@keyframes chickenRun {
+  0% { left: -50px; top: 60%; transform: scaleX(1); }
+  10% { top: 55%; }
+  20% { top: 65%; }
+  30% { top: 50%; }
+  40% { top: 60%; }
+  50% { top: 55%; }
+  60% { top: 65%; }
+  70% { top: 50%; }
+  80% { top: 60%; }
+  90% { top: 55%; }
+  100% { left: calc(100vw + 50px); top: 60%; transform: scaleX(1); }
+}
+
+/* Richard's Shinkansen train (loco 96px + 3 wagons 104px each = 408px total) */
+@keyframes trainArriveLeft {
+  0% { left: -500px; }
+  100% { left: calc(50% - 204px); }
+}
+@keyframes trainDepartLeft {
+  0% { left: calc(50% - 204px); }
+  100% { left: calc(100vw + 500px); }
+}
+@keyframes trainArriveRight {
+  0% { left: calc(100vw + 500px); }
+  100% { left: calc(50% - 204px); }
+}
+@keyframes trainDepartRight {
+  0% { left: calc(50% - 204px); }
+  100% { left: -500px; }
+}
+
+/* OKTA sheep easter egg */
+@keyframes sheepRun {
+  0% { left: -60px; top: 45%; }
+  20% { top: 40%; }
+  40% { top: 50%; }
+  60% { top: 42%; }
+  80% { top: 48%; }
+  100% { left: calc(100vw + 60px); top: 45%; }
+}
+@keyframes sheepTextRun {
+  0% { left: -100%; top: 35%; }
+  100% { left: 120%; top: 35%; }
+}
+
 /* Reveal background numbers */
 @keyframes revealBgFade {
   0% { opacity: 0; }

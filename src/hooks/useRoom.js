@@ -17,6 +17,9 @@ export function useRoom(roomCode, playerName, role = 'player') {
   const [splitMode, setSplitMode] = useState(false);
   const [specialRound, setSpecialRound] = useState(false);
   const [pmQuote, setPmQuote] = useState('');
+  const [oktaEvent, setOktaEvent] = useState(false);
+  // Unified synced events: { type, data } or null
+  const [syncedEvent, setSyncedEvent] = useState(null);
   const [isLeader, setIsLeader] = useState(false);
   const [connected, setConnected] = useState(false);
   const unsubscribesRef = useRef([]);
@@ -96,6 +99,8 @@ export function useRoom(roomCode, playerName, role = 'player') {
         setSplitMode(data.splitMode || false);
         setSpecialRound(data.specialRound || false);
         setPmQuote(data.pmQuote || '');
+        setOktaEvent(data.oktaEvent || false);
+        setSyncedEvent(data.syncedEvent || null);
       }
     });
 
@@ -178,6 +183,19 @@ export function useRoom(roomCode, playerName, role = 'player') {
     set(ref(db, `rooms/${roomCode}/meta/pmQuote`), q);
   }, [roomCode]);
 
+  // Fire a synced event visible to all players
+  const fireSyncedEvent = useCallback((eventData, durationMs = 4000) => {
+    if (!roomCode) return;
+    set(ref(db, `rooms/${roomCode}/meta/syncedEvent`), eventData);
+    setTimeout(() => set(ref(db, `rooms/${roomCode}/meta/syncedEvent`), null), durationMs);
+  }, [roomCode]);
+
+  const triggerOkta = useCallback(() => {
+    if (!roomCode) return;
+    set(ref(db, `rooms/${roomCode}/meta/oktaEvent`), true);
+    setTimeout(() => set(ref(db, `rooms/${roomCode}/meta/oktaEvent`), false), 4500);
+  }, [roomCode]);
+
   return {
     players,
     phase,
@@ -186,6 +204,10 @@ export function useRoom(roomCode, playerName, role = 'player') {
     specialRound,
     pmQuote,
     setPmQuote: setPmQuoteFirebase,
+    oktaEvent,
+    triggerOkta,
+    syncedEvent,
+    fireSyncedEvent,
     isLeader,
     connected,
     castVote,

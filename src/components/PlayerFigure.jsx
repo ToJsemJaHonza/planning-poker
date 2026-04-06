@@ -317,8 +317,33 @@ function spriteToBoxShadow(grid, px) {
   return shadows.join(',');
 }
 
-export default function PlayerFigure({ name, holdingCard }) {
+export default function PlayerFigure({ name, holdingCard, fukEyes }) {
   const shadow = useMemo(() => {
+    if (fukEyes) {
+      // Only show from nose up, pushed to the bottom of the sprite area
+      const h = hashName(name || 'default');
+      const hr = pick(h, 0, HAIR_COLORS);
+      const sk = pick(h, 3, SKIN_TONES);
+      const ns = '#c09060';
+      const hasGlasses = (h >> 12) % 3 === 0;
+      const e4 = hasGlasses ? '#4a90d9' : O;
+      const empty = [_,_,_,_,_,_,_,_,_,_,_,_];
+
+      const grid = [
+        empty, empty, empty, empty, empty, empty, empty, empty, empty,
+        // Hair peeking
+        [_,_,_,_,hr,hr,hr,hr,_,_,_,_],
+        [_,_,_,hr,hr,hr,hr,hr,hr,_,_,_],
+        // Forehead
+        [_,_,_,hr,sk,sk,sk,sk,hr,_,_,_],
+        // Eyes (wide open, peeking)
+        [_,_,_,sk,e4,sk,sk,e4,sk,_,_,_],
+        // Nose at very bottom
+        [_,_,_,sk,sk,sk,ns,sk,sk,_,_,_],
+      ];
+      return spriteToBoxShadow(grid, PX);
+    }
+
     const grid = generateSprite(name || 'default');
 
     // If holding card, extend right arm to the side
@@ -331,7 +356,7 @@ export default function PlayerFigure({ name, holdingCard }) {
     }
 
     return spriteToBoxShadow(grid, PX);
-  }, [name, holdingCard]);
+  }, [name, holdingCard, fukEyes]);
 
   return (
     <div style={{ width: SPRITE_W, height: SPRITE_H, position: 'relative' }}>

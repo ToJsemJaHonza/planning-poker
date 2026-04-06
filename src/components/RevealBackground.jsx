@@ -81,6 +81,10 @@ export default function RevealBackground({ players, splitMode }) {
             color: item.color,
             transform: `rotate(${item.rotation}deg)`,
             animationDelay: `${item.delay}s`,
+            animationName: 'revealNumberPop',
+            animationDuration: '8s',
+            animationTimingFunction: 'ease-out',
+            animationFillMode: 'forwards',
           }}
         >
           {item.value}
@@ -104,7 +108,7 @@ const styles = {
     fontFamily: pixel,
     fontWeight: 'bold',
     opacity: 0,
-    animation: 'revealNumberPop 8s ease-out forwards',
+    /* animation set via inline styles to avoid shorthand conflict */
     textShadow: '2px 2px 0 rgba(0,0,0,0.1)',
   },
 };

@@ -205,20 +205,23 @@ export default function Wizard({ isCasting, onCastComplete, onQuote }) {
   // Track sprite position for bubble (outside flipping container)
   useEffect(() => {
     if (!isThinking || !quote) { setBubblePos(null); return; }
+    let active = true;
     const update = () => {
+      if (!active) return;
       if (spriteRef.current) {
         const rect = spriteRef.current.getBoundingClientRect();
         setBubblePos({ x: rect.left + rect.width / 2, y: rect.top - 10 });
       }
-      if (isThinking && quote) requestAnimationFrame(update);
+      requestAnimationFrame(update);
     };
     update();
+    return () => { active = false; setBubblePos(null); };
   }, [isThinking, quote]);
 
   return (
     <div style={styles.wrap}>
       {/* Bubble rendered outside the flipping container */}
-      {bubblePos && (
+      {isThinking && quote && bubblePos && (
         <div style={{
           ...styles.bubble,
           left: bubblePos.x,
