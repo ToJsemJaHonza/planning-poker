@@ -1,9 +1,10 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRoom } from '../hooks/useRoom';
 import CardPicker, { SplitCardPicker } from './CardPicker';
 import PlayerList from './PlayerList';
 import ResultModal from './ResultModal';
 import Wizard from './Wizard';
+import RevealBackground from './RevealBackground';
 
 export default function Room({ roomCode, playerName, role = 'player' }) {
   const {
@@ -12,6 +13,8 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
     task,
     splitMode,
     specialRound,
+    pmQuote,
+    setPmQuote,
     isLeader,
     connected,
     castVote,
@@ -30,7 +33,6 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
   const [taskDraft, setTaskDraft] = useState('');
   const [showResult, setShowResult] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [casting, setCasting] = useState(false);
 
   const me = players[playerName];
   const myVote = me?.vote || null;
@@ -44,19 +46,10 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
     ? votingPlayers.filter(p => p.voteFe != null && p.voteBe != null).length
     : votingPlayers.filter(p => p.vote != null).length;
 
-  const handleReveal = () => {
-    setCasting(true);
-  };
-
-  const handleCastComplete = useCallback(async () => {
-    setCasting(false);
+  const handleReveal = async () => {
     await revealCards();
-    setTimeout(() => setShowResult(true), 800);
-  }, [revealCards]);
-
-  useEffect(() => {
-    if (!isLeader && casting) setCasting(false);
-  }, [isLeader, casting]);
+    setTimeout(() => setShowResult(true), 300);
+  };
 
   const handleNewRound = () => {
     setShowResult(false);
@@ -92,7 +85,14 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
   return (
     <div style={{ ...styles.container, paddingBottom: isPM ? '80px' : canControl ? (splitMode ? '280px' : '240px') : (splitMode ? '220px' : '190px') }}>
       {canControl && (
-        <Wizard isCasting={casting} onCastComplete={handleCastComplete} />
+        <Wizard isCasting={false} onCastComplete={() => {}} onQuote={setPmQuote} />
+      )}
+
+      {/* PM quote visible to players (non-PM) */}
+      {!canControl && pmQuote && (
+        <div style={styles.playerQuoteBanner}>
+          <span style={styles.playerQuoteText}>📋 {pmQuote}</span>
+        </div>
       )}
 
       {/* Header */}
@@ -154,7 +154,7 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
             <button
               onClick={handleReveal}
               style={styles.revealBtn}
-              disabled={votedCount === 0 || casting}
+              disabled={votedCount === 0}
             >
               Reveal Cards
             </button>
@@ -223,6 +223,11 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
             <div style={styles.specialStars}>✦ ✦ ✦</div>
           </div>
         </div>
+      )}
+
+      {/* Reveal background numbers */}
+      {phase === 'revealed' && (
+        <RevealBackground players={players} splitMode={splitMode} />
       )}
 
       {/* Result modal */}
@@ -399,6 +404,26 @@ const styles = {
     fontSize: '1.2rem',
     fontFamily: pixel,
     color: '#fff',
+  },
+  // PM quote banner for players
+  playerQuoteBanner: {
+    position: 'fixed',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    zIndex: 45,
+    pointerEvents: 'none',
+    animation: 'revealBgFade 4s ease-in-out forwards',
+  },
+  playerQuoteText: {
+    fontSize: '0.75rem',
+    fontFamily: pixel,
+    color: '#2a2a3a',
+    background: '#fff',
+    border: '3px solid #d4a853',
+    padding: '10px 18px',
+    boxShadow: '4px 4px 0 #b8922e',
+    whiteSpace: 'nowrap',
   },
   // SPECIAL ROUND overlay
   specialOverlay: {

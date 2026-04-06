@@ -16,6 +16,7 @@ export function useRoom(roomCode, playerName, role = 'player') {
   const [task, setTask] = useState('');
   const [splitMode, setSplitMode] = useState(false);
   const [specialRound, setSpecialRound] = useState(false);
+  const [pmQuote, setPmQuote] = useState('');
   const [isLeader, setIsLeader] = useState(false);
   const [connected, setConnected] = useState(false);
   const unsubscribesRef = useRef([]);
@@ -94,6 +95,7 @@ export function useRoom(roomCode, playerName, role = 'player') {
         setTask(data.task || '');
         setSplitMode(data.splitMode || false);
         setSpecialRound(data.specialRound || false);
+        setPmQuote(data.pmQuote || '');
       }
     });
 
@@ -169,12 +171,19 @@ export function useRoom(roomCode, playerName, role = 'player') {
     set(ref(db, `rooms/${roomCode}/meta/task`), newTask);
   }, [roomCode, isLeader]);
 
+  const setPmQuoteFirebase = useCallback((q) => {
+    if (!roomCode) return;
+    set(ref(db, `rooms/${roomCode}/meta/pmQuote`), q);
+  }, [roomCode]);
+
   return {
     players,
     phase,
     task,
     splitMode,
     specialRound,
+    pmQuote,
+    setPmQuote: setPmQuoteFirebase,
     isLeader,
     connected,
     castVote,

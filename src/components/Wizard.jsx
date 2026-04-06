@@ -99,10 +99,54 @@ const SPARKLE_DIRS = [
   { dx: -22, dy: -10 }, { dx: 12, dy: -38 },
 ];
 
-export default function Wizard({ isCasting, onCastComplete }) {
+const QUOTES = [
+  // Michael Scott classics
+  "That's what she said",
+  "I'm not superstitious... just a little stitious",
+  "Would I rather be feared or loved? Both. I want people to be afraid of how much they love me",
+  "I am Beyoncé, always",
+  "Sometimes I'll start a sentence and I don't even know where it's going",
+  "I'm an early bird and a night owl. So I'm wise and have worms",
+  "You miss 100% of the shots you don't take",
+  "I knew exactly what to do. But in a much more real sense, I had no idea what to do",
+  "I am running away from my responsibilities. And it feels good",
+  "I'm not a hero. I'm a dynamic manager",
+  "It's a beautiful day to estimate tickets",
+  "Why are you the way that you are?",
+  "I declare bankruptcy!",
+  "That is a $200 plasma screen TV that you just killed!",
+  // PM classics
+  "Let's circle back on this",
+  "Can we align on this?",
+  "Let's put a pin in it",
+  "Per my last email...",
+  "Quick sync anyone?",
+  "Let's take this offline",
+  "Think outside the box!",
+  "Low-hanging fruit!",
+  "Let's double-click on that",
+  "Who owns this?",
+  "It's on the roadmap",
+  "Ballpark estimate?",
+  "Let's timebox this",
+  "We need more synergy",
+  "Is this scalable?",
+  "What's the bandwidth?",
+  "Let's leverage this",
+  "Action items, people!",
+  "We need to pivot",
+  "Moving the needle here",
+  "Let's boil the ocean",
+  "This is a paradigm shift",
+  "Can we get a RACI on this?",
+  "Let's parking lot that",
+];
+
+export default function Wizard({ isCasting, onCastComplete, onQuote }) {
   const [walkFrame, setWalkFrame] = useState(0);
   const [showSparkles, setShowSparkles] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
+  const [quote, setQuote] = useState('');
   const walkRef = useRef(null);
   const castRef = useRef(null);
   const thinkRef = useRef(null);
@@ -118,10 +162,23 @@ export default function Wizard({ isCasting, onCastComplete }) {
     const loop = () => {
       thinkRef.current = setTimeout(() => {
         if (!isCasting) {
+          // 20% chance of saying a quote, otherwise just pause silently
+          if (Math.random() < 0.2) {
+            const q = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+            setQuote(q);
+            onQuote?.(q);
+          } else {
+            setQuote('');
+            onQuote?.('');
+          }
           setIsThinking(true);
-          setTimeout(() => { setIsThinking(false); loop(); }, 2000 + Math.random() * 1500);
+          setTimeout(() => {
+            setIsThinking(false);
+            onQuote?.('');
+            loop();
+          }, 2500 + Math.random() * 1500);
         }
-      }, 6000 + Math.random() * 10000);
+      }, 5000 + Math.random() * 8000);
     };
     loop();
     return () => { clearInterval(walkRef.current); clearTimeout(thinkRef.current); };
@@ -146,7 +203,7 @@ export default function Wizard({ isCasting, onCastComplete }) {
     <div style={styles.wrap}>
       <div className="wizard-walk" style={{ ...styles.sprite, animationPlayState: paused ? 'paused' : 'running' }}>
         <div style={{ width: 1, height: 1, boxShadow: shadow, position: 'absolute', top: 0, left: 0 }} />
-        {isThinking && <div style={styles.bubble}>🤔</div>}
+        {isThinking && quote && <div className="wizard-bubble" style={styles.bubble}>{quote}</div>}
         {showSparkles && SPARKLE_DIRS.map((d, i) => (
           <span key={i} style={{
             ...styles.sparkle,
@@ -169,8 +226,18 @@ const styles = {
     textShadow: '0 0 8px #f5c542, 0 0 16px #d4a853',
   },
   bubble: {
-    position: 'absolute', top: -8, left: SPRITE_W + 2,
-    fontSize: 20,
+    position: 'absolute',
+    bottom: SPRITE_H - 5,
+    left: SPRITE_W + 4,
+    background: '#fff',
+    border: '2px solid #d4a853',
+    borderRadius: '6px',
+    padding: '4px 8px',
+    fontSize: '0.7rem',
+    fontFamily: "'Press Start 2P', monospace",
+    color: '#2a2a3a',
+    whiteSpace: 'nowrap',
     animation: 'float 1.5s ease-in-out infinite',
+    boxShadow: '2px 2px 0 #b8922e',
   },
 };

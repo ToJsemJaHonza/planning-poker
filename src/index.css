@@ -97,37 +97,53 @@ body {
   50% { transform: scale(1.2); opacity: 1; }
 }
 
-/* Player enter animations — walk in from edge */
+/* Prevent wizard speech bubble from mirroring */
+.wizard-bubble {
+  transform: scaleX(1) !important;
+}
+
+/* Player enter animations — walk in from edge with bobbing */
 .player-enter-left {
-  animation: enterFromLeft 0.8s ease-out;
+  animation: enterFromLeft var(--enter-duration, 1.5s) ease-out, walkBob var(--enter-duration, 1.5s) steps(2) forwards;
 }
 .player-enter-right {
-  animation: enterFromRight 0.8s ease-out;
-}
-.player-enter-top {
-  animation: enterFromTop 0.8s ease-out;
-}
-.player-enter-bottom {
-  animation: enterFromBottom 0.8s ease-out;
+  animation: enterFromRight var(--enter-duration, 1.5s) ease-out, walkBob var(--enter-duration, 1.5s) steps(2) forwards;
 }
 
 @keyframes enterFromLeft {
-  0% { transform: translateX(-120vw); opacity: 0; }
-  20% { opacity: 1; }
+  0% { transform: translateX(-50vw); }
   100% { transform: translateX(0); }
 }
 @keyframes enterFromRight {
-  0% { transform: translateX(120vw); opacity: 0; }
-  20% { opacity: 1; }
+  0% { transform: translateX(50vw); }
   100% { transform: translateX(0); }
 }
-@keyframes enterFromTop {
-  0% { transform: translateY(-50vh); opacity: 0; }
-  20% { opacity: 1; }
-  100% { transform: translateY(0); }
+@keyframes walkBob {
+  0% { margin-top: 0; }
+  10% { margin-top: -3px; }
+  20% { margin-top: 0; }
+  30% { margin-top: -3px; }
+  40% { margin-top: 0; }
+  50% { margin-top: -3px; }
+  60% { margin-top: 0; }
+  70% { margin-top: -3px; }
+  80% { margin-top: 0; }
+  90% { margin-top: -3px; }
+  100% { margin-top: 0; }
 }
-@keyframes enterFromBottom {
-  0% { transform: translateY(50vh); opacity: 0; }
-  20% { opacity: 1; }
-  100% { transform: translateY(0); }
+
+/* Reveal background numbers */
+@keyframes revealBgFade {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes revealNumberPop {
+  0% { opacity: 0; transform: scale(0.3) rotate(var(--r, 0deg)); }
+  15% { opacity: 0.12; transform: scale(1.1) rotate(var(--r, 0deg)); }
+  25% { opacity: 0.08; transform: scale(1) rotate(var(--r, 0deg)); }
+  80% { opacity: 0.06; }
+  100% { opacity: 0; }
 }

@@ -3,13 +3,17 @@ import PlayerFigure from './PlayerFigure';
 
 const pixel = "'Press Start 2P', monospace";
 
-// Directions a new player can enter from
-const ENTER_DIRECTIONS = ['left', 'right', 'top', 'bottom'];
+// Direction + speed based on name hash
+const ENTER_DIRECTIONS = ['left', 'right'];
 
 function hashDir(name) {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
-  return ENTER_DIRECTIONS[Math.abs(h) % ENTER_DIRECTIONS.length];
+  const abs = Math.abs(h);
+  return {
+    dir: ENTER_DIRECTIONS[abs % 2],
+    duration: 1.2 + (abs % 10) * 0.15, // 1.2s to 2.55s — varying speed
+  };
 }
 
 export default function PlayerList({ players, phase, currentPlayer, splitMode }) {
@@ -25,23 +29,24 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode })
     const currentNames = playerEntries.map(([name]) => name);
     const newPlayers = {};
 
+    let maxDuration = 0;
     for (const name of currentNames) {
       if (!knownRef.current.has(name)) {
-        // New player — assign random enter direction
-        newPlayers[name] = hashDir(name);
+        const info = hashDir(name);
+        newPlayers[name] = info;
+        if (info.duration > maxDuration) maxDuration = info.duration;
       }
     }
 
     if (Object.keys(newPlayers).length > 0) {
       setEnteringPlayers(prev => ({ ...prev, ...newPlayers }));
-      // Clear entering state after animation completes
       setTimeout(() => {
         setEnteringPlayers(prev => {
           const next = { ...prev };
           Object.keys(newPlayers).forEach(n => delete next[n]);
           return next;
         });
-      }, 800);
+      }, (maxDuration + 0.2) * 1000);
     }
 
     knownRef.current = new Set(currentNames);
@@ -52,9 +57,9 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode })
       <div style={styles.grid}>
         {playerEntries.map(([name, data]) => {
           const isMe = name === currentPlayer;
-          const enterDir = enteringPlayers[name];
-
-          const enterClass = enterDir ? `player-enter-${enterDir}` : '';
+          const enterInfo = enteringPlayers[name];
+          const enterClass = enterInfo ? `player-enter-${enterInfo.dir}` : '';
+          const enterStyle = enterInfo ? { '--enter-duration': `${enterInfo.duration}s` } : {};
 
           if (splitMode) {
             const hasVotedFe = data.voteFe != null;
@@ -62,7 +67,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode })
             const hasVoted = hasVotedFe || hasVotedBe;
 
             return (
-              <div key={name} className={enterClass} style={styles.player}>
+              <div key={name} className={enterClass} style={{ ...styles.player, ...enterStyle }}>
                 {/* Two cards side by side */}
                 <div style={styles.splitCardRow}>
                   {/* FE card */}
@@ -111,7 +116,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode })
           const hasVoted = data.vote != null;
 
           return (
-            <div key={name} className={enterClass} style={styles.player}>
+            <div key={name} className={enterClass} style={{ ...styles.player, ...enterStyle }}>
               <div style={styles.cardSlot}>
                 {hasVoted && (
                   <div style={{
