@@ -66,6 +66,21 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
   const knownRef = useRef(new Set());
   const [enteringPlayers, setEnteringPlayers] = useState({});
   const trainTriggeredRef = useRef(new Set());
+  const trainFromEvent = syncedEvent?.type === 'train' ? syncedEvent : null;
+  const prevTrainRef = useRef(null);
+
+  // When train event ends, give Richard a walk-in animation from bottom
+  useEffect(() => {
+    if (prevTrainRef.current && !trainFromEvent) {
+      // Train just ended — Richard appears with walk-in
+      const name = prevTrainRef.current.playerName;
+      setEnteringPlayers(prev => ({ ...prev, [name]: { dir: 'right', duration: 1.2 } }));
+      setTimeout(() => {
+        setEnteringPlayers(prev => { const next = { ...prev }; delete next[name]; return next; });
+      }, 1400);
+    }
+    prevTrainRef.current = trainFromEvent;
+  }, [trainFromEvent]);
 
   useEffect(() => {
     const currentNames = playerEntries.map(([name]) => name);
@@ -74,12 +89,13 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
     let maxDuration = 0;
     for (const name of currentNames) {
       if (!knownRef.current.has(name)) {
-        // Richard variants: 10% chance of train entrance — leader fires via Firebase
-        if (isLeader && isRichardName(name) && Math.random() < 0.1 && !syncedEvent && !trainTriggeredRef.current.has(name)) {
+        // Richard: 10% chance of train entrance
+        if (isLeader && isRichardName(name) && Math.random() < 0.1 && !trainTriggeredRef.current.has(name)) {
           trainTriggeredRef.current.add(name);
           const fromRight = Math.random() > 0.5;
           fireSyncedEvent?.({ type: 'train', playerName: name, fromRight }, 12000);
-        } else if (!isRichardName(name) || !syncedEvent || syncedEvent.type !== 'train' || syncedEvent.playerName !== name) {
+          // Don't add to walk-in — will be hidden until train exit
+        } else {
           const info = hashDir(name);
           newPlayers[name] = info;
           if (info.duration > maxDuration) maxDuration = info.duration;
@@ -118,26 +134,6 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
     }
   }, [phase, isLeader]);
 
-  // Train — leader decides when Richard joins
-  const trainFromEvent = syncedEvent?.type === 'train' ? syncedEvent : null;
-  const [hiddenByTrain, setHiddenByTrain] = useState(new Set());
-
-  useEffect(() => {
-    if (trainFromEvent) {
-      setHiddenByTrain(new Set([trainFromEvent.playerName]));
-    }
-  }, [trainFromEvent?.playerName]);
-
-  const handleTrainPlayerExit = () => {
-    if (!trainFromEvent) return;
-    const name = trainFromEvent.playerName;
-    setHiddenByTrain(new Set());
-    const info = { dir: trainFromEvent.fromRight ? 'right' : 'left', duration: 1.5 };
-    setEnteringPlayers(prev => ({ ...prev, [name]: info }));
-    setTimeout(() => {
-      setEnteringPlayers(prev => { const next = { ...prev }; delete next[name]; return next; });
-    }, 1700);
-  };
 
   // Alan coffee — leader fires on reveal
   useEffect(() => {
@@ -174,20 +170,21 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
       {trainFromEvent && (
         <Train
           fromRight={trainFromEvent.fromRight}
-          onPlayerExit={handleTrainPlayerExit}
+          playerName={trainFromEvent.playerName}
+          onPlayerExit={() => {}}
         />
       )}
 
       <div style={styles.grid}>
         {playerEntries.map(([name, data]) => {
-          // Hide player during train sequence
-          if (hiddenByTrain.has(name)) return null;
-
           const isMe = name === currentPlayer;
           const enterInfo = enteringPlayers[name];
           const enterClass = enterInfo ? `player-enter-${enterInfo.dir}` : '';
           const enterStyle = enterInfo ? { '--enter-duration': `${enterInfo.duration}s` } : {};
           const isSpeaking = activeQuote && activeQuote.name === name;
+
+          // Hide player if train is active for them (they'll appear when train exits)
+          if (trainFromEvent && trainFromEvent.playerName === name) return null;
 
           if (splitMode) {
             const hasVotedFe = data.voteFe != null;
@@ -299,7 +296,10 @@ const devBubbleStyle = {
   fontSize: '0.45rem',
   fontFamily: pixel,
   color: '#2a2a3a',
-  whiteSpace: 'nowrap',
+  whiteSpace: 'normal',
+  maxWidth: '180px',
+  textAlign: 'center',
+  lineHeight: '1.5',
   boxShadow: '2px 2px 0 #2074a8',
   zIndex: 10,
   marginBottom: '4px',

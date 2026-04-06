@@ -142,22 +142,28 @@ body {
   100% { left: calc(100vw + 50px); top: 60%; transform: scaleX(1); }
 }
 
-/* Richard's Shinkansen train (loco 96px + 3 wagons 104px each = 408px total) */
+/* Richard's Shinkansen train (2 noses + 3 mid = ~416px) */
 @keyframes trainArriveLeft {
   0% { left: -500px; }
-  100% { left: calc(50% - 204px); }
+  100% { left: calc(50% - 208px); }
 }
 @keyframes trainDepartLeft {
-  0% { left: calc(50% - 204px); }
+  0% { left: calc(50% - 208px); }
   100% { left: calc(100vw + 500px); }
 }
 @keyframes trainArriveRight {
   0% { left: calc(100vw + 500px); }
-  100% { left: calc(50% - 204px); }
+  100% { left: calc(50% - 208px); }
 }
 @keyframes trainDepartRight {
-  0% { left: calc(50% - 204px); }
+  0% { left: calc(50% - 208px); }
   100% { left: -500px; }
+}
+
+/* Richard exits train — walks up */
+@keyframes richardExit {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-120px); }
 }
 
 /* OKTA sheep easter egg */

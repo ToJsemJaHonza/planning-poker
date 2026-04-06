@@ -450,14 +450,17 @@ const styles = {
     animation: 'revealBgFade 4s ease-in-out forwards',
   },
   playerQuoteText: {
-    fontSize: '0.75rem',
+    fontSize: '0.65rem',
     fontFamily: pixel,
     color: '#2a2a3a',
     background: '#fff',
     border: '3px solid #d4a853',
     padding: '10px 18px',
     boxShadow: '4px 4px 0 #b8922e',
-    whiteSpace: 'nowrap',
+    maxWidth: '80vw',
+    textAlign: 'center',
+    lineHeight: '1.6',
+    display: 'inline-block',
   },
   // SPECIAL ROUND overlay
   specialOverlay: {

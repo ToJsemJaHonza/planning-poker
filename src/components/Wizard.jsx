@@ -262,10 +262,11 @@ const styles = {
     fontSize: '0.65rem',
     fontFamily: "'Press Start 2P', monospace",
     color: '#2a2a3a',
-    whiteSpace: 'nowrap',
+    whiteSpace: 'normal',
+    lineHeight: '1.6',
     animation: 'float 1.5s ease-in-out infinite',
     boxShadow: '2px 2px 0 #b8922e',
-    maxWidth: '300px',
+    maxWidth: '280px',
     textAlign: 'center',
   },
 };
