@@ -1,18 +1,60 @@
+import { useRef, useState, useEffect } from 'react';
 import PlayerFigure from './PlayerFigure';
 
 const pixel = "'Press Start 2P', monospace";
 
+// Directions a new player can enter from
+const ENTER_DIRECTIONS = ['left', 'right', 'top', 'bottom'];
+
+function hashDir(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  return ENTER_DIRECTIONS[Math.abs(h) % ENTER_DIRECTIONS.length];
+}
+
 export default function PlayerList({ players, phase, currentPlayer, splitMode }) {
-  // Filter out PM (role='pm') — they don't get a figure
   const playerEntries = Object.entries(players)
     .filter(([_, data]) => data.role !== 'pm')
     .sort((a, b) => a[1].joinedAt - b[1].joinedAt);
+
+  // Track known players to detect new joins
+  const knownRef = useRef(new Set());
+  const [enteringPlayers, setEnteringPlayers] = useState({});
+
+  useEffect(() => {
+    const currentNames = playerEntries.map(([name]) => name);
+    const newPlayers = {};
+
+    for (const name of currentNames) {
+      if (!knownRef.current.has(name)) {
+        // New player — assign random enter direction
+        newPlayers[name] = hashDir(name);
+      }
+    }
+
+    if (Object.keys(newPlayers).length > 0) {
+      setEnteringPlayers(prev => ({ ...prev, ...newPlayers }));
+      // Clear entering state after animation completes
+      setTimeout(() => {
+        setEnteringPlayers(prev => {
+          const next = { ...prev };
+          Object.keys(newPlayers).forEach(n => delete next[n]);
+          return next;
+        });
+      }, 800);
+    }
+
+    knownRef.current = new Set(currentNames);
+  }, [playerEntries.map(([n]) => n).join(',')]);
 
   return (
     <div style={styles.container}>
       <div style={styles.grid}>
         {playerEntries.map(([name, data]) => {
           const isMe = name === currentPlayer;
+          const enterDir = enteringPlayers[name];
+
+          const enterClass = enterDir ? `player-enter-${enterDir}` : '';
 
           if (splitMode) {
             const hasVotedFe = data.voteFe != null;
@@ -20,7 +62,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode })
             const hasVoted = hasVotedFe || hasVotedBe;
 
             return (
-              <div key={name} style={styles.player}>
+              <div key={name} className={enterClass} style={styles.player}>
                 {/* Two cards side by side */}
                 <div style={styles.splitCardRow}>
                   {/* FE card */}
@@ -69,7 +111,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode })
           const hasVoted = data.vote != null;
 
           return (
-            <div key={name} style={styles.player}>
+            <div key={name} className={enterClass} style={styles.player}>
               <div style={styles.cardSlot}>
                 {hasVoted && (
                   <div style={{

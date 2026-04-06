@@ -96,3 +96,38 @@ body {
   0%, 100% { transform: scale(1); opacity: 0.8; }
   50% { transform: scale(1.2); opacity: 1; }
 }
+
+/* Player enter animations — walk in from edge */
+.player-enter-left {
+  animation: enterFromLeft 0.8s ease-out;
+}
+.player-enter-right {
+  animation: enterFromRight 0.8s ease-out;
+}
+.player-enter-top {
+  animation: enterFromTop 0.8s ease-out;
+}
+.player-enter-bottom {
+  animation: enterFromBottom 0.8s ease-out;
+}
+
+@keyframes enterFromLeft {
+  0% { transform: translateX(-120vw); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateX(0); }
+}
+@keyframes enterFromRight {
+  0% { transform: translateX(120vw); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateX(0); }
+}
+@keyframes enterFromTop {
+  0% { transform: translateY(-50vh); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(0); }
+}
+@keyframes enterFromBottom {
+  0% { transform: translateY(50vh); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(0); }
+}

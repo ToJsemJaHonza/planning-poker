@@ -11,6 +11,7 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
     phase,
     task,
     splitMode,
+    specialRound,
     isLeader,
     connected,
     castVote,
@@ -30,7 +31,6 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
   const [showResult, setShowResult] = useState(false);
   const [copied, setCopied] = useState(false);
   const [casting, setCasting] = useState(false);
-  const [showSpecial, setShowSpecial] = useState(false);
 
   const me = players[playerName];
   const myVote = me?.vote || null;
@@ -143,13 +143,7 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
         {canControl && phase === 'voting' && (
           <>
             <button
-              onClick={() => {
-                if (!splitMode) {
-                  setShowSpecial(true);
-                  setTimeout(() => setShowSpecial(false), 2200);
-                }
-                toggleSplit();
-              }}
+              onClick={toggleSplit}
               style={{
                 ...styles.splitBtn,
                 ...(splitMode ? styles.splitBtnActive : {}),
@@ -218,8 +212,8 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
         </div>
       )}
 
-      {/* SPECIAL ROUND overlay */}
-      {showSpecial && (
+      {/* SPECIAL ROUND overlay — synced via Firebase, visible to all */}
+      {specialRound && (
         <div style={styles.specialOverlay}>
           <div style={styles.specialContent}>
             <div style={styles.specialStars}>✦ ✦ ✦</div>

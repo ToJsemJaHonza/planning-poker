@@ -15,6 +15,7 @@ export function useRoom(roomCode, playerName, role = 'player') {
   const [phase, setPhase] = useState('voting');
   const [task, setTask] = useState('');
   const [splitMode, setSplitMode] = useState(false);
+  const [specialRound, setSpecialRound] = useState(false);
   const [isLeader, setIsLeader] = useState(false);
   const [connected, setConnected] = useState(false);
   const unsubscribesRef = useRef([]);
@@ -92,6 +93,7 @@ export function useRoom(roomCode, playerName, role = 'player') {
         setPhase(data.phase || 'voting');
         setTask(data.task || '');
         setSplitMode(data.splitMode || false);
+        setSpecialRound(data.specialRound || false);
       }
     });
 
@@ -132,7 +134,15 @@ export function useRoom(roomCode, playerName, role = 'player') {
 
   const toggleSplit = useCallback(() => {
     if (!roomCode || !isLeader) return;
-    set(ref(db, `rooms/${roomCode}/meta/splitMode`), !splitMode);
+    const newSplit = !splitMode;
+    set(ref(db, `rooms/${roomCode}/meta/splitMode`), newSplit);
+    if (newSplit) {
+      // Trigger special round animation for everyone
+      set(ref(db, `rooms/${roomCode}/meta/specialRound`), true);
+      setTimeout(() => {
+        set(ref(db, `rooms/${roomCode}/meta/specialRound`), false);
+      }, 2500);
+    }
   }, [roomCode, isLeader, splitMode]);
 
   const revealCards = useCallback(async () => {
@@ -164,6 +174,7 @@ export function useRoom(roomCode, playerName, role = 'player') {
     phase,
     task,
     splitMode,
+    specialRound,
     isLeader,
     connected,
     castVote,
