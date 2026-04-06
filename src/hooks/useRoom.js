@@ -154,6 +154,8 @@ export function useRoom(roomCode, playerName, role = 'player') {
 
   const newRound = useCallback(async () => {
     if (!roomCode || !isLeader) return;
+    // Reset split mode back to normal for next round
+    await set(ref(db, `rooms/${roomCode}/meta/splitMode`), false);
     await set(ref(db, `rooms/${roomCode}/meta/phase`), 'voting');
     const playersSnap = await get(ref(db, `rooms/${roomCode}/players`));
     const data = playersSnap.val() || {};

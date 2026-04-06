@@ -199,11 +199,35 @@ export default function Wizard({ isCasting, onCastComplete, onQuote }) {
   const shadow = isCasting ? sc : isThinking ? st : walkFrame ? sw2 : sw1;
   const paused = isCasting || isThinking;
 
+  const spriteRef = useRef(null);
+  const [bubblePos, setBubblePos] = useState(null);
+
+  // Track sprite position for bubble (outside flipping container)
+  useEffect(() => {
+    if (!isThinking || !quote) { setBubblePos(null); return; }
+    const update = () => {
+      if (spriteRef.current) {
+        const rect = spriteRef.current.getBoundingClientRect();
+        setBubblePos({ x: rect.left + rect.width / 2, y: rect.top - 10 });
+      }
+      if (isThinking && quote) requestAnimationFrame(update);
+    };
+    update();
+  }, [isThinking, quote]);
+
   return (
     <div style={styles.wrap}>
-      <div className="wizard-walk" style={{ ...styles.sprite, animationPlayState: paused ? 'paused' : 'running' }}>
+      {/* Bubble rendered outside the flipping container */}
+      {bubblePos && (
+        <div style={{
+          ...styles.bubble,
+          left: bubblePos.x,
+          top: bubblePos.y,
+          transform: 'translateX(-50%)',
+        }}>{quote}</div>
+      )}
+      <div ref={spriteRef} className="wizard-walk" style={{ ...styles.sprite, animationPlayState: paused ? 'paused' : 'running' }}>
         <div style={{ width: 1, height: 1, boxShadow: shadow, position: 'absolute', top: 0, left: 0 }} />
-        {isThinking && quote && <div className="wizard-bubble" style={styles.bubble}>{quote}</div>}
         {showSparkles && SPARKLE_DIRS.map((d, i) => (
           <span key={i} style={{
             ...styles.sparkle,
@@ -226,10 +250,8 @@ const styles = {
     textShadow: '0 0 8px #f5c542, 0 0 16px #d4a853',
   },
   bubble: {
-    position: 'absolute',
-    bottom: SPRITE_H + 5,
-    left: '50%',
-    transform: 'translateX(-50%) scaleX(1)',
+    position: 'fixed',
+    zIndex: 51,
     background: '#fff',
     border: '2px solid #d4a853',
     borderRadius: '6px',

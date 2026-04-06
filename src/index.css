@@ -97,11 +97,6 @@ body {
   50% { transform: scale(1.2); opacity: 1; }
 }
 
-/* Prevent wizard speech bubble from mirroring */
-.wizard-bubble {
-  transform: scaleX(1) !important;
-}
-
 /* Player enter animations — walk in from edge with bobbing */
 .player-enter-left {
   animation: enterFromLeft var(--enter-duration, 1.5s) ease-out, walkBob var(--enter-duration, 1.5s) steps(2) forwards;
