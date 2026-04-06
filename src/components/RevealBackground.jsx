@@ -38,9 +38,9 @@ export default function RevealBackground({ players, splitMode }) {
         result.push({
           value: val,
           color: isFe ? '#3498db' : '#27ae60',
-          left: `${rng() * 95}%`,
-          top: `${rng() * 90}%`,
-          size: 1.5 + rng() * 3,
+          left: `${rng() * 90}%`,
+          top: `${rng() * 85}%`,
+          size: 2.5 + rng() * 4,
           rotation: -20 + rng() * 40,
           delay: rng() * 0.8,
         });
@@ -52,10 +52,10 @@ export default function RevealBackground({ players, splitMode }) {
       for (let i = 0; i < count; i++) {
         result.push({
           value: val,
-          color: '#d4a853',
-          left: `${rng() * 95}%`,
-          top: `${rng() * 90}%`,
-          size: 1.5 + rng() * 3.5,
+          color: '#b08030',
+          left: `${rng() * 90}%`,
+          top: `${rng() * 85}%`,
+          size: 2.5 + rng() * 5,
           rotation: -25 + rng() * 50,
           delay: rng() * 0.8,
         });
@@ -97,13 +97,14 @@ const styles = {
     zIndex: 5,
     pointerEvents: 'none',
     overflow: 'hidden',
-    animation: 'revealBgFade 5s ease-in-out forwards',
+    animation: 'revealBgFade 8s ease-in-out forwards',
   },
   number: {
     position: 'absolute',
     fontFamily: pixel,
     fontWeight: 'bold',
     opacity: 0,
-    animation: 'revealNumberPop 5s ease-out forwards',
+    animation: 'revealNumberPop 8s ease-out forwards',
+    textShadow: '2px 2px 0 rgba(0,0,0,0.1)',
   },
 };
