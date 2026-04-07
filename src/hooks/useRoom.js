@@ -184,11 +184,25 @@ export function useRoom(roomCode, playerName, role = 'player') {
   }, [roomCode]);
 
   // Fire a synced event visible to all players
+  // Important events (train, chicken) can't be overwritten by minor ones (devQuote)
+  const IMPORTANT_EVENTS = ['train', 'chicken'];
   const fireSyncedEvent = useCallback((eventData, durationMs = 4000) => {
     if (!roomCode) return;
+    // Don't overwrite important events with minor ones
+    if (syncedEvent && IMPORTANT_EVENTS.includes(syncedEvent.type) && !IMPORTANT_EVENTS.includes(eventData.type)) {
+      return;
+    }
     set(ref(db, `rooms/${roomCode}/meta/syncedEvent`), eventData);
-    setTimeout(() => set(ref(db, `rooms/${roomCode}/meta/syncedEvent`), null), durationMs);
-  }, [roomCode]);
+    setTimeout(() => {
+      // Only clear if this event is still the active one
+      get(ref(db, `rooms/${roomCode}/meta/syncedEvent`)).then(snap => {
+        const current = snap.val();
+        if (current && current.type === eventData.type) {
+          set(ref(db, `rooms/${roomCode}/meta/syncedEvent`), null);
+        }
+      });
+    }, durationMs);
+  }, [roomCode, syncedEvent]);
 
   const triggerOkta = useCallback(() => {
     if (!roomCode) return;

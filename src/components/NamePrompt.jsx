@@ -5,10 +5,11 @@ export default function NamePrompt({ onSubmit }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const trimmed = name.trim();
-    if (trimmed) {
-      localStorage.setItem('poker-player-name', trimmed);
-      onSubmit(trimmed);
+    // Strip Firebase-unsafe characters: . $ # [ ] /
+    const sanitized = name.trim().replace(/[.$#\[\]/]/g, '');
+    if (sanitized && sanitized.length >= 1) {
+      localStorage.setItem('poker-player-name', sanitized);
+      onSubmit(sanitized);
     }
   };
 

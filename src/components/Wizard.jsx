@@ -142,7 +142,7 @@ const QUOTES = [
   "Let's parking lot that",
 ];
 
-export default function Wizard({ isCasting, onCastComplete, onQuote }) {
+export default function Wizard({ isCasting, onCastComplete, onQuote, externalQuote }) {
   const [walkFrame, setWalkFrame] = useState(0);
   const [showSparkles, setShowSparkles] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
@@ -150,6 +150,9 @@ export default function Wizard({ isCasting, onCastComplete, onQuote }) {
   const walkRef = useRef(null);
   const castRef = useRef(null);
   const thinkRef = useRef(null);
+
+  // For non-leader: show externalQuote as thinking pose
+  const showExtQuote = !onQuote && !!externalQuote;
 
   useEffect(() => {
     if (isCasting) {
@@ -159,10 +162,13 @@ export default function Wizard({ isCasting, onCastComplete, onQuote }) {
       return;
     }
     walkRef.current = setInterval(() => setWalkFrame(f => f ^ 1), 500);
+
+    // Only leader runs the thinking/quote loop
+    if (!onQuote) return () => clearInterval(walkRef.current);
+
     const loop = () => {
       thinkRef.current = setTimeout(() => {
         if (!isCasting) {
-          // 20% chance of saying a quote, otherwise just pause silently
           if (Math.random() < 0.2) {
             const q = QUOTES[Math.floor(Math.random() * QUOTES.length)];
             setQuote(q);
@@ -196,15 +202,19 @@ export default function Wizard({ isCasting, onCastComplete, onQuote }) {
   const sc = useMemo(() => spriteToBoxShadow(CAST, PX), []);
   const st = useMemo(() => spriteToBoxShadow(THINK, PX), []);
 
-  const shadow = isCasting ? sc : isThinking ? st : walkFrame ? sw2 : sw1;
-  const paused = isCasting || isThinking;
+  // Non-leader: pause when externalQuote is showing
+  const effectiveThinking = onQuote ? isThinking : showExtQuote;
+  const effectiveQuote = onQuote ? quote : (externalQuote || '');
+
+  const shadow = isCasting ? sc : effectiveThinking ? st : walkFrame ? sw2 : sw1;
+  const paused = isCasting || effectiveThinking;
 
   const spriteRef = useRef(null);
   const [bubblePos, setBubblePos] = useState(null);
 
   // Track sprite position for bubble (outside flipping container)
   useEffect(() => {
-    if (!isThinking || !quote) { setBubblePos(null); return; }
+    if (!effectiveThinking || !effectiveQuote) { setBubblePos(null); return; }
     let active = true;
     const update = () => {
       if (!active) return;
@@ -216,18 +226,18 @@ export default function Wizard({ isCasting, onCastComplete, onQuote }) {
     };
     update();
     return () => { active = false; setBubblePos(null); };
-  }, [isThinking, quote]);
+  }, [effectiveThinking, effectiveQuote]);
 
   return (
     <div style={styles.wrap}>
       {/* Bubble rendered outside the flipping container */}
-      {isThinking && quote && bubblePos && (
+      {effectiveThinking && effectiveQuote && bubblePos && (
         <div style={{
           ...styles.bubble,
           left: bubblePos.x,
           top: bubblePos.y,
           transform: 'translateX(-50%)',
-        }}>{quote}</div>
+        }}>{effectiveQuote}</div>
       )}
       <div ref={spriteRef} className="wizard-walk" style={{ ...styles.sprite, animationPlayState: paused ? 'paused' : 'running' }}>
         <div style={{ width: 1, height: 1, boxShadow: shadow, position: 'absolute', top: 0, left: 0 }} />

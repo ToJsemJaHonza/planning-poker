@@ -111,16 +111,13 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
 
   return (
     <div style={{ ...styles.container, paddingBottom: isPM ? '80px' : canControl ? (splitMode ? '280px' : '240px') : (splitMode ? '220px' : '190px') }}>
-      {canControl && (
-        <Wizard isCasting={false} onCastComplete={() => {}} onQuote={setPmQuote} />
-      )}
-
-      {/* PM quote visible to players (non-PM) */}
-      {!canControl && pmQuote && (
-        <div style={styles.playerQuoteBanner}>
-          <span style={styles.playerQuoteText}>📋 {pmQuote}</span>
-        </div>
-      )}
+      {/* PM sprite visible to ALL players */}
+      <Wizard
+        isCasting={false}
+        onCastComplete={() => {}}
+        onQuote={canControl ? setPmQuote : null}
+        externalQuote={!canControl ? pmQuote : null}
+      />
 
       {/* Header */}
       <div style={styles.header}>
@@ -438,29 +435,6 @@ const styles = {
     fontSize: '1.2rem',
     fontFamily: pixel,
     color: '#fff',
-  },
-  // PM quote banner for players
-  playerQuoteBanner: {
-    position: 'fixed',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    zIndex: 45,
-    pointerEvents: 'none',
-    animation: 'revealBgFade 4s ease-in-out forwards',
-  },
-  playerQuoteText: {
-    fontSize: '0.65rem',
-    fontFamily: pixel,
-    color: '#2a2a3a',
-    background: '#fff',
-    border: '3px solid #d4a853',
-    padding: '10px 18px',
-    boxShadow: '4px 4px 0 #b8922e',
-    maxWidth: '80vw',
-    textAlign: 'center',
-    lineHeight: '1.6',
-    display: 'inline-block',
   },
   // SPECIAL ROUND overlay
   specialOverlay: {
