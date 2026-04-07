@@ -69,16 +69,8 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
   const trainFromEvent = syncedEvent?.type === 'train' ? syncedEvent : null;
   const prevTrainRef = useRef(null);
 
-  // When train event ends, give Richard a walk-in animation from bottom
+  // When train event ends, Richard simply appears (no walk-in — he already exited the train)
   useEffect(() => {
-    if (prevTrainRef.current && !trainFromEvent) {
-      // Train just ended — Richard appears with walk-in
-      const name = prevTrainRef.current.playerName;
-      setEnteringPlayers(prev => ({ ...prev, [name]: { dir: 'right', duration: 1.2 } }));
-      setTimeout(() => {
-        setEnteringPlayers(prev => { const next = { ...prev }; delete next[name]; return next; });
-      }, 1400);
-    }
     prevTrainRef.current = trainFromEvent;
   }, [trainFromEvent]);
 

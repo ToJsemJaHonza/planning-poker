@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import PlayerFigure from './PlayerFigure';
 
 const _ = null;
 // Shinkansen E5 series colors
@@ -91,7 +90,6 @@ function flipGrid(grid) {
 
 export default function Train({ fromRight, playerName, onPlayerExit }) {
   const [phase, setPhase] = useState('rails');
-  const [richardPos, setRichardPos] = useState(null); // {x,y} for Richard exiting
   const trainRef = useRef(null);
 
   const trainShadow = useMemo(() => {
@@ -113,14 +111,7 @@ export default function Train({ fromRight, playerName, onPlayerExit }) {
       setTimeout(() => setPhase('arrive'), 800),
       setTimeout(() => setPhase('stopped'), 3800),
       setTimeout(() => setPhase('bubble'), 4200),
-      setTimeout(() => {
-        setPhase('exit');
-        // Position Richard at the train door (center of train)
-        if (trainRef.current) {
-          const rect = trainRef.current.getBoundingClientRect();
-          setRichardPos({ x: rect.left + rect.width / 2 - 30, y: rect.top - 20 });
-        }
-      }, 6500),
+      setTimeout(() => setPhase('exit'), 6500),
       setTimeout(() => {
         setPhase('depart');
         // Keep richardPos — don't clear, he stays visible until syncedEvent ends
@@ -152,17 +143,9 @@ export default function Train({ fromRight, playerName, onPlayerExit }) {
 
       {/* Bubble */}
       {(phase === 'bubble' || phase === 'exit') && (
-        <div style={styles.bubble}>🚄 Monorepo conductor has arrived 🚄</div>
+        <div style={styles.bubble}>🚄 {playerName}: Monorepo conductor has arrived 🚄</div>
       )}
 
-      {/* Richard exiting train — stays visible until PlayerList takes over */}
-      {richardPos && (
-        <div style={{
-          position: 'fixed', left: richardPos.x, top: richardPos.y, zIndex: 185,
-        }}>
-          <PlayerFigure name={playerName} holdingCard={false} />
-        </div>
-      )}
 
       {/* Train */}
       {showTrain && (
