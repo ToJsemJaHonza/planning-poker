@@ -41,6 +41,7 @@ Every player must see the same thing at the same time. Never use local `Math.ran
 - Chicken easter egg (after reveal)
 - Fuk eyes pose (františek/fanda)
 - Richard's train entrance
+- Tomáš DBB pipeline entrance
 - Alan coffee quote
 
 ### Events that need Firebase sync:
