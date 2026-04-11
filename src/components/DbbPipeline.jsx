@@ -230,7 +230,7 @@ export function buildPipePath(fromSide, viewport) {
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export default function DbbPipeline({ fromSide = 'top', playerName, onPlayerExit, onDone }) {
+export default function DbbPipeline({ fromSide = 'top', playerId, playerName, onPlayerExit, onDone }) {
   const [phase, setPhase] = useState('hidden');
   const [showTomas, setShowTomas] = useState(false);
   const [showArrivalBubble, setShowArrivalBubble] = useState(false);
@@ -254,8 +254,11 @@ export default function DbbPipeline({ fromSide = 'top', playerName, onPlayerExit
 
   const pipePath = useMemo(() => buildPipePath(fromSide, viewport), [fromSide, viewport]);
 
+  // Handoff hook targets the placeholder keyed by session ID.
+  // When unit tests pass only `playerName`, fall back to that.
+  const targetKey = playerId || playerName;
   const handoff = useCinematicHandoff(
-    playerName,
+    targetKey,
     tomasRef,
     () => onPlayerExitRef.current?.()
   );
@@ -511,22 +514,24 @@ export default function DbbPipeline({ fromSide = 'top', playerName, onPlayerExit
       )}
 
       {showArrivalBubble && (
-        <ArrivalBubble playerName={playerName} />
+        <ArrivalBubble targetKey={targetKey} />
       )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// ArrivalBubble (unchanged behavior — parks over the grid slot)
+// ArrivalBubble (unchanged behavior — parks over the grid slot).
+// `targetKey` is the player's stable session ID (the Firebase key), which
+// is also what `data-entrance-target` is set to on the grid placeholder.
 // ---------------------------------------------------------------------------
-function ArrivalBubble({ playerName }) {
+function ArrivalBubble({ targetKey }) {
   const ref = useRef(null);
   const [fading, setFading] = useState(false);
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
-    const selector = `[data-entrance-target="${typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(playerName) : playerName}"]`;
+    const selector = `[data-entrance-target="${typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(targetKey) : targetKey}"]`;
     requestAnimationFrame(() => {
       const target = document.querySelector(selector);
       if (!target) return;
@@ -537,7 +542,7 @@ function ArrivalBubble({ playerName }) {
     });
     const fadeTimer = setTimeout(() => setFading(true), 1600 - 250);
     return () => clearTimeout(fadeTimer);
-  }, [playerName]);
+  }, [targetKey]);
   return (
     <div
       ref={ref}

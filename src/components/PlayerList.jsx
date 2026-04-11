@@ -62,15 +62,21 @@ function WalkingFigure({ name, fukEyes }) {
 }
 
 export default function PlayerList({ players, phase, currentPlayer, splitMode, syncedEvent, fireSyncedEvent, isLeader, createdAt = 0 }) {
+  // Entries are [playerId, data]; `data.name` holds the display name.
+  // Players are keyed by a per-tab session ID so two browsers with the same
+  // display name coexist as separate entries — everything below (join/leave
+  // animation tracking, easter-egg matching, entrance triggers) keys off the
+  // ID, not the name, so duplicates never collide.
   const playerEntries = Object.entries(players)
-    .filter(([_, data]) => data.role !== 'pm')
+    .filter(([, data]) => data.role !== 'pm')
     .sort((a, b) => a[1].joinedAt - b[1].joinedAt);
 
-  // Track known players to detect new joins
+  // Track known player IDs to detect new joins / leaves. Keying these off
+  // the ID means two same-named players are tracked independently.
   const knownRef = useRef(new Set());
-  const lastPlayerDataRef = useRef({}); // keep last seen data for disconnecting players
+  const lastPlayerDataRef = useRef({}); // keep last seen data for disconnecting players, keyed by ID
   const [enteringPlayers, setEnteringPlayers] = useState({});
-  const [leavingPlayers, setLeavingPlayers] = useState({}); // { name: { data, dir } }
+  const [leavingPlayers, setLeavingPlayers] = useState({}); // { id: { data, dir } }
 
   // All cinematic entrance events go through the unified engine. It handles
   // trigger detection (leader-only), mutex, and derives which players need
@@ -83,37 +89,40 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
   });
 
   useEffect(() => {
-    const currentNames = playerEntries.map(([name]) => name);
-    const currentSet = new Set(currentNames);
+    const currentIds = playerEntries.map(([id]) => id);
+    const currentSet = new Set(currentIds);
     const newPlayers = {};
     const gonePlayers = {};
 
-    // Remember latest data for everyone currently present
-    playerEntries.forEach(([name, data]) => {
-      lastPlayerDataRef.current[name] = data;
+    // Remember latest data for everyone currently present (keyed by ID)
+    playerEntries.forEach(([id, data]) => {
+      lastPlayerDataRef.current[id] = data;
     });
 
     let maxDuration = 0;
-    for (const name of currentNames) {
-      if (!knownRef.current.has(name)) {
+    for (const id of currentIds) {
+      if (!knownRef.current.has(id)) {
         // If the engine is currently hiding this player (they're in the
         // middle of their cinematic entrance), don't ALSO queue them as a
         // normal walk-in — the cinematic IS their grand arrival.
-        if (hiddenPlayers.has(name)) continue;
-        const info = hashDir(name);
-        newPlayers[name] = info;
+        if (hiddenPlayers.has(id)) continue;
+        // Hash on the display name so two same-named players still look
+        // consistent with themselves visually even though the ID varies.
+        const displayName = lastPlayerDataRef.current[id]?.name || id;
+        const info = hashDir(displayName);
+        newPlayers[id] = info;
         if (info.duration > maxDuration) maxDuration = info.duration;
       }
     }
 
     // Detect disconnected players — they should walk off instead of vanishing
-    for (const name of knownRef.current) {
-      if (!currentSet.has(name)) {
-        const info = hashDir(name);
+    for (const id of knownRef.current) {
+      if (!currentSet.has(id)) {
+        const data = lastPlayerDataRef.current[id] || { name: id };
+        const info = hashDir(data.name || id);
         // Exit in the opposite direction they came from for a "walked through" feel
         const exitDir = info.dir === 'left' ? 'right' : 'left';
-        const data = lastPlayerDataRef.current[name] || { name };
-        gonePlayers[name] = { info: { dir: exitDir, duration: info.duration }, data };
+        gonePlayers[id] = { info: { dir: exitDir, duration: info.duration }, data };
       }
     }
 
@@ -122,7 +131,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
       setTimeout(() => {
         setEnteringPlayers(prev => {
           const next = { ...prev };
-          Object.keys(newPlayers).forEach(n => delete next[n]);
+          Object.keys(newPlayers).forEach(k => delete next[k]);
           return next;
         });
       }, (maxDuration + 0.2) * 1000);
@@ -133,24 +142,27 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
       const exitMaxDuration = Math.max(
         ...Object.values(gonePlayers).map(g => g.info.duration)
       );
-      const goneNames = Object.keys(gonePlayers);
+      const goneIds = Object.keys(gonePlayers);
       setTimeout(() => {
         setLeavingPlayers(prev => {
           const next = { ...prev };
-          goneNames.forEach(n => delete next[n]);
+          goneIds.forEach(k => delete next[k]);
           return next;
         });
         // Also drop their last-known data
-        goneNames.forEach(n => delete lastPlayerDataRef.current[n]);
+        goneIds.forEach(k => delete lastPlayerDataRef.current[k]);
       }, (exitMaxDuration + 0.3) * 1000);
     }
 
     knownRef.current = currentSet;
-  }, [playerEntries.map(([n]) => n).join(',')]);
+  }, [playerEntries.map(([id]) => id).join(',')]);
 
   // === ALL EVENTS SYNCED VIA FIREBASE (leader decides, all clients render) ===
 
-  // Fuk eyes — leader decides on phase change, writes to Firebase
+  // Fuk eyes — leader decides on phase change, writes to Firebase.
+  // Matches on display name (`data.name`), but the event payload stores the
+  // matched display names — the event only affects players by name, and is
+  // intentionally "fuzzy" in the same way the easter egg has always been.
   const fukEyesSet = useMemo(
     () => new Set(syncedEvent?.type === 'fukEyes' ? syncedEvent.names : []),
     [syncedEvent]
@@ -158,9 +170,10 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
   useEffect(() => {
     if (!isLeader) return;
     const fuk = [];
-    playerEntries.forEach(([name]) => {
-      if (FUKNAMES.has(name.toLowerCase()) && Math.random() < 0.1) {
-        fuk.push(name);
+    playerEntries.forEach(([, data]) => {
+      const displayName = data.name || '';
+      if (FUKNAMES.has(displayName.toLowerCase()) && Math.random() < 0.1) {
+        fuk.push(displayName);
       }
     });
     if (fuk.length > 0) {
@@ -172,20 +185,25 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
   // Alan coffee — leader fires on reveal
   useEffect(() => {
     if (!isLeader || phase !== 'revealed') return;
-    playerEntries.forEach(([name, data]) => {
-      if (name.toLowerCase() === 'alan' && data.vote === '☕' && Math.random() < 0.1) {
+    playerEntries.forEach(([, data]) => {
+      const displayName = data.name || '';
+      if (displayName.toLowerCase() === 'alan' && data.vote === '☕' && Math.random() < 0.1) {
         setTimeout(() => {
-          fireSyncedEvent?.({ type: 'devQuote', name, text: 'Fullstack FE developer' }, 4000);
+          fireSyncedEvent?.({ type: 'devQuote', name: displayName, text: 'Fullstack FE developer' }, 4000);
         }, 1500);
       }
     });
   }, [phase, isLeader]);
 
-  // Dev quotes — leader triggers, 2% chance every 3s
+  // Dev quotes — leader triggers, 2% chance every 3s.
+  // devQuote payload stores a display name; the speech bubble renderer below
+  // matches it against `data.name` for whichever player is currently being
+  // iterated, so with two same-named players they both light up — acceptable
+  // since the payload itself is display-name based and historically always was.
   const activeQuote = syncedEvent?.type === 'devQuote' ? syncedEvent : null;
   useEffect(() => {
     if (!isLeader) return;
-    const names = playerEntries.map(([n]) => n);
+    const names = playerEntries.map(([, data]) => data.name).filter(Boolean);
     if (names.length === 0) return;
     const interval = setInterval(() => {
       if (syncedEvent) return; // something already showing
@@ -204,7 +222,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
   // the same quote at the same time.
   useEffect(() => {
     if (!isLeader || typeof createdAt !== 'number' || !createdAt) return;
-    const richardEntry = playerEntries.find(([name]) => isRichardName(name));
+    const richardEntry = playerEntries.find(([, data]) => isRichardName(data.name));
     if (!richardEntry) return;
     const interval = setInterval(() => {
       if (syncedEvent) return; // something already showing — don't stomp on it
@@ -213,7 +231,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
       // 40% chance per tick so Richard complains visibly often once he's hungry
       if (Math.random() >= 0.4) return;
       const text = RICHARD_HUNGER_QUOTES[Math.floor(Math.random() * RICHARD_HUNGER_QUOTES.length)];
-      fireSyncedEvent?.({ type: 'devQuote', name: richardEntry[0], text }, 4000);
+      fireSyncedEvent?.({ type: 'devQuote', name: richardEntry[1].name, text }, 4000);
     }, 15000);
     return () => clearInterval(interval);
   }, [isLeader, createdAt, playerEntries.length, syncedEvent]);
@@ -221,17 +239,21 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
   // Tomáš DBB trigger is handled in the unified entrance dispatcher above
   // (same useEffect as Richard's train) so the two are mutually exclusive.
 
-  // Render a single player box (or a frozen "leaving" copy) — keeps the grid + leaving layer DRY
-  const renderPlayer = (name, data, opts = {}) => {
+  // Render a single player box (or a frozen "leaving" copy) — keeps the grid + leaving layer DRY.
+  // `id` is the stable Firebase key (session ID); `data.name` is the display name.
+  // `currentPlayer` is the current viewer's ID so "me" highlighting is exact even
+  // when two viewers share a display name.
+  const renderPlayer = (id, data, opts = {}) => {
     const { className = '', style = {}, keySuffix = '', walking = false, testIdOverride } = opts;
-    const isMe = name === currentPlayer;
-    const isSpeaking = activeQuote && activeQuote.name === name;
-    const justArrived = recentArrivals.has(name);
+    const displayName = data.name || id;
+    const isMe = id === currentPlayer;
+    const isSpeaking = activeQuote && activeQuote.name === displayName;
+    const justArrived = recentArrivals.has(id);
     const nameTagClass = justArrived ? 'name-tag-arrived' : '';
-    const testId = testIdOverride ?? `player-${name}`;
+    const testId = testIdOverride ?? `player-${displayName}`;
     const figureSlot = walking
-      ? <WalkingFigure name={name} fukEyes={fukEyesSet.has(name)} />
-      : <PlayerFigure name={name} holdingCard={false} fukEyes={fukEyesSet.has(name)} />;
+      ? <WalkingFigure name={displayName} fukEyes={fukEyesSet.has(displayName)} />
+      : <PlayerFigure name={displayName} holdingCard={false} fukEyes={fukEyesSet.has(displayName)} />;
 
     if (splitMode) {
       const hasVotedFe = data.voteFe != null;
@@ -239,7 +261,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
 
       return (
         <div
-          key={name + keySuffix}
+          key={id + keySuffix}
           className={className}
           style={{ ...styles.player, ...style }}
           data-testid={testId}
@@ -283,7 +305,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
             className={nameTagClass}
             style={{ ...styles.nameTag, ...(isMe ? styles.nameTagMe : {}), maxWidth: 160 }}
           >
-            {data.isLeader ? '👑 ' : ''}{name}
+            {data.isLeader ? '👑 ' : ''}{displayName}
           </div>
         </div>
       );
@@ -294,7 +316,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
 
     return (
       <div
-        key={name + keySuffix}
+        key={id + keySuffix}
         className={className}
         style={{ ...styles.player, ...style }}
         data-testid={testId}
@@ -320,7 +342,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
           data-player-tag
           style={{ ...styles.nameTag, ...(isMe ? styles.nameTagMe : {}), maxWidth: 160 }}
         >
-          {data.isLeader ? '👑 ' : ''}{name}
+          {data.isLeader ? '👑 ' : ''}{displayName}
         </div>
       </div>
     );
@@ -332,8 +354,8 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
   // Firebase roundtrip. Runs on EVERY client (not just the leader), so
   // non-leaders don't see a flicker either.
   const handlePlayerExit = () => {
-    const hiddenName = activeEntrance?.event.getHiddenPlayer?.(activeEntrance.payload);
-    if (hiddenName) markArrived(hiddenName);
+    const hiddenId = activeEntrance?.event.getHiddenPlayer?.(activeEntrance.payload);
+    if (hiddenId) markArrived(hiddenId);
   };
 
   return (
@@ -344,13 +366,14 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
       <EntranceStage activeEntrance={activeEntrance} onPlayerExit={handlePlayerExit} />
 
       <div style={styles.grid}>
-        {playerEntries.map(([name, data]) => {
+        {playerEntries.map(([id, data]) => {
+          const displayName = data.name || id;
           // Engine tells us which players are currently being rendered by
           // a cinematic entrance; reserve their grid slot with a
           // visibility: hidden copy of the real figure so the cinematic
           // animation has a deterministic target to aim at (and flexbox
           // holds the exact pixel-identical box).
-          if (hiddenPlayers.has(name)) {
+          if (hiddenPlayers.has(id)) {
             // Reserve the grid slot with an invisible copy of the real
             // figure so the cinematic animation has a deterministic
             // target to aim at. Flexbox reserves the same pixel box as
@@ -359,33 +382,33 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
             // the cinematic is playing.
             return (
               <div
-                key={name}
+                key={id}
                 style={{
                   visibility: 'hidden',
                   minHeight: 100,
                   display: 'flex',
                 }}
-                data-entrance-target={name}
+                data-entrance-target={id}
               >
-                {renderPlayer(name, data, {
+                {renderPlayer(id, data, {
                   keySuffix: '__placeholder',
-                  testIdOverride: `player-${name}-placeholder`,
+                  testIdOverride: `player-${displayName}-placeholder`,
                 })}
               </div>
             );
           }
 
-          const enterInfo = enteringPlayers[name];
+          const enterInfo = enteringPlayers[id];
           const className = enterInfo ? `player-walk-in-${enterInfo.dir}` : '';
           const style = enterInfo ? { '--enter-duration': `${enterInfo.duration}s` } : {};
-          return renderPlayer(name, data, { className, style, walking: !!enterInfo });
+          return renderPlayer(id, data, { className, style, walking: !!enterInfo });
         })}
 
         {/* Leaving players — frozen last-known figure walks off-screen */}
-        {Object.entries(leavingPlayers).map(([name, { info, data }]) => {
+        {Object.entries(leavingPlayers).map(([id, { info, data }]) => {
           const className = `player-walk-out-${info.dir}`;
           const style = { '--enter-duration': `${info.duration}s` };
-          return renderPlayer(name, data, { className, style, keySuffix: '__leaving', walking: true });
+          return renderPlayer(id, data, { className, style, keySuffix: '__leaving', walking: true });
         })}
       </div>
     </div>

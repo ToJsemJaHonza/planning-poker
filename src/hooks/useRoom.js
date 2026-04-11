@@ -34,7 +34,7 @@ function generateRoomCode() {
   return code;
 }
 
-export function useRoom(roomCode, playerName, role = 'player') {
+export function useRoom(roomCode, playerId, playerName, role = 'player') {
   const [players, setPlayers] = useState({});
   const [phase, setPhase] = useState('voting');
   const [task, setTask] = useState('');
@@ -51,14 +51,17 @@ export function useRoom(roomCode, playerName, role = 'player') {
   const unsubscribesRef = useRef([]);
 
   useEffect(() => {
-    if (!roomCode || !playerName) return;
+    if (!roomCode || !playerId || !playerName) return;
     if (!isSafeRoomCode(roomCode)) {
       console.error('[useRoom] refusing to mount: room code contains unsafe characters');
       return;
     }
 
     const roomRef = ref(db, `rooms/${roomCode}`);
-    const playerRef = ref(db, `rooms/${roomCode}/players/${playerName}`);
+    // Players are keyed by a per-tab session ID (not the display name) so
+    // two browsers showing the same name coexist as two separate entries
+    // and their votes / disconnects never clobber each other.
+    const playerRef = ref(db, `rooms/${roomCode}/players/${playerId}`);
     const metaRef = ref(db, `rooms/${roomCode}/meta`);
     const playersRef = ref(db, `rooms/${roomCode}/players`);
 
@@ -87,7 +90,7 @@ export function useRoom(roomCode, playerName, role = 'player') {
       // Determine leadership based on current player map (post-meta-write)
       const playersSnap = await get(playersRef);
       const existingPlayers = playersSnap.val() || {};
-      const alreadyInRoom = !!existingPlayers[playerName];
+      const alreadyInRoom = !!existingPlayers[playerId];
       const hasLeader = Object.values(existingPlayers).some(p => p.isLeader);
 
       if (!alreadyInRoom) {
@@ -104,7 +107,7 @@ export function useRoom(roomCode, playerName, role = 'player') {
           role: role,
         });
       } else {
-        // Same name re-joining their own slot (e.g. Strict Mode double-mount
+        // Same session re-joining their own slot (e.g. Strict Mode double-mount
         // in dev). With the cleanup no longer scrubbing our node, there's
         // nothing to restore — our player entry is still intact as-is.
       }
@@ -118,8 +121,8 @@ export function useRoom(roomCode, playerName, role = 'player') {
     const unsubPlayers = onValue(playersRef, (snap) => {
       const data = snap.val() || {};
       setPlayers(data);
-      if (data[playerName]) {
-        setIsLeader(data[playerName].isLeader === true);
+      if (data[playerId]) {
+        setIsLeader(data[playerId].isLeader === true);
       }
     });
 
@@ -143,7 +146,7 @@ export function useRoom(roomCode, playerName, role = 'player') {
     return () => {
       unsubscribesRef.current.forEach(unsub => unsub());
     };
-  }, [roomCode, playerName]);
+  }, [roomCode, playerId, playerName]);
 
   // Leader promotion — when the previous leader disconnects (or none exists),
   // the earliest-joined remaining player promotes themselves and scrubs any
@@ -154,15 +157,15 @@ export function useRoom(roomCode, playerName, role = 'player') {
   // Strict Mode / rapid re-renders, React state can briefly show an older
   // value while Firebase already has the new one.
   useEffect(() => {
-    if (!roomCode || !playerName || Object.keys(players).length === 0) return;
+    if (!roomCode || !playerId || Object.keys(players).length === 0) return;
     const hasLeader = Object.values(players).some(p => p.isLeader);
     if (hasLeader) return;
     const sorted = Object.entries(players).sort((a, b) => a[1].joinedAt - b[1].joinedAt);
-    if (sorted.length === 0 || sorted[0][0] !== playerName) return;
+    if (sorted.length === 0 || sorted[0][0] !== playerId) return;
 
     (async () => {
       // Self-promote first so the takeover is visible ASAP
-      await set(ref(db, `rooms/${roomCode}/players/${playerName}/isLeader`), true);
+      await set(ref(db, `rooms/${roomCode}/players/${playerId}/isLeader`), true);
 
       // Read the LIVE event. If it's fresh (<15s old) it's almost certainly
       // the new leader's own event — don't stomp on it.
@@ -182,22 +185,22 @@ export function useRoom(roomCode, playerName, role = 'player') {
       }
       update(ref(db, `rooms/${roomCode}/meta`), wipe);
     })();
-  }, [players, roomCode, playerName]);
+  }, [players, roomCode, playerId]);
 
   const castVote = useCallback((value) => {
-    if (!roomCode || !playerName || phase !== 'voting') return;
-    safeWrite(set(ref(db, `rooms/${roomCode}/players/${playerName}/vote`), value));
-  }, [roomCode, playerName, phase]);
+    if (!roomCode || !playerId || phase !== 'voting') return;
+    safeWrite(set(ref(db, `rooms/${roomCode}/players/${playerId}/vote`), value));
+  }, [roomCode, playerId, phase]);
 
   const castVoteFe = useCallback((value) => {
-    if (!roomCode || !playerName || phase !== 'voting') return;
-    safeWrite(set(ref(db, `rooms/${roomCode}/players/${playerName}/voteFe`), value));
-  }, [roomCode, playerName, phase]);
+    if (!roomCode || !playerId || phase !== 'voting') return;
+    safeWrite(set(ref(db, `rooms/${roomCode}/players/${playerId}/voteFe`), value));
+  }, [roomCode, playerId, phase]);
 
   const castVoteBe = useCallback((value) => {
-    if (!roomCode || !playerName || phase !== 'voting') return;
-    safeWrite(set(ref(db, `rooms/${roomCode}/players/${playerName}/voteBe`), value));
-  }, [roomCode, playerName, phase]);
+    if (!roomCode || !playerId || phase !== 'voting') return;
+    safeWrite(set(ref(db, `rooms/${roomCode}/players/${playerId}/voteBe`), value));
+  }, [roomCode, playerId, phase]);
 
   const toggleSplit = useCallback(() => {
     if (!roomCode || !isLeader) return;
@@ -225,10 +228,10 @@ export function useRoom(roomCode, playerName, role = 'player') {
     const playersSnap = await get(ref(db, `rooms/${roomCode}/players`));
     const data = playersSnap.val() || {};
     const updates = {};
-    Object.keys(data).forEach(name => {
-      updates[`rooms/${roomCode}/players/${name}/vote`] = null;
-      updates[`rooms/${roomCode}/players/${name}/voteFe`] = null;
-      updates[`rooms/${roomCode}/players/${name}/voteBe`] = null;
+    Object.keys(data).forEach(id => {
+      updates[`rooms/${roomCode}/players/${id}/vote`] = null;
+      updates[`rooms/${roomCode}/players/${id}/voteFe`] = null;
+      updates[`rooms/${roomCode}/players/${id}/voteBe`] = null;
     });
     await update(ref(db), updates);
   }, [roomCode, isLeader]);

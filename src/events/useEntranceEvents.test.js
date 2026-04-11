@@ -7,8 +7,11 @@ import { ENTRANCE_EVENTS, findEntranceByType, findEntranceForName } from './entr
 // The engine is Firebase-agnostic — we pass in a stub fireSyncedEvent and
 // mutate syncedEvent via re-renders. No firebase-mock needed here.
 
+// Each entry is [playerId, data]. For single-name fixtures we reuse the
+// display name as the ID so assertions stay readable; the duplicate-name
+// scenario explicitly provides distinct IDs below.
 function makeEntries(names) {
-  return names.map((n, i) => [n, { joinedAt: i + 1 }]);
+  return names.map((n, i) => [n, { name: n, joinedAt: i + 1 }]);
 }
 
 describe('Entrance event registry', () => {
@@ -65,7 +68,7 @@ describe('useEntranceEvents — derivations', () => {
       useEntranceEvents({
         playerEntries: makeEntries(['Richard']),
         isLeader: false,
-        syncedEvent: { type: 'train', playerName: 'Richard', fromRight: false },
+        syncedEvent: { type: 'train', playerId: 'Richard', playerName: 'Richard', fromRight: false },
         fireSyncedEvent: vi.fn(),
       })
     );
@@ -78,7 +81,7 @@ describe('useEntranceEvents — derivations', () => {
       useEntranceEvents({
         playerEntries: makeEntries(['Tomáš']),
         isLeader: false,
-        syncedEvent: { type: 'dbbPipeline', playerName: 'Tomáš', fromSide: 'top' },
+        syncedEvent: { type: 'dbbPipeline', playerId: 'Tomáš', playerName: 'Tomáš', fromSide: 'top' },
         fireSyncedEvent: vi.fn(),
       })
     );
@@ -141,7 +144,7 @@ describe('useEntranceEvents — trigger side effects', () => {
         playerEntries: makeEntries(['Richard', 'Tomáš']),
         isLeader: true,
         // train already playing — Tomas must NOT fire
-        syncedEvent: { type: 'train', playerName: 'Richard', fromRight: false },
+        syncedEvent: { type: 'train', playerId: 'Richard', playerName: 'Richard', fromRight: false },
         fireSyncedEvent,
       })
     );

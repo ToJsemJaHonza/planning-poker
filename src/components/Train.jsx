@@ -90,7 +90,7 @@ function flipGrid(grid) {
   return grid.map(row => [...row].reverse());
 }
 
-export default function Train({ fromRight, playerName, onPlayerExit, onDone }) {
+export default function Train({ fromRight, playerId, playerName, onPlayerExit, onDone }) {
   const [phase, setPhase] = useState('rails');
   const [showRichard, setShowRichard] = useState(false);
   const [showDust, setShowDust] = useState(false);
@@ -107,8 +107,13 @@ export default function Train({ fromRight, playerName, onPlayerExit, onDone }) {
   useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
 
   // Handoff hook — drives the continuous walk from train door to grid slot.
+  // The placeholder is keyed by the player's session ID, so that's what
+  // useCinematicHandoff must query. Unit tests pass only `playerName`; in
+  // that case we fall back to using the name as the target key (which is
+  // also what the test fixtures use for `data-entrance-target`).
+  const targetKey = playerId || playerName;
   const handoff = useCinematicHandoff(
-    playerName,
+    targetKey,
     richardRef,
     () => onPlayerExitRef.current?.()
   );

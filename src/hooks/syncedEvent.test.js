@@ -10,13 +10,13 @@ describe('fireSyncedEvent mutex (user requirement: never two entrances at once)'
   beforeEach(() => { __mock.reset(); });
 
   it('important event (train) blocks a second important event (dbbPipeline)', async () => {
-    const { result } = renderHook(() => useRoom('MUTEX1', 'Leader', 'pm'));
+    const { result } = renderHook(() => useRoom('MUTEX1', 'leader-id', 'Leader', 'pm'));
     await waitFor(() => expect(result.current.isLeader).toBe(true));
 
     let firstResult, secondResult;
     await act(async () => {
       firstResult = await result.current.fireSyncedEvent(
-        { type: 'train', playerName: 'Richard', fromRight: false },
+        { type: 'train', playerId: 'richard-id', playerName: 'Richard', fromRight: false },
         5000
       );
     });
@@ -24,7 +24,7 @@ describe('fireSyncedEvent mutex (user requirement: never two entrances at once)'
 
     await act(async () => {
       secondResult = await result.current.fireSyncedEvent(
-        { type: 'dbbPipeline', playerName: 'Tomáš', fromSide: 'top' },
+        { type: 'dbbPipeline', playerId: 'tomas-id', playerName: 'Tomáš', fromSide: 'top' },
         5000
       );
     });
@@ -37,11 +37,11 @@ describe('fireSyncedEvent mutex (user requirement: never two entrances at once)'
   });
 
   it('important event blocks minor events too (devQuote)', async () => {
-    const { result } = renderHook(() => useRoom('MUTEX2', 'Leader', 'pm'));
+    const { result } = renderHook(() => useRoom('MUTEX2', 'leader-id', 'Leader', 'pm'));
     await waitFor(() => expect(result.current.isLeader).toBe(true));
 
     await act(async () => {
-      result.current.fireSyncedEvent({ type: 'train', playerName: 'R', fromRight: false }, 5000);
+      result.current.fireSyncedEvent({ type: 'train', playerId: 'r-id', playerName: 'R', fromRight: false }, 5000);
     });
     await waitFor(() => expect(result.current.syncedEvent?.type).toBe('train'));
 
@@ -53,12 +53,12 @@ describe('fireSyncedEvent mutex (user requirement: never two entrances at once)'
   });
 
   it('DBB pipeline also blocks a train from firing on top of it', async () => {
-    const { result } = renderHook(() => useRoom('MUTEX3', 'Leader', 'pm'));
+    const { result } = renderHook(() => useRoom('MUTEX3', 'leader-id', 'Leader', 'pm'));
     await waitFor(() => expect(result.current.isLeader).toBe(true));
 
     await act(async () => {
       await result.current.fireSyncedEvent(
-        { type: 'dbbPipeline', playerName: 'Tomáš', fromSide: 'left' },
+        { type: 'dbbPipeline', playerId: 'tomas-id', playerName: 'Tomáš', fromSide: 'left' },
         5000
       );
     });
@@ -67,7 +67,7 @@ describe('fireSyncedEvent mutex (user requirement: never two entrances at once)'
     let secondResult;
     await act(async () => {
       secondResult = await result.current.fireSyncedEvent(
-        { type: 'train', playerName: 'Richard', fromRight: true },
+        { type: 'train', playerId: 'richard-id', playerName: 'Richard', fromRight: true },
         5000
       );
     });
@@ -77,11 +77,11 @@ describe('fireSyncedEvent mutex (user requirement: never two entrances at once)'
   });
 
   it('after an important event clears, the next one can fire', async () => {
-    const { result } = renderHook(() => useRoom('MUTEX4', 'Leader', 'pm'));
+    const { result } = renderHook(() => useRoom('MUTEX4', 'leader-id', 'Leader', 'pm'));
     await waitFor(() => expect(result.current.isLeader).toBe(true));
 
     await act(async () => {
-      await result.current.fireSyncedEvent({ type: 'train', playerName: 'R', fromRight: false }, 100);
+      await result.current.fireSyncedEvent({ type: 'train', playerId: 'r-id', playerName: 'R', fromRight: false }, 100);
     });
     await waitFor(() => expect(result.current.syncedEvent?.type).toBe('train'));
     await waitFor(() => expect(result.current.syncedEvent).toBeNull(), { timeout: 1000 });
@@ -90,7 +90,7 @@ describe('fireSyncedEvent mutex (user requirement: never two entrances at once)'
     let ok;
     await act(async () => {
       ok = await result.current.fireSyncedEvent(
-        { type: 'dbbPipeline', playerName: 'Tomáš', fromSide: 'top' },
+        { type: 'dbbPipeline', playerId: 'tomas-id', playerName: 'Tomáš', fromSide: 'top' },
         1000
       );
     });

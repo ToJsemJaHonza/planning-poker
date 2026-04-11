@@ -10,7 +10,7 @@ import Sheep from './Sheep';
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-export default function Room({ roomCode, playerName, role = 'player' }) {
+export default function Room({ roomCode, playerId, playerName, role = 'player' }) {
   const {
     players,
     phase,
@@ -34,7 +34,7 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
     revealCards,
     newRound,
     updateTask,
-  } = useRoom(roomCode, playerName, role);
+  } = useRoom(roomCode, playerId, playerName, role);
 
   const isPM = role === 'pm';
   const canControl = isLeader; // creator always has control (player or PM)
@@ -59,10 +59,11 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
     return () => clearTimeout(t);
   }, [leaderChangedAt]);
 
-  // Find who the current leader is, so the banner can name them
-  const currentLeaderName = Object.entries(players).find(([, p]) => p.isLeader)?.[0];
+  // Find who the current leader is, so the banner can name them.
+  // Players are keyed by ID, so pull the display name off the entry itself.
+  const currentLeaderName = Object.values(players).find((p) => p.isLeader)?.name;
 
-  const me = players[playerName];
+  const me = players[playerId];
   const myVote = me?.vote || null;
   const myVoteFe = me?.voteFe || null;
   const myVoteBe = me?.voteBe || null;
@@ -251,7 +252,7 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
       <PlayerList
         players={players}
         phase={phase}
-        currentPlayer={playerName}
+        currentPlayer={playerId}
         splitMode={splitMode}
         syncedEvent={syncedEvent}
         fireSyncedEvent={fireSyncedEvent}
@@ -300,7 +301,7 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
       {showLeaderBanner && currentLeaderName && (
         <div style={styles.leaderBanner} data-testid="leader-banner">
           <span style={styles.leaderBannerText}>
-            👑 {currentLeaderName === playerName ? 'You are now the leader' : `${currentLeaderName} is now the leader`}
+            👑 {isLeader ? 'You are now the leader' : `${currentLeaderName} is now the leader`}
           </span>
         </div>
       )}

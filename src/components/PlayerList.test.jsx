@@ -256,7 +256,7 @@ describe('PlayerList — walking in / out', () => {
         phase="voting"
         currentPlayer="Alice"
         splitMode={false}
-        syncedEvent={{ type: 'train', playerName: 'Richard', fromRight: false }}
+        syncedEvent={{ type: 'train', playerId: 'Richard', playerName: 'Richard', fromRight: false }}
         fireSyncedEvent={() => {}}
         isLeader={false}
       />
@@ -285,7 +285,7 @@ describe('PlayerList — walking in / out', () => {
         phase="voting"
         currentPlayer="Alice"
         splitMode={false}
-        syncedEvent={{ type: 'train', playerName: 'Richard', fromRight: false }}
+        syncedEvent={{ type: 'train', playerId: 'Richard', playerName: 'Richard', fromRight: false }}
         fireSyncedEvent={() => {}}
         isLeader={false}
       />
@@ -313,7 +313,7 @@ describe('PlayerList — walking in / out', () => {
         phase="voting"
         currentPlayer="Alice"
         splitMode={false}
-        syncedEvent={{ type: 'dbbPipeline', playerName: 'Tomáš', fromSide: 'top' }}
+        syncedEvent={{ type: 'dbbPipeline', playerId: 'Tomáš', playerName: 'Tomáš', fromSide: 'top' }}
         fireSyncedEvent={() => {}}
         isLeader={false}
       />
@@ -341,7 +341,7 @@ describe('PlayerList — walking in / out', () => {
         phase="voting"
         currentPlayer="Alice"
         splitMode={false}
-        syncedEvent={{ type: 'train', playerName: 'Richard', fromRight: false }}
+        syncedEvent={{ type: 'train', playerId: 'Richard', playerName: 'Richard', fromRight: false }}
         fireSyncedEvent={() => {}}
         isLeader={false}
       />
@@ -350,6 +350,8 @@ describe('PlayerList — walking in / out', () => {
     // Placeholder exists with a dedicated testid…
     expect(getByTestId('player-Richard-placeholder')).toBeInTheDocument();
     // …and an entrance-target marker the cinematic hook can aim at.
+    // data-entrance-target is the stable Firebase key (the player ID),
+    // which in this fixture equals the display name.
     const target = container.querySelector('[data-entrance-target="Richard"]');
     expect(target).not.toBeNull();
     expect(target.style.visibility).toBe('hidden');

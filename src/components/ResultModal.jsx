@@ -41,8 +41,9 @@ function ResultSection({ title, titleColor, stats }) {
 
       {special.length > 0 && (
         <div style={styles.specials}>
-          {special.map(v => (
-            <span key={v.name} style={styles.specialItem}>
+          {special.map((v, i) => (
+            // Composite key — two same-named voters still get unique React keys.
+            <span key={`${v.name}__${i}`} style={styles.specialItem}>
               {v.vote} {v.name}
             </span>
           ))}
@@ -53,14 +54,18 @@ function ResultSection({ title, titleColor, stats }) {
 }
 
 export default function ResultModal({ players, splitMode, onNewRound }) {
+  // Players are keyed by stable session ID — pull the display name off the
+  // entry itself so the histogram and "special" rows show human-readable
+  // names instead of opaque IDs. Two same-named players are independent
+  // entries here, so their votes each count separately.
   if (splitMode) {
-    const feVotes = Object.entries(players)
-      .filter(([_, p]) => p.voteFe != null)
-      .map(([name, p]) => ({ name, vote: p.voteFe }));
+    const feVotes = Object.values(players)
+      .filter((p) => p.voteFe != null)
+      .map((p) => ({ name: p.name, vote: p.voteFe }));
 
-    const beVotes = Object.entries(players)
-      .filter(([_, p]) => p.voteBe != null)
-      .map(([name, p]) => ({ name, vote: p.voteBe }));
+    const beVotes = Object.values(players)
+      .filter((p) => p.voteBe != null)
+      .map((p) => ({ name: p.name, vote: p.voteBe }));
 
     const feStats = computeStats(feVotes);
     const beStats = computeStats(beVotes);
@@ -85,9 +90,9 @@ export default function ResultModal({ players, splitMode, onNewRound }) {
   }
 
   // Normal single mode
-  const votes = Object.entries(players)
-    .filter(([_, p]) => p.vote != null)
-    .map(([name, p]) => ({ name, vote: p.vote }));
+  const votes = Object.values(players)
+    .filter((p) => p.vote != null)
+    .map((p) => ({ name: p.name, vote: p.vote }));
 
   const stats = computeStats(votes);
 
