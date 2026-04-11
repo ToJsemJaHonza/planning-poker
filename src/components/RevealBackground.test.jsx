@@ -29,3 +29,62 @@ describe('RevealBackground — smoke', () => {
     expect(() => render(<RevealBackground players={{}} splitMode={false} />)).not.toThrow();
   });
 });
+
+// --- Display-card regression: background must show the average rounded to
+// the nearest deck card, not the arbitrary first-iteration vote the old
+// `getConsensus` fallback returned. These tests reproduce the exact
+// screenshot the user reported (FE: 2 and 5; BE: 2 and 13) and would have
+// failed with the old implementation. ---------------------------------
+describe('RevealBackground — card rounding (reveal screenshot bug)', () => {
+  const read = (container) =>
+    Array.from(container.querySelectorAll('.reveal-number')).map((el) => el.textContent);
+
+  it('split: FE avg 3.5 (2+5) renders as 3, BE avg 7.5 (2+13) renders as 8', () => {
+    const players = {
+      Alice: { name: 'Alice', vote: null, voteFe: '2', voteBe: '2',  joinedAt: 1, role: 'player', isLeader: false },
+      Bob:   { name: 'Bob',   vote: null, voteFe: '5', voteBe: '13', joinedAt: 2, role: 'player', isLeader: false },
+    };
+    const { container } = render(<RevealBackground players={players} splitMode={true} />);
+    const texts = read(container);
+
+    // FE items (even indices in the generator) should all say "3".
+    // BE items (odd indices) should all say "8".
+    expect(texts).toContain('3');
+    expect(texts).toContain('8');
+    // And never leak the raw individual votes.
+    expect(texts).not.toContain('2');
+    expect(texts).not.toContain('5');
+    expect(texts).not.toContain('13');
+  });
+
+  it('normal: avg rounds to nearest card and ignores ?/☕', () => {
+    const players = {
+      Alice: { name: 'Alice', vote: '5',  voteFe: null, voteBe: null, joinedAt: 1, role: 'player', isLeader: false },
+      Bob:   { name: 'Bob',   vote: '8',  voteFe: null, voteBe: null, joinedAt: 2, role: 'player', isLeader: false },
+      Cara:  { name: 'Cara',  vote: '☕', voteFe: null, voteBe: null, joinedAt: 3, role: 'player', isLeader: false },
+      Dan:   { name: 'Dan',   vote: '?',  voteFe: null, voteBe: null, joinedAt: 4, role: 'player', isLeader: false },
+    };
+    const { container } = render(<RevealBackground players={players} splitMode={false} />);
+    const texts = read(container);
+    // (5+8)/2 = 6.5 → tie between 5 and 8 → round UP to 8.
+    expect(new Set(texts)).toEqual(new Set(['8']));
+  });
+
+  it('normal: exact card avg renders that card', () => {
+    const players = {
+      A: { name: 'A', vote: '3', voteFe: null, voteBe: null, joinedAt: 1, role: 'player', isLeader: false },
+      B: { name: 'B', vote: '3', voteFe: null, voteBe: null, joinedAt: 2, role: 'player', isLeader: false },
+    };
+    const { container } = render(<RevealBackground players={players} splitMode={false} />);
+    expect(new Set(read(container))).toEqual(new Set(['3']));
+  });
+
+  it('normal: renders nothing when no numeric votes', () => {
+    const players = {
+      A: { name: 'A', vote: '☕', voteFe: null, voteBe: null, joinedAt: 1, role: 'player', isLeader: false },
+      B: { name: 'B', vote: '?',  voteFe: null, voteBe: null, joinedAt: 2, role: 'player', isLeader: false },
+    };
+    const { container } = render(<RevealBackground players={players} splitMode={false} />);
+    expect(container.querySelectorAll('.reveal-number').length).toBe(0);
+  });
+});
