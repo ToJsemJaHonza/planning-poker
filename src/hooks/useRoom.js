@@ -1,5 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { db, ref, set, get, update, onValue, onDisconnect, serverTimestamp } from '../firebase';
+import { db, ref, set, get, update, onValue, onDisconnect, runTransaction, serverTimestamp } from '../firebase';
+
+// Important events are mutually exclusive cinematics — once one is playing
+// in a room, nothing (not even another important event) can overwrite it
+// until its TTL expires.
+const IMPORTANT_EVENTS = ['train', 'chicken', 'dbbPipeline'];
+
+// Fire-and-forget write helper: log errors to the console so a dropped
+// network write doesn't vanish silently (P9).
+const safeWrite = (promise) => {
+  Promise.resolve(promise).catch((err) => console.error('[useRoom] write failed', err));
+  return promise;
+};
 
 function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -18,10 +30,12 @@ export function useRoom(roomCode, playerName, role = 'player') {
   const [specialRound, setSpecialRound] = useState(false);
   const [pmQuote, setPmQuote] = useState('');
   const [oktaEvent, setOktaEvent] = useState(false);
+  const [createdAt, setCreatedAt] = useState(0);
   // Unified synced events: { type, data } or null
   const [syncedEvent, setSyncedEvent] = useState(null);
   const [isLeader, setIsLeader] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [leaderChangedAt, setLeaderChangedAt] = useState(0);
   const unsubscribesRef = useRef([]);
 
   useEffect(() => {
@@ -33,48 +47,50 @@ export function useRoom(roomCode, playerName, role = 'player') {
     const playersRef = ref(db, `rooms/${roomCode}/players`);
 
     const setupPlayer = async () => {
-      const roomSnap = await get(roomRef);
-      const roomExists = roomSnap.exists();
+      // Race-safe room bootstrap: write meta/createdAt with our timestamp, then
+      // re-read it. If another client got there first, our timestamp will be
+      // overwritten on read by the earlier one and we gracefully become a joiner
+      // instead of a second "creator". We also only write `players/me` — not the
+      // whole room — to avoid two concurrent creators clobbering each other's
+      // player maps.
+      const metaSnap = await get(metaRef);
+      const existingMeta = metaSnap.val();
 
-      if (!roomExists) {
-        await set(roomRef, {
-          meta: {
-            task: '',
-            phase: 'voting',
-            splitMode: false,
-            createdAt: Date.now(),
-          },
-          players: {
-            [playerName]: {
-              name: playerName,
-              joinedAt: Date.now(),
-              vote: null,
-              voteFe: null,
-              voteBe: null,
-              isLeader: true, // creator is always leader
-              role: role,
-            }
-          }
+      if (!existingMeta) {
+        // Establish meta separately so concurrent joiners can't wipe each
+        // other's player nodes. Whichever client's set() lands last wins the
+        // meta race — both players still end up in `players/`.
+        await set(metaRef, {
+          task: '',
+          phase: 'voting',
+          splitMode: false,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      // Determine leadership based on current player map (post-meta-write)
+      const playersSnap = await get(playersRef);
+      const existingPlayers = playersSnap.val() || {};
+      const alreadyInRoom = !!existingPlayers[playerName];
+      const hasLeader = Object.values(existingPlayers).some(p => p.isLeader);
+
+      if (!alreadyInRoom) {
+        await set(playerRef, {
+          name: playerName,
+          joinedAt: Date.now(),
+          vote: null,
+          voteFe: null,
+          voteBe: null,
+          // First arrival in an empty room becomes leader regardless of role.
+          // Otherwise, PM joiners can promote themselves only if there's no
+          // existing leader (e.g. after the previous one disconnected).
+          isLeader: Object.keys(existingPlayers).length === 0 || (!hasLeader && role === 'pm'),
+          role: role,
         });
       } else {
-        const playerSnap = await get(playerRef);
-        if (!playerSnap.exists()) {
-          const playersSnap = await get(playersRef);
-          const existingPlayers = playersSnap.val() || {};
-          const hasLeader = Object.values(existingPlayers).some(p => p.isLeader);
-
-          await set(playerRef, {
-            name: playerName,
-            joinedAt: Date.now(),
-            vote: null,
-            voteFe: null,
-            voteBe: null,
-            isLeader: !hasLeader && role === 'pm',
-            role: role,
-          });
-        } else {
-          await update(playerRef, { name: playerName });
-        }
+        // Same name re-joining their own slot (e.g. Strict Mode double-mount
+        // in dev). With the cleanup no longer scrubbing our node, there's
+        // nothing to restore — our player entry is still intact as-is.
       }
 
       onDisconnect(playerRef).remove();
@@ -101,6 +117,8 @@ export function useRoom(roomCode, playerName, role = 'player') {
         setPmQuote(data.pmQuote || '');
         setOktaEvent(data.oktaEvent || false);
         setSyncedEvent(data.syncedEvent || null);
+        setLeaderChangedAt(data.leaderChangedAt || 0);
+        setCreatedAt(typeof data.createdAt === 'number' ? data.createdAt : Date.now());
       }
     });
 
@@ -108,46 +126,72 @@ export function useRoom(roomCode, playerName, role = 'player') {
 
     return () => {
       unsubscribesRef.current.forEach(unsub => unsub());
-      set(playerRef, null);
     };
   }, [roomCode, playerName]);
 
-  // Leader promotion
+  // Leader promotion — when the previous leader disconnects (or none exists),
+  // the earliest-joined remaining player promotes themselves and scrubs any
+  // stuck flags the dead leader left behind.
+  //
+  // `syncedEvent` is read LIVE from Firebase (not React state) so the age
+  // guard below is never fooled by a stale closure. This is critical: on
+  // Strict Mode / rapid re-renders, React state can briefly show an older
+  // value while Firebase already has the new one.
   useEffect(() => {
     if (!roomCode || !playerName || Object.keys(players).length === 0) return;
     const hasLeader = Object.values(players).some(p => p.isLeader);
-    if (!hasLeader) {
-      const sorted = Object.entries(players).sort((a, b) => a[1].joinedAt - b[1].joinedAt);
-      if (sorted.length > 0 && sorted[0][0] === playerName) {
-        set(ref(db, `rooms/${roomCode}/players/${playerName}/isLeader`), true);
+    if (hasLeader) return;
+    const sorted = Object.entries(players).sort((a, b) => a[1].joinedAt - b[1].joinedAt);
+    if (sorted.length === 0 || sorted[0][0] !== playerName) return;
+
+    (async () => {
+      // Self-promote first so the takeover is visible ASAP
+      await set(ref(db, `rooms/${roomCode}/players/${playerName}/isLeader`), true);
+
+      // Read the LIVE event. If it's fresh (<15s old) it's almost certainly
+      // the new leader's own event — don't stomp on it.
+      const liveSnap = await get(ref(db, `rooms/${roomCode}/meta/syncedEvent`));
+      const currentEvent = liveSnap.val();
+      const now = Date.now();
+      const MAX_EVENT_AGE_MS = 15_000;
+
+      const wipe = {
+        specialRound: false,
+        oktaEvent: false,
+        pmQuote: '',
+        leaderChangedAt: now,
+      };
+      if (!currentEvent || !currentEvent.startedAt || (now - currentEvent.startedAt) > MAX_EVENT_AGE_MS) {
+        wipe.syncedEvent = null;
       }
-    }
+      update(ref(db, `rooms/${roomCode}/meta`), wipe);
+    })();
   }, [players, roomCode, playerName]);
 
   const castVote = useCallback((value) => {
     if (!roomCode || !playerName || phase !== 'voting') return;
-    set(ref(db, `rooms/${roomCode}/players/${playerName}/vote`), value);
+    safeWrite(set(ref(db, `rooms/${roomCode}/players/${playerName}/vote`), value));
   }, [roomCode, playerName, phase]);
 
   const castVoteFe = useCallback((value) => {
     if (!roomCode || !playerName || phase !== 'voting') return;
-    set(ref(db, `rooms/${roomCode}/players/${playerName}/voteFe`), value);
+    safeWrite(set(ref(db, `rooms/${roomCode}/players/${playerName}/voteFe`), value));
   }, [roomCode, playerName, phase]);
 
   const castVoteBe = useCallback((value) => {
     if (!roomCode || !playerName || phase !== 'voting') return;
-    set(ref(db, `rooms/${roomCode}/players/${playerName}/voteBe`), value);
+    safeWrite(set(ref(db, `rooms/${roomCode}/players/${playerName}/voteBe`), value));
   }, [roomCode, playerName, phase]);
 
   const toggleSplit = useCallback(() => {
     if (!roomCode || !isLeader) return;
     const newSplit = !splitMode;
-    set(ref(db, `rooms/${roomCode}/meta/splitMode`), newSplit);
+    safeWrite(set(ref(db, `rooms/${roomCode}/meta/splitMode`), newSplit));
     if (newSplit) {
       // Trigger special round animation for everyone
-      set(ref(db, `rooms/${roomCode}/meta/specialRound`), true);
+      safeWrite(set(ref(db, `rooms/${roomCode}/meta/specialRound`), true));
       setTimeout(() => {
-        set(ref(db, `rooms/${roomCode}/meta/specialRound`), false);
+        safeWrite(set(ref(db, `rooms/${roomCode}/meta/specialRound`), false));
       }, 2500);
     }
   }, [roomCode, isLeader, splitMode]);
@@ -175,39 +219,57 @@ export function useRoom(roomCode, playerName, role = 'player') {
 
   const updateTask = useCallback((newTask) => {
     if (!roomCode || !isLeader) return;
-    set(ref(db, `rooms/${roomCode}/meta/task`), newTask);
+    safeWrite(set(ref(db, `rooms/${roomCode}/meta/task`), newTask));
   }, [roomCode, isLeader]);
 
   const setPmQuoteFirebase = useCallback((q) => {
     if (!roomCode) return;
-    set(ref(db, `rooms/${roomCode}/meta/pmQuote`), q);
+    safeWrite(set(ref(db, `rooms/${roomCode}/meta/pmQuote`), q));
   }, [roomCode]);
 
-  // Fire a synced event visible to all players
-  // Important events (train, chicken) can't be overwritten by minor ones (devQuote)
-  const IMPORTANT_EVENTS = ['train', 'chicken'];
-  const fireSyncedEvent = useCallback((eventData, durationMs = 4000) => {
-    if (!roomCode) return;
-    // Don't overwrite important events with minor ones
-    if (syncedEvent && IMPORTANT_EVENTS.includes(syncedEvent.type) && !IMPORTANT_EVENTS.includes(eventData.type)) {
-      return;
-    }
-    set(ref(db, `rooms/${roomCode}/meta/syncedEvent`), eventData);
+  // Fire a synced event visible to all players.
+  // Important events (train, chicken, dbbPipeline) are mutually exclusive:
+  // once one is active, NOTHING else can fire over it — not even another
+  // important event. That guarantees Richard's train and Tomáš's DBB
+  // pipeline never play simultaneously.
+  //
+  // Implemented with `runTransaction` so the mutex check happens atomically
+  // against Firebase's live value — the previous `useCallback([syncedEvent])`
+  // version captured stale state between rapid calls and could let a second
+  // important event slip through within a single render.
+  const fireSyncedEvent = useCallback(async (eventData, durationMs = 4000) => {
+    if (!roomCode) return false;
+    const now = Date.now();
+    const payload = { ...eventData, startedAt: now, expiresAt: now + durationMs };
+    const { committed } = await runTransaction(
+      ref(db, `rooms/${roomCode}/meta/syncedEvent`),
+      (current) => {
+        // Block if an important event is still actively playing.
+        if (current && IMPORTANT_EVENTS.includes(current.type) && (current.expiresAt || 0) > now) {
+          return; // abort transaction → committed === false
+        }
+        return payload;
+      }
+    );
+    if (!committed) return false;
+    // Best-effort cleanup after the event's duration elapses. Any client can
+    // run this — we only null the slot if it's still OUR event (matched by
+    // `startedAt`), so a later event can't be accidentally wiped.
     setTimeout(() => {
-      // Only clear if this event is still the active one
       get(ref(db, `rooms/${roomCode}/meta/syncedEvent`)).then(snap => {
         const current = snap.val();
-        if (current && current.type === eventData.type) {
+        if (current && current.startedAt === payload.startedAt) {
           set(ref(db, `rooms/${roomCode}/meta/syncedEvent`), null);
         }
       });
     }, durationMs);
-  }, [roomCode, syncedEvent]);
+    return true;
+  }, [roomCode]);
 
   const triggerOkta = useCallback(() => {
     if (!roomCode) return;
-    set(ref(db, `rooms/${roomCode}/meta/oktaEvent`), true);
-    setTimeout(() => set(ref(db, `rooms/${roomCode}/meta/oktaEvent`), false), 4500);
+    safeWrite(set(ref(db, `rooms/${roomCode}/meta/oktaEvent`), true));
+    setTimeout(() => safeWrite(set(ref(db, `rooms/${roomCode}/meta/oktaEvent`), false)), 4500);
   }, [roomCode]);
 
   return {
@@ -224,6 +286,8 @@ export function useRoom(roomCode, playerName, role = 'player') {
     fireSyncedEvent,
     isLeader,
     connected,
+    leaderChangedAt,
+    createdAt,
     castVote,
     castVoteFe,
     castVoteBe,

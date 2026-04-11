@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import PlayerFigure from './PlayerFigure';
+import { useCinematicHandoff } from '../events/useCinematicHandoff';
 
 const _ = null;
 // Shinkansen E5 series colors
@@ -88,9 +90,28 @@ function flipGrid(grid) {
   return grid.map(row => [...row].reverse());
 }
 
-export default function Train({ fromRight, playerName, onPlayerExit }) {
+export default function Train({ fromRight, playerName, onPlayerExit, onDone }) {
   const [phase, setPhase] = useState('rails');
+  const [showRichard, setShowRichard] = useState(false);
+  const [showDust, setShowDust] = useState(false);
   const trainRef = useRef(null);
+  const richardRef = useRef(null);
+
+  // Keep latest callbacks in refs so the animation effect doesn't restart on re-render.
+  // Previously the effect depended on [onPlayerExit] which was a fresh function on every
+  // parent render — every re-render of PlayerList restarted the whole animation, which is
+  // why non-owners saw the train arrive twice.
+  const onPlayerExitRef = useRef(onPlayerExit);
+  const onDoneRef = useRef(onDone);
+  useEffect(() => { onPlayerExitRef.current = onPlayerExit; }, [onPlayerExit]);
+  useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
+
+  // Handoff hook — drives the continuous walk from train door to grid slot.
+  const handoff = useCinematicHandoff(
+    playerName,
+    richardRef,
+    () => onPlayerExitRef.current?.()
+  );
 
   const trainShadow = useMemo(() => {
     const all = [];
@@ -111,17 +132,36 @@ export default function Train({ fromRight, playerName, onPlayerExit }) {
       setTimeout(() => setPhase('arrive'), 800),
       setTimeout(() => setPhase('stopped'), 3800),
       setTimeout(() => setPhase('bubble'), 4200),
-      setTimeout(() => setPhase('exit'), 6500),
+      // Richard steps out; mount the cinematic figure at the train door.
+      setTimeout(() => { setPhase('exit'); setShowRichard(true); }, 6500),
+      // One frame later, start the handoff walk-to-slot. The hook measures
+      // both rects, computes a distance-scaled duration, and the CSS
+      // transition carries Richard from the train door all the way to his
+      // reserved grid slot in a single continuous motion.
+      setTimeout(() => { handoff.startHandoff(); }, 6550),
+      // Train departs while Richard is still walking toward the grid.
+      setTimeout(() => setPhase('depart'), 8500),
+      // Dust puff kicks up ~400ms before arrival.
+      setTimeout(() => setShowDust(true), 8700),
+      // Arrival: tell the parent Richard has taken his seat, then unmount
+      // our cinematic figure on the next frame. finishHandoff flips the
+      // placeholder to visible first (via onPlayerExit → markArrived),
+      // so the grid figure appears exactly where our cinematic figure
+      // currently sits — no teleport.
       setTimeout(() => {
-        setPhase('depart');
-        // Keep richardPos — don't clear, he stays visible until syncedEvent ends
-        onPlayerExit?.();
-      }, 8000),
+        handoff.finishHandoff().then(() => {
+          setShowRichard(false);
+          setShowDust(false);
+        });
+      }, 9100),
+      // Rails fade
       setTimeout(() => setPhase('fadeRails'), 10500),
-      setTimeout(() => setPhase('done'), 11500),
+      // Full cleanup — tell parent to unmount
+      setTimeout(() => { setPhase('done'); onDoneRef.current?.(); }, 11500),
     ];
     return () => timers.forEach(clearTimeout);
-  }, [onPlayerExit]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (phase === 'done') return null;
 
@@ -131,54 +171,96 @@ export default function Train({ fromRight, playerName, onPlayerExit }) {
   const trees = [40, 140, 280, 420, 560, 700];
 
   return (
-    <div style={styles.container}>
-      {/* Trees */}
-      {trees.map((tx, i) => (
-        <div key={i} style={{
-          position: 'absolute', bottom: 18, left: tx, width: 1, height: 1,
-          boxShadow: treeShadow, zIndex: 0,
-          opacity: railsFading ? 0 : 1, transition: 'opacity 0.8s',
-        }} />
-      ))}
+    <div style={styles.container} data-testid="train-backdrop">
+      <div style={styles.trainArea}>
+        {/* Trees */}
+        {trees.map((tx, i) => (
+          <div key={i} style={{
+            position: 'absolute', bottom: 18, left: tx, width: 1, height: 1,
+            boxShadow: treeShadow, zIndex: 0,
+            opacity: railsFading ? 0 : 1, transition: 'opacity 0.8s',
+          }} />
+        ))}
 
-      {/* Bubble */}
-      {(phase === 'bubble' || phase === 'exit') && (
-        <div style={styles.bubble}>🚄 {playerName}: Monorepo conductor has arrived 🚄</div>
-      )}
+        {/* Bubble — always rendered during the arrival window, fades out
+            when Richard starts walking so the eye follows him up. */}
+        {(phase === 'stopped' || phase === 'bubble' || phase === 'exit') && (
+          <div style={{
+            ...styles.bubble,
+            opacity: phase === 'bubble' ? 1 : 0,
+            transition: 'opacity 250ms steps(4, end)',
+          }}>
+            🚄 {playerName}: Monorepo conductor has arrived 🚄
+          </div>
+        )}
 
+        {/* Richard — walks continuously from train door to his grid slot.
+            The outer div is position:fixed so `getBoundingClientRect` is
+            measured in viewport coordinates (matching the grid placeholder),
+            and its `transform` + `transition` are set by useCinematicHandoff. */}
+        {showRichard && (
+          <div
+            ref={richardRef}
+            className="richard-exit-train"
+            style={{
+              position: 'fixed',
+              bottom: 210 + CAR_H + 16, /* container bottom + train height + gap */
+              left: '50%',
+              marginLeft: '-30px',
+              zIndex: 185,
+              transform: handoff.transform,
+              transition: `transform ${handoff.duration}ms steps(${handoff.stepCount}, end)`,
+            }}
+          >
+            <PlayerFigure
+              name={playerName}
+              holdingCard={false}
+              walkFrame={handoff.walkFrame}
+            />
+            {showDust && <div className="dust-puff" />}
+          </div>
+        )}
 
-      {/* Train */}
-      {showTrain && (
-        <div
-          ref={trainRef}
-          style={{
-            ...styles.train, width: TOTAL_W,
-            transform: fromRight ? 'scaleX(-1)' : 'scaleX(1)',
-            ...(phase === 'arrive' ? {
-              animation: `trainArrive${fromRight ? 'Right' : 'Left'} 3s ease-out forwards`,
-            } : phase === 'depart' ? {
-              animation: `trainDepart${fromRight ? 'Right' : 'Left'} 2.5s ease-in forwards`,
-            } : { left: stopX }),
-          }}
-        >
-          <div style={{ width: 1, height: 1, boxShadow: trainShadow, position: 'absolute', top: 0, left: 0 }} />
+        {/* Train */}
+        {showTrain && (
+          <div
+            ref={trainRef}
+            style={{
+              ...styles.train, width: TOTAL_W,
+              transform: fromRight ? 'scaleX(-1)' : 'scaleX(1)',
+              ...(phase === 'arrive' ? {
+                animation: `trainArrive${fromRight ? 'Right' : 'Left'} 3s ease-out forwards`,
+              } : phase === 'depart' ? {
+                animation: `trainDepart${fromRight ? 'Right' : 'Left'} 2.5s ease-in forwards`,
+              } : { left: stopX }),
+            }}
+          >
+            <div style={{ width: 1, height: 1, boxShadow: trainShadow, position: 'absolute', top: 0, left: 0 }} />
+          </div>
+        )}
+
+        {/* Rails */}
+        <div style={{ ...styles.rails, opacity: railsFading ? 0 : 1, transition: 'opacity 0.8s' }}>
+          <div style={styles.ties} />
+          <div style={{ ...styles.railLine, top: 2 }} />
+          <div style={{ ...styles.railLine, top: 12 }} />
         </div>
-      )}
-
-      {/* Rails */}
-      <div style={{ ...styles.rails, opacity: railsFading ? 0 : 1, transition: 'opacity 0.8s' }}>
-        <div style={styles.ties} />
-        <div style={{ ...styles.railLine, top: 2 }} />
-        <div style={{ ...styles.railLine, top: 12 }} />
       </div>
     </div>
   );
 }
 
 const styles = {
+  // No backdrop — the regular room UI stays fully visible. The rails and
+  // train float high enough on the screen that they don't collide with
+  // the bottom UI strip (CardPicker + wizard walk path + pmBar ≈ 280 px).
   container: {
-    position: 'fixed', bottom: '80px', left: 0, right: 0,
-    height: `${CAR_H + 70}px`, zIndex: 180, pointerEvents: 'none',
+    position: 'fixed', bottom: 210, left: 0, right: 0,
+    height: `${CAR_H + 90}px`,
+    zIndex: 180, pointerEvents: 'none',
+  },
+  trainArea: {
+    position: 'absolute', inset: 0,
   },
   train: { position: 'absolute', height: CAR_H, bottom: 16, zIndex: 2 },
   bubble: {

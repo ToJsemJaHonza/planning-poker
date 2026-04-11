@@ -3,6 +3,7 @@ import NamePrompt from './components/NamePrompt';
 import Landing from './components/Landing';
 import Room from './components/Room';
 import FigureGallery from './components/FigureGallery';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function getRoomFromURL() {
   const params = new URLSearchParams(window.location.search);
@@ -44,21 +45,16 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePop);
   }, []);
 
-  // Gallery mode for testing
+  let content;
   if (getGalleryMode()) {
-    return <FigureGallery />;
+    content = <FigureGallery />;
+  } else if (!playerName) {
+    content = <NamePrompt onSubmit={handleSetName} />;
+  } else if (!roomCode) {
+    content = <Landing playerName={playerName} onJoinRoom={handleJoinRoom} />;
+  } else {
+    content = <Room roomCode={roomCode} playerName={playerName} role={role} />;
   }
 
-  // Step 1: Name prompt
-  if (!playerName) {
-    return <NamePrompt onSubmit={handleSetName} />;
-  }
-
-  // Step 2: Landing (no room)
-  if (!roomCode) {
-    return <Landing playerName={playerName} onJoinRoom={handleJoinRoom} />;
-  }
-
-  // Step 3: In a room
-  return <Room roomCode={roomCode} playerName={playerName} role={role} />;
+  return <ErrorBoundary>{content}</ErrorBoundary>;
 }

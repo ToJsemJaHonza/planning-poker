@@ -2,15 +2,14 @@ import { useState } from 'react';
 
 export default function NamePrompt({ onSubmit }) {
   const [name, setName] = useState('');
+  const sanitized = name.trim().replace(/[.$#\[\]/]/g, '');
+  const showInvalidHint = name.trim().length > 0 && sanitized.length === 0;
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Strip Firebase-unsafe characters: . $ # [ ] /
-    const sanitized = name.trim().replace(/[.$#\[\]/]/g, '');
-    if (sanitized && sanitized.length >= 1) {
-      localStorage.setItem('poker-player-name', sanitized);
-      onSubmit(sanitized);
-    }
+    if (!sanitized) return;
+    localStorage.setItem('poker-player-name', sanitized);
+    onSubmit(sanitized);
   };
 
   return (
@@ -26,8 +25,14 @@ export default function NamePrompt({ onSubmit }) {
           style={styles.input}
           autoFocus
           maxLength={20}
+          aria-invalid={showInvalidHint}
         />
-        <button type="submit" style={styles.button} disabled={!name.trim()}>
+        {showInvalidHint && (
+          <p data-testid="name-hint" style={styles.hint}>
+            Use letters or numbers (no . $ # [ ] /)
+          </p>
+        )}
+        <button type="submit" style={styles.button} disabled={!sanitized}>
           Enter
         </button>
       </form>
@@ -35,53 +40,36 @@ export default function NamePrompt({ onSubmit }) {
   );
 }
 
+const pixel = "'Press Start 2P', monospace";
+
 const styles = {
   container: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '100vh',
-    background: '#f5f0e8',
-    fontFamily: 'Georgia, serif',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+    minHeight: '100vh', background: '#e8dcc8', fontFamily: pixel, padding: '1rem',
   },
   title: {
-    fontSize: '2.5rem',
-    color: '#333',
-    marginBottom: '2rem',
+    fontSize: '1.4rem', color: '#d4a853', margin: 0, marginBottom: '0.4rem',
+    textShadow: '3px 3px 0 #2a2a3a', letterSpacing: '1px', textAlign: 'center',
   },
   form: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '1rem',
-    padding: '2rem',
-    background: '#fff',
-    borderRadius: '8px',
-    border: '2px solid #d4a853',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '0.9rem',
+    padding: '1.5rem', background: '#f5f0e4', border: '3px solid #d4a853',
+    borderRadius: 0, boxShadow: '4px 4px 0 #b8922e', minWidth: '280px', maxWidth: '320px',
   },
-  label: {
-    fontSize: '1.1rem',
-    color: '#555',
-  },
+  label: { fontSize: '0.6rem', color: '#2a2a3a', letterSpacing: '1px' },
   input: {
-    padding: '0.6rem 1rem',
-    fontSize: '1.1rem',
-    border: '2px solid #d4a853',
-    borderRadius: '4px',
-    outline: 'none',
-    textAlign: 'center',
-    fontFamily: 'monospace',
+    padding: '0.7rem 0.6rem', fontSize: '0.75rem', border: '3px solid #d4a853',
+    borderRadius: 0, outline: 'none', textAlign: 'center', fontFamily: pixel,
+    background: '#fff', color: '#2a2a3a', letterSpacing: '1px',
   },
   button: {
-    padding: '0.6rem 2rem',
-    fontSize: '1.1rem',
-    background: '#d4a853',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontFamily: 'Georgia, serif',
+    padding: '0.7rem 1rem', fontSize: '0.7rem', background: '#d4a853', color: '#1e1e2e',
+    border: '3px solid #b8922e', borderRadius: 0, cursor: 'pointer', fontFamily: pixel,
+    boxShadow: '4px 4px 0 #8a6a1f', letterSpacing: '1px',
+  },
+  hint: {
+    fontSize: '0.45rem', color: '#c0392b', fontFamily: pixel, lineHeight: 1.5, margin: 0,
+    padding: '0.3rem 0.4rem', border: '2px solid #c0392b', background: '#f7e3e0',
+    textAlign: 'center', letterSpacing: '0.5px',
   },
 };

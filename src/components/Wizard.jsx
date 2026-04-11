@@ -212,20 +212,26 @@ export default function Wizard({ isCasting, onCastComplete, onQuote, externalQuo
   const spriteRef = useRef(null);
   const [bubblePos, setBubblePos] = useState(null);
 
-  // Track sprite position for bubble (outside flipping container)
+  // Track sprite position for bubble (outside flipping container).
+  // Y7: one-shot read + resize listener instead of rAF loop.
+  // Y5: clamp bubble horizontally to viewport so it doesn't clip off-screen.
   useEffect(() => {
     if (!effectiveThinking || !effectiveQuote) { setBubblePos(null); return; }
-    let active = true;
-    const update = () => {
-      if (!active) return;
-      if (spriteRef.current) {
-        const rect = spriteRef.current.getBoundingClientRect();
-        setBubblePos({ x: rect.left + rect.width / 2, y: rect.top - 10 });
-      }
-      requestAnimationFrame(update);
+    const read = () => {
+      if (!spriteRef.current) return;
+      const rect = spriteRef.current.getBoundingClientRect();
+      const BUBBLE_W = 220;
+      const MARGIN = 12;
+      const spriteX = rect.left + rect.width / 2;
+      const clampedX = Math.max(
+        MARGIN + BUBBLE_W / 2,
+        Math.min(window.innerWidth - MARGIN - BUBBLE_W / 2, spriteX)
+      );
+      setBubblePos({ x: clampedX, y: rect.top - 10 });
     };
-    update();
-    return () => { active = false; setBubblePos(null); };
+    read();
+    window.addEventListener('resize', read);
+    return () => { window.removeEventListener('resize', read); setBubblePos(null); };
   }, [effectiveThinking, effectiveQuote]);
 
   return (
@@ -276,7 +282,8 @@ const styles = {
     lineHeight: '1.6',
     animation: 'float 1.5s ease-in-out infinite',
     boxShadow: '2px 2px 0 #b8922e',
-    maxWidth: '280px',
+    maxWidth: '220px',
+    wordBreak: 'break-word',
     textAlign: 'center',
   },
 };

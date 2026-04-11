@@ -4,12 +4,15 @@ const _ = null;
 const O = '#222';     // eyes
 const K = '#1a1a2e'; // shoes
 
-function hashName(name) {
-  let h = 0;
+export function hashName(name) {
+  let h = 2166136261;
   for (let i = 0; i < name.length; i++) {
-    h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+    h = Math.imul(h ^ name.charCodeAt(i), 16777619);
   }
-  return Math.abs(h);
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  h = (h ^ (h >>> 16)) >>> 0;
+  return h;
 }
 
 function pick(hash, shift, options) {
@@ -36,6 +39,15 @@ function generateSprite(name) {
   const h = hashName(name);
   const hr = pick(h, 0, HAIR_COLORS);
   const sk = pick(h, 3, SKIN_TONES);
+  // P4: if hair luminance is too close to skin, force a high-contrast hair color
+  const lum = (hex) => {
+    const n = parseInt(hex.slice(1), 16);
+    return ((n >> 16) & 255) * 0.299 + ((n >> 8) & 255) * 0.587 + (n & 255) * 0.114;
+  };
+  let hrFinal = hr;
+  if (Math.abs(lum(hrFinal) - lum(sk)) < 40) {
+    hrFinal = pick(h, 30, ['#d4850a', '#f1c40f', '#daa520', '#8b4513']);
+  }
   const sc = pick(h, 6, SHIRT_COLORS);
   const pc = pick(h, 9, PANTS_COLORS);
   const acc = pick(h, 12, ACCESSORIES);
@@ -49,55 +61,55 @@ function generateSprite(name) {
   let h0, h1, h2;
   switch (haircut) {
     case 'short':
-      h0 = [_,_,_,_,hr,hr,hr,hr,_,_,_,_];
-      h1 = [_,_,_,hr,hr,hr,hr,hr,hr,_,_,_];
-      h2 = [_,_,_,hr,sk,sk,sk,sk,hr,_,_,_];
+      h0 = [_,_,_,_,hrFinal,hrFinal,hrFinal,hrFinal,_,_,_,_];
+      h1 = [_,_,_,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,_,_,_];
+      h2 = [_,_,_,hrFinal,sk,sk,sk,sk,hrFinal,_,_,_];
       break;
     case 'neat':
-      h0 = [_,_,_,hr,hr,hr,hr,hr,_,_,_,_];
-      h1 = [_,_,_,hr,hr,hr,hr,hr,hr,_,_,_];
-      h2 = [_,_,_,hr,sk,sk,sk,sk,hr,_,_,_];
+      h0 = [_,_,_,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,_,_,_,_];
+      h1 = [_,_,_,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,_,_,_];
+      h2 = [_,_,_,hrFinal,sk,sk,sk,sk,hrFinal,_,_,_];
       break;
     case 'spiky':
-      h0 = [_,_,_,hr,_,hr,_,hr,_,_,_,_];
-      h1 = [_,_,_,hr,hr,hr,hr,hr,hr,_,_,_];
-      h2 = [_,_,_,hr,sk,sk,sk,sk,hr,_,_,_];
+      h0 = [_,_,_,hrFinal,_,hrFinal,_,hrFinal,_,_,_,_];
+      h1 = [_,_,_,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,_,_,_];
+      h2 = [_,_,_,hrFinal,sk,sk,sk,sk,hrFinal,_,_,_];
       break;
     case 'side':
-      h0 = [_,_,_,_,_,hr,hr,hr,hr,_,_,_];
-      h1 = [_,_,_,_,hr,hr,hr,hr,hr,hr,_,_];
-      h2 = [_,_,_,hr,sk,sk,sk,sk,hr,_,_,_];
+      h0 = [_,_,_,_,_,hrFinal,hrFinal,hrFinal,hrFinal,_,_,_];
+      h1 = [_,_,_,_,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,_,_];
+      h2 = [_,_,_,hrFinal,sk,sk,sk,sk,hrFinal,_,_,_];
       break;
     case 'long':
-      h0 = [_,_,_,hr,hr,hr,hr,hr,hr,_,_,_];
-      h1 = [_,_,hr,hr,hr,hr,hr,hr,hr,hr,_,_];
-      h2 = [_,_,hr,hr,sk,sk,sk,sk,hr,hr,_,_];
+      h0 = [_,_,_,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,_,_,_];
+      h1 = [_,_,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,_,_];
+      h2 = [_,_,hrFinal,hrFinal,sk,sk,sk,sk,hrFinal,hrFinal,_,_];
       break;
     case 'curly':
-      h0 = [_,_,hr,hr,hr,hr,hr,hr,hr,_,_,_];
-      h1 = [_,_,hr,hr,hr,hr,hr,hr,hr,hr,_,_];
-      h2 = [_,_,hr,hr,sk,sk,sk,sk,hr,hr,_,_];
+      h0 = [_,_,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,_,_,_];
+      h1 = [_,_,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,_,_];
+      h2 = [_,_,hrFinal,hrFinal,sk,sk,sk,sk,hrFinal,hrFinal,_,_];
       break;
     case 'mohawk':
-      h0 = [_,_,_,_,_,hr,hr,_,_,_,_,_];
-      h1 = [_,_,_,_,hr,hr,hr,hr,_,_,_,_];
-      h2 = [_,_,_,hr,sk,sk,sk,sk,hr,_,_,_];
+      h0 = [_,_,_,_,_,hrFinal,hrFinal,_,_,_,_,_];
+      h1 = [_,_,_,_,hrFinal,hrFinal,hrFinal,hrFinal,_,_,_,_];
+      h2 = [_,_,_,hrFinal,sk,sk,sk,sk,hrFinal,_,_,_];
       break;
     case 'buzz':
       h0 = [_,_,_,_,_,_,_,_,_,_,_,_];
-      h1 = [_,_,_,_,hr,hr,hr,hr,_,_,_,_];
-      h2 = [_,_,_,hr,sk,sk,sk,sk,hr,_,_,_];
+      h1 = [_,_,_,_,hrFinal,hrFinal,hrFinal,hrFinal,_,_,_,_];
+      h2 = [_,_,_,hrFinal,sk,sk,sk,sk,hrFinal,_,_,_];
       break;
     case 'parted':
-      h0 = [_,_,_,hr,hr,_,hr,hr,hr,_,_,_];
-      h1 = [_,_,_,hr,hr,hr,hr,hr,hr,_,_,_];
-      h2 = [_,_,_,hr,sk,sk,sk,sk,hr,_,_,_];
+      h0 = [_,_,_,hrFinal,hrFinal,_,hrFinal,hrFinal,hrFinal,_,_,_];
+      h1 = [_,_,_,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,_,_,_];
+      h2 = [_,_,_,hrFinal,sk,sk,sk,sk,hrFinal,_,_,_];
       break;
     case 'messy':
     default:
-      h0 = [_,_,hr,_,hr,hr,hr,_,hr,_,_,_];
-      h1 = [_,_,_,hr,hr,hr,hr,hr,hr,_,_,_];
-      h2 = [_,_,_,hr,sk,sk,sk,sk,hr,_,_,_];
+      h0 = [_,_,hrFinal,_,hrFinal,hrFinal,hrFinal,_,hrFinal,_,_,_];
+      h1 = [_,_,_,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,hrFinal,_,_,_];
+      h2 = [_,_,_,hrFinal,sk,sk,sk,sk,hrFinal,_,_,_];
       break;
   }
 
@@ -317,46 +329,77 @@ function spriteToBoxShadow(grid, px) {
   return shadows.join(',');
 }
 
-export default function PlayerFigure({ name, holdingCard, fukEyes }) {
-  const shadow = useMemo(() => {
-    if (fukEyes) {
-      // Only show from nose up, pushed to the bottom of the sprite area
-      const h = hashName(name || 'default');
-      const hr = pick(h, 0, HAIR_COLORS);
-      const sk = pick(h, 3, SKIN_TONES);
-      const ns = '#c09060';
-      const hasGlasses = (h >> 12) % 3 === 0;
-      const e4 = hasGlasses ? '#4a90d9' : O;
-      const empty = [_,_,_,_,_,_,_,_,_,_,_,_];
+// Subtle two-frame walk cycle matching the PM (Wizard) style: only the
+// bottom three rows (pants hem + legs + shoes) change between frames.
+// Both frames are intentionally chosen so they don't coincide with ANY
+// idle leg stance, guaranteeing every player visibly animates.
+function applyWalkFrame(grid, pc, sk, sc, frame) {
+  const K = '#1a1a2e';
+  if (frame === 0) {
+    // Feet split wide with a visible gap
+    grid[11] = [_,_,_,pc,pc,_,_,pc,pc,_,_,_];
+    grid[12] = [_,_,_,K,_,_,_,_,_,K,_,_];
+    grid[13] = [_,_,K,K,_,_,_,_,_,K,K,_];
+  } else {
+    // Feet lifted close to center, toe line planted
+    grid[11] = [_,_,_,_,pc,pc,pc,pc,_,_,_,_];
+    grid[12] = [_,_,_,_,_,K,K,_,_,_,_,_];
+    grid[13] = [_,_,_,K,K,K,K,K,K,_,_,_];
+  }
+  return grid;
+}
 
-      const grid = [
-        empty, empty, empty, empty, empty, empty, empty, empty, empty,
-        // Hair peeking
-        [_,_,_,_,hr,hr,hr,hr,_,_,_,_],
-        [_,_,_,hr,hr,hr,hr,hr,hr,_,_,_],
-        // Forehead
-        [_,_,_,hr,sk,sk,sk,sk,hr,_,_,_],
-        // Eyes (wide open, peeking)
-        [_,_,_,sk,e4,sk,sk,e4,sk,_,_,_],
-        // Nose at very bottom
-        [_,_,_,sk,sk,sk,ns,sk,sk,_,_,_],
-      ];
-      return spriteToBoxShadow(grid, PX);
-    }
-
-    const grid = generateSprite(name || 'default');
-
-    // If holding card, extend right arm to the side
-    if (holdingCard) {
-      const h = hashName(name || 'default');
-      const sk = pick(h, 3, SKIN_TONES);
-      const sc = pick(h, 6, SHIRT_COLORS);
-      grid[7] = [_,_,sc,sc,sc,sc,sc,sc,sc,sk,sk,_];
-      grid[8] = [_,_,sc,sk,sc,sc,sc,sc,sc,sc,sk,_];
-    }
-
+/**
+ * Pure helper: compute the final box-shadow string for a given player /
+ * pose / walk frame. Exported for tests so we don't have to go through
+ * React render + DOM introspection (jsdom strips very long CSS values).
+ */
+export function computePlayerShadow(name, { holdingCard = false, fukEyes = false, walkFrame = null } = {}) {
+  if (fukEyes) {
+    const h = hashName(name || 'default');
+    const hr = pick(h, 0, HAIR_COLORS);
+    const sk = pick(h, 3, SKIN_TONES);
+    const ns = '#c09060';
+    const hasGlasses = (h >> 12) % 3 === 0;
+    const e4 = hasGlasses ? '#4a90d9' : O;
+    const empty = [_,_,_,_,_,_,_,_,_,_,_,_];
+    const grid = [
+      empty, empty, empty, empty, empty, empty, empty, empty, empty,
+      [_,_,_,_,hr,hr,hr,hr,_,_,_,_],
+      [_,_,_,hr,hr,hr,hr,hr,hr,_,_,_],
+      [_,_,_,hr,sk,sk,sk,sk,hr,_,_,_],
+      [_,_,_,sk,e4,sk,sk,e4,sk,_,_,_],
+      [_,_,_,sk,sk,sk,ns,sk,sk,_,_,_],
+    ];
     return spriteToBoxShadow(grid, PX);
-  }, [name, holdingCard, fukEyes]);
+  }
+
+  const grid = generateSprite(name || 'default');
+
+  if (holdingCard) {
+    const h = hashName(name || 'default');
+    const sk = pick(h, 3, SKIN_TONES);
+    const sc = pick(h, 6, SHIRT_COLORS);
+    grid[7] = [_,_,sc,sc,sc,sc,sc,sc,sc,sk,sk,_];
+    grid[8] = [_,_,sc,sk,sc,sc,sc,sc,sc,sc,sk,_];
+  }
+
+  if (walkFrame === 0 || walkFrame === 1) {
+    const h = hashName(name || 'default');
+    const sk = pick(h, 3, SKIN_TONES);
+    const pc = pick(h, 9, PANTS_COLORS);
+    const sc = pick(h, 6, SHIRT_COLORS);
+    applyWalkFrame(grid, pc, sk, sc, walkFrame);
+  }
+
+  return spriteToBoxShadow(grid, PX);
+}
+
+export default function PlayerFigure({ name, holdingCard, fukEyes, walkFrame = null }) {
+  const shadow = useMemo(
+    () => computePlayerShadow(name, { holdingCard, fukEyes, walkFrame }),
+    [name, holdingCard, fukEyes, walkFrame]
+  );
 
   return (
     <div style={{ width: SPRITE_W, height: SPRITE_H, position: 'relative' }}>
