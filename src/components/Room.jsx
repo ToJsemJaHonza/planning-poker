@@ -8,6 +8,8 @@ import RevealBackground from './RevealBackground';
 import Chicken from './Chicken';
 import Sheep from './Sheep';
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
 export default function Room({ roomCode, playerName, role = 'player' }) {
   const {
     players,
@@ -23,6 +25,8 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
     fireSyncedEvent,
     isLeader,
     connected,
+    leaderChangedAt,
+    createdAt,
     castVote,
     castVoteFe,
     castVoteBe,
@@ -39,6 +43,24 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
   const [taskDraft, setTaskDraft] = useState('');
   const [showResult, setShowResult] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
+  const [showLeaderBanner, setShowLeaderBanner] = useState(false);
+
+  // Y3 — close task editor whenever we leave the voting phase
+  useEffect(() => {
+    if (phase !== 'voting') setEditingTask(false);
+  }, [phase]);
+
+  // Surface a short banner whenever leadership changes (old owner left)
+  useEffect(() => {
+    if (!leaderChangedAt) return;
+    setShowLeaderBanner(true);
+    const t = setTimeout(() => setShowLeaderBanner(false), 4500);
+    return () => clearTimeout(t);
+  }, [leaderChangedAt]);
+
+  // Find who the current leader is, so the banner can name them
+  const currentLeaderName = Object.entries(players).find(([, p]) => p.isLeader)?.[0];
 
   const me = players[playerName];
   const myVote = me?.vote || null;
@@ -61,21 +83,37 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
     setTimeout(() => setShowResult(true), 300);
   };
 
-  // OKTA easter egg — only for "Honza", detect O+K+T+A keys held together
+  // OKTA easter egg — only for "Honza", detect O+K+T+A keys held together.
+  // P6: ignore modifiers (ctrl/meta/alt), ignore autorepeat, and soft-clear
+  // the pressed set after 2s of inactivity so ghost keyups never brick it.
   useEffect(() => {
     if (playerName.toLowerCase() !== 'honza') return;
     const pressed = new Set();
+    let clearTimer = null;
+    const scheduleClear = () => {
+      if (clearTimer) clearTimeout(clearTimer);
+      clearTimer = setTimeout(() => pressed.clear(), 2000);
+    };
     const check = () => {
       if (pressed.has('o') && pressed.has('k') && pressed.has('t') && pressed.has('a')) {
         triggerOkta();
         pressed.clear();
       }
     };
-    const down = (e) => { pressed.add(e.key.toLowerCase()); check(); };
+    const down = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      pressed.add(e.key.toLowerCase());
+      check();
+      scheduleClear();
+    };
     const up = (e) => { pressed.delete(e.key.toLowerCase()); };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
-    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      if (clearTimer) clearTimeout(clearTimer);
+    };
   }, [playerName, triggerOkta]);
 
   const handleNewRound = () => {
@@ -83,11 +121,17 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
     newRound();
   };
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     const url = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setCopyError(false);
+    } catch {
+      setCopied(false);
+      setCopyError(true);
+    }
+    setTimeout(() => { setCopied(false); setCopyError(false); }, 2000);
   };
 
   const handleTaskEdit = () => {
@@ -110,7 +154,16 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
   }
 
   return (
-    <div style={{ ...styles.container, paddingBottom: isPM ? '80px' : canControl ? (splitMode ? '280px' : '240px') : (splitMode ? '220px' : '190px') }}>
+    <div style={{
+      ...styles.container,
+      // Entrance events (train, dbbPipeline) float above the bottom UI strip.
+      // Push the player grid down so its figures don't overlap the train/pipe.
+      paddingBottom:
+        syncedEvent && (syncedEvent.type === 'train' || syncedEvent.type === 'dbbPipeline')
+          ? '380px'
+          : isPM ? '80px' : canControl ? (splitMode ? '280px' : '240px') : (splitMode ? '220px' : '190px'),
+      transition: 'padding-bottom 0.3s ease',
+    }}>
       {/* PM sprite visible to ALL players */}
       <Wizard
         isCasting={false}
@@ -120,14 +173,14 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
       />
 
       {/* Header */}
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
-          <h2 style={styles.roomTitle}>Room: {roomCode}</h2>
-          <span style={styles.playerCount}>{playerCount} players</span>
+      <div style={styles.header} data-room-header>
+        <div style={styles.headerLeft} data-header-left>
+          <h2 style={styles.roomTitle} data-room-title>Room: {roomCode}</h2>
+          <span style={styles.playerCount} data-player-count>{plural(playerCount, 'player')}</span>
         </div>
         <div style={styles.headerRight}>
-          <button onClick={handleCopyLink} style={styles.copyBtn}>
-            {copied ? '✓ Copied' : '📋 Invite'}
+          <button onClick={handleCopyLink} style={styles.copyBtn} data-copy-btn>
+            {copied ? '✓ Copied' : copyError ? '✗ Copy failed' : '📋 Invite'}
           </button>
         </div>
       </div>
@@ -142,7 +195,10 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
               placeholder="Task name..."
               style={styles.taskInput}
               autoFocus
-              onKeyDown={(e) => e.key === 'Enter' && handleTaskSave()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleTaskSave();
+                else if (e.key === 'Escape') { setEditingTask(false); setTaskDraft(''); }
+              }}
             />
             <button onClick={handleTaskSave} style={styles.taskSaveBtn}>✓</button>
           </div>
@@ -200,6 +256,7 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
         syncedEvent={syncedEvent}
         fireSyncedEvent={fireSyncedEvent}
         isLeader={isLeader}
+        createdAt={createdAt}
       />
 
       {/* Card picker — only for players, not PM */}
@@ -236,6 +293,15 @@ export default function Room({ roomCode, playerName, role = 'player' }) {
       {canControl && phase === 'revealed' && (
         <div style={styles.pmBar}>
           <span style={styles.pmBarText}>Results revealed</span>
+        </div>
+      )}
+
+      {/* Leader takeover banner — old owner disconnected, someone else took the crown */}
+      {showLeaderBanner && currentLeaderName && (
+        <div style={styles.leaderBanner} data-testid="leader-banner">
+          <span style={styles.leaderBannerText}>
+            👑 {currentLeaderName === playerName ? 'You are now the leader' : `${currentLeaderName} is now the leader`}
+          </span>
         </div>
       )}
 
@@ -479,5 +545,24 @@ const styles = {
     marginTop: '0.5rem',
     textShadow: '2px 2px 0 #1a3a5a',
     letterSpacing: '8px',
+  },
+  leaderBanner: {
+    position: 'fixed',
+    top: 80,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    background: '#2a2a3a',
+    border: '4px solid #d4a853',
+    color: '#d4a853',
+    padding: '10px 18px',
+    fontSize: '0.7rem',
+    fontFamily: pixel,
+    boxShadow: '4px 4px 0 #b8922e',
+    zIndex: 190,
+    letterSpacing: '1px',
+    animation: 'specialFade 4.5s ease-in-out forwards',
+  },
+  leaderBannerText: {
+    fontFamily: pixel,
   },
 };

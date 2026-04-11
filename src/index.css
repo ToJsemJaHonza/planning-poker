@@ -8,7 +8,6 @@ body {
   background: #e8dcc8;
   font-family: 'Press Start 2P', monospace;
   color: #2a2a3a;
-  image-rendering: pixelated;
 }
 
 #root {
@@ -97,35 +96,151 @@ body {
   50% { transform: scale(1.2); opacity: 1; }
 }
 
-/* Player enter animations — walk in from edge with bobbing */
-.player-enter-left {
-  animation: enterFromLeft var(--enter-duration, 1.5s) ease-out, walkBob var(--enter-duration, 1.5s) steps(2) forwards;
-}
-.player-enter-right {
-  animation: enterFromRight var(--enter-duration, 1.5s) ease-out, walkBob var(--enter-duration, 1.5s) steps(2) forwards;
+/* Player walk in/out — slow linear motion with visible step bobbing.
+   The inner <div> (PlayerFigure wrapper) gets a "stepping" sub-animation
+   so you can see them putting one foot in front of the other. */
+.player-walk-in-left,
+.player-walk-in-right,
+.player-walk-out-left,
+.player-walk-out-right {
+  /* Slower, steadier walk — linear so speed feels mechanical like stepping */
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  animation-iteration-count: 1;
 }
 
-@keyframes enterFromLeft {
-  0% { transform: translateX(-50vw); }
+.player-walk-in-left {
+  animation-name: walkInFromLeft;
+  animation-duration: var(--enter-duration, 2.8s);
+}
+.player-walk-in-right {
+  animation-name: walkInFromRight;
+  animation-duration: var(--enter-duration, 2.8s);
+}
+.player-walk-out-left {
+  animation-name: walkOutToLeft;
+  animation-duration: var(--enter-duration, 2.2s);
+}
+.player-walk-out-right {
+  animation-name: walkOutToRight;
+  animation-duration: var(--enter-duration, 2.2s);
+}
+
+/* Walk-in / walk-out: parent container slides horizontally ONLY.
+   Vertical body-bob is handled per-figure by .walk-bob-0 / .walk-bob-1
+   so it syncs perfectly with the JS-driven leg-swap frames. */
+@keyframes walkInFromLeft {
+  0%   { transform: translateX(-110vw); }
   100% { transform: translateX(0); }
 }
-@keyframes enterFromRight {
-  0% { transform: translateX(50vw); }
+@keyframes walkInFromRight {
+  0%   { transform: translateX(110vw); }
   100% { transform: translateX(0); }
 }
-@keyframes walkBob {
-  0% { margin-top: 0; }
-  10% { margin-top: -3px; }
-  20% { margin-top: 0; }
-  30% { margin-top: -3px; }
-  40% { margin-top: 0; }
-  50% { margin-top: -3px; }
-  60% { margin-top: 0; }
-  70% { margin-top: -3px; }
-  80% { margin-top: 0; }
-  90% { margin-top: -3px; }
-  100% { margin-top: 0; }
+@keyframes walkOutToLeft {
+  0%   { transform: translateX(0);      opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateX(-120vw); opacity: 0; }
 }
+@keyframes walkOutToRight {
+  0%   { transform: translateX(0);      opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateX(120vw);  opacity: 0; }
+}
+
+/* GH issue #2 — Tomáš emerges from the DBB pipe mouth. The pipe is an
+   L-segmented shape anchored to a screen edge; Tomáš is invisible until
+   the emerge phase (~t=3000 ms), at which point a 450 ms pixel-art burst
+   pops him out of the mouth. The slide-out direction is driven by an
+   inline transform on the pipe group wrapper (no CSS keyframe needed for
+   retract). See DbbPipeline.jsx for the timeline. */
+/* Emerge bursts — each variant grows from the mouth face outward.
+   transform-origin is set on the base class so the idle sprite inherits
+   the origin and doesn't snap back at animation end. */
+.dbb-tomas-emerge-right,
+.dbb-tomas-emerge-left,
+.dbb-tomas-emerge-up,
+.dbb-tomas-emerge-down {
+  animation-duration: 600ms;
+  animation-timing-function: steps(8, end);
+  animation-fill-mode: forwards;
+}
+
+.dbb-tomas-emerge-right { transform-origin: left center;   animation-name: dbbTomasEmergeRight; }
+.dbb-tomas-emerge-left  { transform-origin: right center;  animation-name: dbbTomasEmergeLeft;  }
+.dbb-tomas-emerge-down  { transform-origin: center top;    animation-name: dbbTomasEmergeDown;  }
+.dbb-tomas-emerge-up    { transform-origin: center bottom; animation-name: dbbTomasEmergeUp;    }
+
+@keyframes dbbTomasEmergeRight {
+  0%   { opacity: 0; transform: scaleX(0.15) scaleY(0.85); }
+  30%  { opacity: 1; transform: scaleX(0.6)  scaleY(1.05); }
+  60%  { opacity: 1; transform: scaleX(1.1)  scaleY(0.95); }
+  100% { opacity: 1; transform: scaleX(1)    scaleY(1);    }
+}
+@keyframes dbbTomasEmergeLeft {
+  0%   { opacity: 0; transform: scaleX(0.15) scaleY(0.85); }
+  30%  { opacity: 1; transform: scaleX(0.6)  scaleY(1.05); }
+  60%  { opacity: 1; transform: scaleX(1.1)  scaleY(0.95); }
+  100% { opacity: 1; transform: scaleX(1)    scaleY(1);    }
+}
+@keyframes dbbTomasEmergeDown {
+  0%   { opacity: 0; transform: scaleY(0.15) scaleX(0.85); }
+  30%  { opacity: 1; transform: scaleY(0.6)  scaleX(1.05); }
+  60%  { opacity: 1; transform: scaleY(1.1)  scaleX(0.95); }
+  100% { opacity: 1; transform: scaleY(1)    scaleX(1);    }
+}
+@keyframes dbbTomasEmergeUp {
+  0%   { opacity: 0; transform: scaleY(0.15) scaleX(0.85); }
+  30%  { opacity: 1; transform: scaleY(0.6)  scaleX(1.05); }
+  60%  { opacity: 1; transform: scaleY(1.1)  scaleX(0.95); }
+  100% { opacity: 1; transform: scaleY(1)    scaleX(1);    }
+}
+
+/* Steam puff at the mouth during emerge. */
+@keyframes dbb-steam-puff {
+  0%   { opacity: 0; transform: translate(-50%, 0)    scale(0.5); }
+  25%  { opacity: 1; transform: translate(-50%, -4px) scale(1);   }
+  70%  { opacity: 0.7; transform: translate(-50%, -8px) scale(1.4); }
+  100% { opacity: 0; transform: translate(-50%, -14px) scale(1.8); }
+}
+.dbb-steam-puff {
+  position: absolute;
+  width: 20px;
+  height: 6px;
+  background: #c0c4ca;
+  box-shadow:
+    -10px 0 0 0 #c0c4ca,
+     10px 0 0 0 #c0c4ca,
+    -16px 0 0 0 rgba(192,196,202,0.55),
+     16px 0 0 0 rgba(192,196,202,0.55),
+     0 -6px 0 0 rgba(192,196,202,0.7);
+  pointer-events: none;
+  animation: dbb-steam-puff 450ms steps(4, end) forwards;
+}
+
+/* Mouth flash overlay during emerge. */
+@keyframes dbb-mouth-flash {
+  0%   { opacity: 0; }
+  10%  { opacity: 1; }
+  40%  { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+.dbb-mouth-flash {
+  position: absolute;
+  inset: 5px;
+  background: #d8dbe0;
+  animation: dbb-mouth-flash 450ms steps(4, end) forwards;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+/* DBB factory ID tag — painted ON the pipe body (child of a segment).
+   Inline styles on the element handle positioning/colors; this rule only
+   enforces pixelated rendering. */
+.dbb-label-on-pipe {
+  image-rendering: pixelated;
+}
+
 
 /* Chicken easter egg */
 @keyframes chickenRun {
@@ -160,10 +275,47 @@ body {
   100% { left: -500px; }
 }
 
-/* Richard exits train — walks up */
-@keyframes richardExit {
-  0% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(-120px); }
+/* Richard exits train — walks continuously from the train door to his
+   grid slot. The fade-up keyframe has been removed; motion is now
+   driven entirely by useCinematicHandoff via inline transform +
+   transition so the figure never disappears mid-walk. This class is
+   kept as a DOM marker (used by tests and by the dust puff positioning)
+   but intentionally applies no animation. */
+.richard-exit-train {
+  /* transform + transition are set inline per-frame by the handoff hook */
+  will-change: transform;
+}
+
+/* Dust puff — kicked up where a walking figure lands on its grid slot.
+   Sibling of the cinematic figure; anchored to its bottom center. */
+@keyframes dust-puff {
+  0%   { opacity: 0; transform: translateX(-50%) scaleX(0.6); }
+  15%  { opacity: 1; }
+  60%  { opacity: 0.85; transform: translateX(-50%) scaleX(1.1); }
+  100% { opacity: 0;    transform: translateX(-50%) scaleX(1.6); }
+}
+.dust-puff {
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+  width: 18px;
+  height: 6px;
+  background: #c9bfa8;
+  box-shadow: -9px 0 0 0 #c9bfa8, 9px 0 0 0 #c9bfa8, -14px 0 0 0 rgba(201,191,168,0.6), 14px 0 0 0 rgba(201,191,168,0.6);
+  pointer-events: none;
+  animation: dust-puff 360ms steps(3, end) forwards;
+}
+
+/* Name tag pulse — runs for ~220ms on the grid figure's name tag the
+   moment the cinematic hands off. Draws the eye to the newly-arrived
+   player without being loud. */
+@keyframes name-tag-pulse {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 0 rgba(255,215,106,0); }
+  50%  { transform: scale(1.22); box-shadow: 0 0 0 2px #ffd76a; }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(255,215,106,0); }
+}
+.name-tag-arrived {
+  animation: name-tag-pulse 360ms ease-out 1;
 }
 
 /* OKTA sheep easter egg */
@@ -194,4 +346,97 @@ body {
   20% { opacity: 0.35; transform: scale(1); }
   75% { opacity: 0.25; }
   100% { opacity: 0; }
+}
+
+/* === Global pixel defaults === */
+button, input, textarea, select {
+  border-radius: 0;
+}
+
+/* === Disabled buttons === */
+button:disabled,
+button[disabled] {
+  opacity: 0.45;
+  filter: saturate(0.4);
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+button:disabled:hover,
+button[disabled]:hover {
+  opacity: 0.45;
+  transform: none !important;
+}
+
+/* === Focus indicators (keyboard only) === */
+button:focus-visible {
+  outline: 3px solid #2a2a3a;
+  outline-offset: 2px;
+}
+input:focus-visible {
+  outline: 3px solid #d4a853;
+  outline-offset: 2px;
+}
+button:focus:not(:focus-visible),
+input:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* === Mobile header === */
+@media (max-width: 560px) {
+  [data-room-header] { padding: 0.5rem 0.6rem !important; }
+  [data-room-header] [data-header-left] {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 0.2rem !important;
+  }
+  [data-room-header] [data-room-title] { font-size: 0.7rem !important; }
+  [data-room-header] [data-player-count] { font-size: 0.5rem !important; }
+  [data-room-header] [data-copy-btn] {
+    padding: 0.35rem 0.5rem !important;
+    font-size: 0.5rem !important;
+  }
+}
+@media (max-width: 380px) {
+  [data-room-header] [data-player-count] { display: none !important; }
+}
+
+/* === Split modal responsive === */
+@media (max-width: 520px) {
+  [data-split-modal-body] {
+    flex-direction: column !important;
+    gap: 0.8rem !important;
+  }
+  [data-split-modal] {
+    padding: 1rem !important;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+}
+
+/* === Player name tag mobile === */
+@media (max-width: 560px) {
+  [data-player-tag] {
+    max-width: 120px !important;
+    font-size: 0.45rem !important;
+  }
+}
+
+/* === Reduced motion === */
+@media (prefers-reduced-motion: reduce) {
+  .wizard-walk,
+  .wizard-walk * { animation: none !important; }
+  [class*="float"],
+  [class*="bob"],
+  [class*="idle"],
+  [class*="bubble-float"],
+  [class*="sparkle"] { animation: none !important; }
+  [class*="walk-in"],
+  [class*="walk-out"] {
+    animation: rm-fade-in 0.2s ease-out !important;
+  }
+  @keyframes rm-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 }

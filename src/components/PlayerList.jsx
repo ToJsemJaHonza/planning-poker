@@ -1,13 +1,16 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import PlayerFigure from './PlayerFigure';
-import Train from './Train';
+import {
+  isRichardName,
+  hashDir,
+  FUKNAMES,
+  RICHARD_HUNGER_QUOTES,
+  RICHARD_HUNGER_THRESHOLD_MS,
+} from './playerList.utils';
+import { useEntranceEvents } from '../events/useEntranceEvents';
+import EntranceStage from '../events/EntranceStage';
 
 const pixel = "'Press Start 2P', monospace";
-
-function isRichardName(name) {
-  const clean = name.toLowerCase().replace(/\./g, '');
-  return ['richard', 'ricardo', 'ricardino', 'ricardito', 'ricardinho'].includes(clean);
-}
 
 const DEV_QUOTES = [
   "It works on my machine",
@@ -42,56 +45,75 @@ const DEV_QUOTES = [
   "This should be a 2-pointer, right?",
 ];
 
-// Direction + speed based on name hash
-const ENTER_DIRECTIONS = ['left', 'right'];
 
-function hashDir(name) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
-  const abs = Math.abs(h);
-  return {
-    dir: ENTER_DIRECTIONS[abs % 2],
-    duration: 1.2 + (abs % 10) * 0.15, // 1.2s to 2.55s — varying speed
-  };
+// A figure that actually moves its legs — uses JS setInterval to toggle
+// between the two walk-cycle sprite frames (the same pattern Wizard uses).
+// MUST be declared at module scope — if defined inside PlayerList, React
+// treats each render as a new component type and unmounts/remounts on
+// every parent re-render, so the interval never has time to tick.
+function WalkingFigure({ name, fukEyes }) {
+  const [frame, setFrame] = useState(0);
+  useEffect(() => {
+    // 500 ms per frame, matching the PM (Wizard) walk cadence.
+    const id = setInterval(() => setFrame(f => f ^ 1), 500);
+    return () => clearInterval(id);
+  }, []);
+  return <PlayerFigure name={name} holdingCard={false} fukEyes={fukEyes} walkFrame={frame} />;
 }
 
-const FUKNAMES = ['františek', 'fanda'];
-
-export default function PlayerList({ players, phase, currentPlayer, splitMode, syncedEvent, fireSyncedEvent, isLeader }) {
+export default function PlayerList({ players, phase, currentPlayer, splitMode, syncedEvent, fireSyncedEvent, isLeader, createdAt = 0 }) {
   const playerEntries = Object.entries(players)
     .filter(([_, data]) => data.role !== 'pm')
     .sort((a, b) => a[1].joinedAt - b[1].joinedAt);
 
   // Track known players to detect new joins
   const knownRef = useRef(new Set());
+  const lastPlayerDataRef = useRef({}); // keep last seen data for disconnecting players
   const [enteringPlayers, setEnteringPlayers] = useState({});
-  const trainTriggeredRef = useRef(new Set());
-  const trainFromEvent = syncedEvent?.type === 'train' ? syncedEvent : null;
-  const prevTrainRef = useRef(null);
+  const [leavingPlayers, setLeavingPlayers] = useState({}); // { name: { data, dir } }
 
-  // When train event ends, Richard simply appears (no walk-in — he already exited the train)
-  useEffect(() => {
-    prevTrainRef.current = trainFromEvent;
-  }, [trainFromEvent]);
+  // All cinematic entrance events go through the unified engine. It handles
+  // trigger detection (leader-only), mutex, and derives which players need
+  // to be hidden from the grid while their event plays.
+  const { activeEntrance, hiddenPlayers, markArrived, recentArrivals } = useEntranceEvents({
+    playerEntries,
+    isLeader,
+    syncedEvent,
+    fireSyncedEvent,
+  });
 
   useEffect(() => {
     const currentNames = playerEntries.map(([name]) => name);
+    const currentSet = new Set(currentNames);
     const newPlayers = {};
+    const gonePlayers = {};
+
+    // Remember latest data for everyone currently present
+    playerEntries.forEach(([name, data]) => {
+      lastPlayerDataRef.current[name] = data;
+    });
 
     let maxDuration = 0;
     for (const name of currentNames) {
       if (!knownRef.current.has(name)) {
-        // Richard: 10% chance of train entrance
-        if (isLeader && isRichardName(name) && Math.random() < 0.1 && !trainTriggeredRef.current.has(name)) {
-          trainTriggeredRef.current.add(name);
-          const fromRight = Math.random() > 0.5;
-          fireSyncedEvent?.({ type: 'train', playerName: name, fromRight }, 12000);
-          // Don't add to walk-in — will be hidden until train exit
-        } else {
-          const info = hashDir(name);
-          newPlayers[name] = info;
-          if (info.duration > maxDuration) maxDuration = info.duration;
-        }
+        // If the engine is currently hiding this player (they're in the
+        // middle of their cinematic entrance), don't ALSO queue them as a
+        // normal walk-in — the cinematic IS their grand arrival.
+        if (hiddenPlayers.has(name)) continue;
+        const info = hashDir(name);
+        newPlayers[name] = info;
+        if (info.duration > maxDuration) maxDuration = info.duration;
+      }
+    }
+
+    // Detect disconnected players — they should walk off instead of vanishing
+    for (const name of knownRef.current) {
+      if (!currentSet.has(name)) {
+        const info = hashDir(name);
+        // Exit in the opposite direction they came from for a "walked through" feel
+        const exitDir = info.dir === 'left' ? 'right' : 'left';
+        const data = lastPlayerDataRef.current[name] || { name };
+        gonePlayers[name] = { info: { dir: exitDir, duration: info.duration }, data };
       }
     }
 
@@ -106,18 +128,38 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
       }, (maxDuration + 0.2) * 1000);
     }
 
-    knownRef.current = new Set(currentNames);
+    if (Object.keys(gonePlayers).length > 0) {
+      setLeavingPlayers(prev => ({ ...prev, ...gonePlayers }));
+      const exitMaxDuration = Math.max(
+        ...Object.values(gonePlayers).map(g => g.info.duration)
+      );
+      const goneNames = Object.keys(gonePlayers);
+      setTimeout(() => {
+        setLeavingPlayers(prev => {
+          const next = { ...prev };
+          goneNames.forEach(n => delete next[n]);
+          return next;
+        });
+        // Also drop their last-known data
+        goneNames.forEach(n => delete lastPlayerDataRef.current[n]);
+      }, (exitMaxDuration + 0.3) * 1000);
+    }
+
+    knownRef.current = currentSet;
   }, [playerEntries.map(([n]) => n).join(',')]);
 
   // === ALL EVENTS SYNCED VIA FIREBASE (leader decides, all clients render) ===
 
   // Fuk eyes — leader decides on phase change, writes to Firebase
-  const fukEyesSet = new Set(syncedEvent?.type === 'fukEyes' ? syncedEvent.names : []);
+  const fukEyesSet = useMemo(
+    () => new Set(syncedEvent?.type === 'fukEyes' ? syncedEvent.names : []),
+    [syncedEvent]
+  );
   useEffect(() => {
     if (!isLeader) return;
     const fuk = [];
     playerEntries.forEach(([name]) => {
-      if (FUKNAMES.includes(name.toLowerCase()) && Math.random() < 0.1) {
+      if (FUKNAMES.has(name.toLowerCase()) && Math.random() < 0.1) {
         fuk.push(name);
       }
     });
@@ -156,111 +198,194 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
     return () => clearInterval(interval);
   }, [playerEntries.length, isLeader, syncedEvent]);
 
+  // GH issue #1 — "Richard is hungry". If the room has been open for more than
+  // an hour and there's a Richard in the voter list, the leader periodically
+  // makes him speak a hunger quote. Synced via Firebase so every client sees
+  // the same quote at the same time.
+  useEffect(() => {
+    if (!isLeader || typeof createdAt !== 'number' || !createdAt) return;
+    const richardEntry = playerEntries.find(([name]) => isRichardName(name));
+    if (!richardEntry) return;
+    const interval = setInterval(() => {
+      if (syncedEvent) return; // something already showing — don't stomp on it
+      const age = Date.now() - createdAt;
+      if (age < RICHARD_HUNGER_THRESHOLD_MS) return;
+      // 40% chance per tick so Richard complains visibly often once he's hungry
+      if (Math.random() >= 0.4) return;
+      const text = RICHARD_HUNGER_QUOTES[Math.floor(Math.random() * RICHARD_HUNGER_QUOTES.length)];
+      fireSyncedEvent?.({ type: 'devQuote', name: richardEntry[0], text }, 4000);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [isLeader, createdAt, playerEntries.length, syncedEvent]);
+
+  // Tomáš DBB trigger is handled in the unified entrance dispatcher above
+  // (same useEffect as Richard's train) so the two are mutually exclusive.
+
+  // Render a single player box (or a frozen "leaving" copy) — keeps the grid + leaving layer DRY
+  const renderPlayer = (name, data, opts = {}) => {
+    const { className = '', style = {}, keySuffix = '', walking = false, testIdOverride } = opts;
+    const isMe = name === currentPlayer;
+    const isSpeaking = activeQuote && activeQuote.name === name;
+    const justArrived = recentArrivals.has(name);
+    const nameTagClass = justArrived ? 'name-tag-arrived' : '';
+    const testId = testIdOverride ?? `player-${name}`;
+    const figureSlot = walking
+      ? <WalkingFigure name={name} fukEyes={fukEyesSet.has(name)} />
+      : <PlayerFigure name={name} holdingCard={false} fukEyes={fukEyesSet.has(name)} />;
+
+    if (splitMode) {
+      const hasVotedFe = data.voteFe != null;
+      const hasVotedBe = data.voteBe != null;
+
+      return (
+        <div
+          key={name + keySuffix}
+          className={className}
+          style={{ ...styles.player, ...style }}
+          data-testid={testId}
+        >
+          <div style={styles.splitCardRow}>
+            <div style={styles.splitSlot}>
+              <div style={styles.splitLabel}>FE</div>
+              {hasVotedFe ? (
+                <div style={{
+                  ...styles.splitCard,
+                  ...(phase === 'revealed' ? styles.cardRevealed : styles.cardHiddenFe),
+                }}>
+                  {phase === 'revealed' ? data.voteFe : '?'}
+                </div>
+              ) : (
+                <div style={styles.splitCardEmpty} />
+              )}
+            </div>
+            <div style={styles.splitSlot}>
+              <div style={styles.splitLabel}>BE</div>
+              {hasVotedBe ? (
+                <div style={{
+                  ...styles.splitCard,
+                  ...(phase === 'revealed' ? styles.cardRevealed : styles.cardHiddenBe),
+                }}>
+                  {phase === 'revealed' ? data.voteBe : '?'}
+                </div>
+              ) : (
+                <div style={styles.splitCardEmpty} />
+              )}
+            </div>
+          </div>
+
+          <div style={{ position: 'relative' }}>
+            {figureSlot}
+            {isSpeaking && <div style={styles.devBubble}>{activeQuote.text}</div>}
+          </div>
+
+          <div
+            data-player-tag
+            className={nameTagClass}
+            style={{ ...styles.nameTag, ...(isMe ? styles.nameTagMe : {}), maxWidth: 160 }}
+          >
+            {data.isLeader ? '👑 ' : ''}{name}
+          </div>
+        </div>
+      );
+    }
+
+    // Normal single-card mode
+    const hasVoted = data.vote != null;
+
+    return (
+      <div
+        key={name + keySuffix}
+        className={className}
+        style={{ ...styles.player, ...style }}
+        data-testid={testId}
+      >
+        <div style={styles.cardSlot}>
+          {hasVoted && (
+            <div style={{
+              ...styles.card,
+              ...(phase === 'revealed' ? styles.cardRevealed : styles.cardHidden),
+            }}>
+              {phase === 'revealed' ? data.vote : '?'}
+            </div>
+          )}
+        </div>
+
+        <div style={{ position: 'relative' }}>
+          {figureSlot}
+          {isSpeaking && <div style={styles.devBubble}>{activeQuote.text}</div>}
+        </div>
+
+        <div
+          className={nameTagClass}
+          data-player-tag
+          style={{ ...styles.nameTag, ...(isMe ? styles.nameTagMe : {}), maxWidth: 160 }}
+        >
+          {data.isLeader ? '👑 ' : ''}{name}
+        </div>
+      </div>
+    );
+  };
+
+  // Callback for the cinematic component: the moment its handoff animation
+  // parks the figure on its grid slot, it calls this so we can flip the
+  // placeholder into the real (visible) figure on this client without any
+  // Firebase roundtrip. Runs on EVERY client (not just the leader), so
+  // non-leaders don't see a flicker either.
+  const handlePlayerExit = () => {
+    const hiddenName = activeEntrance?.event.getHiddenPlayer?.(activeEntrance.payload);
+    if (hiddenName) markArrived(hiddenName);
+  };
+
   return (
     <div style={styles.container}>
-      {/* Richard's train — synced via Firebase */}
-      {trainFromEvent && (
-        <Train
-          fromRight={trainFromEvent.fromRight}
-          playerName={trainFromEvent.playerName}
-          onPlayerExit={() => {}}
-        />
-      )}
+      {/* Whatever entrance event is currently active — driven entirely by
+          Firebase syncedEvent, no local mirror state. Adding a new entrance
+          type requires ZERO changes here — just drop it in the registry. */}
+      <EntranceStage activeEntrance={activeEntrance} onPlayerExit={handlePlayerExit} />
 
       <div style={styles.grid}>
         {playerEntries.map(([name, data]) => {
-          const isMe = name === currentPlayer;
-          const enterInfo = enteringPlayers[name];
-          const enterClass = enterInfo ? `player-enter-${enterInfo.dir}` : '';
-          const enterStyle = enterInfo ? { '--enter-duration': `${enterInfo.duration}s` } : {};
-          const isSpeaking = activeQuote && activeQuote.name === name;
-
-          // Hide player if train is active for them (they'll appear when train exits)
-          if (trainFromEvent && trainFromEvent.playerName === name) return null;
-
-          if (splitMode) {
-            const hasVotedFe = data.voteFe != null;
-            const hasVotedBe = data.voteBe != null;
-            const hasVoted = hasVotedFe || hasVotedBe;
-
+          // Engine tells us which players are currently being rendered by
+          // a cinematic entrance; reserve their grid slot with a
+          // visibility: hidden copy of the real figure so the cinematic
+          // animation has a deterministic target to aim at (and flexbox
+          // holds the exact pixel-identical box).
+          if (hiddenPlayers.has(name)) {
+            // Reserve the grid slot with an invisible copy of the real
+            // figure so the cinematic animation has a deterministic
+            // target to aim at. Flexbox reserves the same pixel box as
+            // the real entry. Testid is suffixed `-placeholder` so
+            // queryByTestId('player-{name}') still returns null while
+            // the cinematic is playing.
             return (
-              <div key={name} className={enterClass} style={{ ...styles.player, ...enterStyle }}>
-                {/* Two cards side by side */}
-                <div style={styles.splitCardRow}>
-                  {/* FE card */}
-                  <div style={styles.splitSlot}>
-                    <div style={styles.splitLabel}>FE</div>
-                    {hasVotedFe ? (
-                      <div style={{
-                        ...styles.splitCard,
-                        ...(phase === 'revealed' ? styles.cardRevealed : styles.cardHiddenFe),
-                      }}>
-                        {phase === 'revealed' ? data.voteFe : '?'}
-                      </div>
-                    ) : (
-                      <div style={styles.splitCardEmpty} />
-                    )}
-                  </div>
-                  {/* BE card */}
-                  <div style={styles.splitSlot}>
-                    <div style={styles.splitLabel}>BE</div>
-                    {hasVotedBe ? (
-                      <div style={{
-                        ...styles.splitCard,
-                        ...(phase === 'revealed' ? styles.cardRevealed : styles.cardHiddenBe),
-                      }}>
-                        {phase === 'revealed' ? data.voteBe : '?'}
-                      </div>
-                    ) : (
-                      <div style={styles.splitCardEmpty} />
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ position: 'relative' }}>
-                  <PlayerFigure name={name} holdingCard={false} fukEyes={fukEyesSet.has(name)} />
-                  {isSpeaking && <div style={styles.devBubble}>{activeQuote.text}</div>}
-                </div>
-
-                <div style={{
-                  ...styles.nameTag,
-                  ...(isMe ? styles.nameTagMe : {}),
-                }}>
-                  {data.isLeader ? '👑 ' : ''}{name}
-                </div>
+              <div
+                key={name}
+                style={{
+                  visibility: 'hidden',
+                  minHeight: 100,
+                  display: 'flex',
+                }}
+                data-entrance-target={name}
+              >
+                {renderPlayer(name, data, {
+                  keySuffix: '__placeholder',
+                  testIdOverride: `player-${name}-placeholder`,
+                })}
               </div>
             );
           }
 
-          // Normal single-card mode
-          const hasVoted = data.vote != null;
+          const enterInfo = enteringPlayers[name];
+          const className = enterInfo ? `player-walk-in-${enterInfo.dir}` : '';
+          const style = enterInfo ? { '--enter-duration': `${enterInfo.duration}s` } : {};
+          return renderPlayer(name, data, { className, style, walking: !!enterInfo });
+        })}
 
-          return (
-            <div key={name} className={enterClass} style={{ ...styles.player, ...enterStyle }}>
-              <div style={styles.cardSlot}>
-                {hasVoted && (
-                  <div style={{
-                    ...styles.card,
-                    ...(phase === 'revealed' ? styles.cardRevealed : styles.cardHidden),
-                  }}>
-                    {phase === 'revealed' ? data.vote : '?'}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ position: 'relative' }}>
-                <PlayerFigure name={name} holdingCard={false} fukEyes={fukEyesSet.has(name)} />
-                {isSpeaking && <div style={styles.devBubble}>{activeQuote.text}</div>}
-              </div>
-
-              <div style={{
-                ...styles.nameTag,
-                ...(isMe ? styles.nameTagMe : {}),
-              }}>
-                {data.isLeader ? '👑 ' : ''}{name}
-              </div>
-            </div>
-          );
+        {/* Leaving players — frozen last-known figure walks off-screen */}
+        {Object.entries(leavingPlayers).map(([name, { info, data }]) => {
+          const className = `player-walk-out-${info.dir}`;
+          const style = { '--enter-duration': `${info.duration}s` };
+          return renderPlayer(name, data, { className, style, keySuffix: '__leaving', walking: true });
         })}
       </div>
     </div>

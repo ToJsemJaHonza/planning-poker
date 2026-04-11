@@ -1,5 +1,25 @@
 # Planning Poker — Development Notes
 
+## 🎯 Quality Bar: 120% Perfection Required
+
+Every change merged into this repo is held to a **120% perfection** bar — not 100%, not "it works". The extra 20% is what separates a passable feature from one the user actually feels good about.
+
+Before you consider a change "done":
+
+1. **Test what you built, honestly.** Open the app, reproduce the exact scenario the user would hit, and watch it. Screenshots or inspector evidence, not "I'm pretty sure it works".
+2. **Write regression tests.** Every bug you fix and every feature you ship gets a test that would have failed before your fix. No exceptions — the test suite is the only thing standing between us and re-breaking the same thing next week.
+3. **Verify the test catches the regression.** Temporarily reintroduce the bug, run the test, see it fail. Then put the fix back. If the test doesn't fail without the fix, the test is worthless.
+4. **Look for the second problem.** If you fixed a race in one place, check whether the same race exists elsewhere. If one animation felt wrong, look at the other animations.
+5. **Read the final state.** Re-read the diff from top to bottom before calling it done. Check for debug code, temporary values, commented-out experiments, and console.logs.
+6. **Match the existing feel.** Pixel-art animations, fonts, spacing, colors — new work must match the rest of the app, not look like it was grafted on.
+7. **Think about failure modes.** What happens if Firebase is slow? What happens if a player disconnects mid-animation? What happens if two clients race? Handle it, or document why you chose not to.
+
+"It compiled" is not done. "Tests pass" is not done. 120% perfection is done.
+
+## Architecture
+
+See `ARCHITECTURE.md` for the full write-up of data flow, known limits, and the rationale behind the current design. Read it before making significant changes.
+
 ## IMPORTANT: Event Synchronization Rule
 
 **ALL visual events, animations, and easter eggs MUST be synchronized through Firebase.**
