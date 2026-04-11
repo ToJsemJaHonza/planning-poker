@@ -18,8 +18,11 @@ export default function Landing({ playerName, onJoinRoom }) {
 
   const handleJoin = (e) => {
     e.preventDefault();
+    // Strict 6-char alphanumeric room code — prevents any Firebase path
+    // injection via crafted inputs like "AB/../meta". generateRoomCode
+    // always produces values matching this shape.
     const code = joinCode.trim().toUpperCase();
-    if (code) {
+    if (/^[A-Z0-9]{6}$/.test(code)) {
       onJoinRoom(code, 'player'); // joining = always player
     }
   };
@@ -67,7 +70,12 @@ export default function Landing({ playerName, onJoinRoom }) {
           <input
             type="text"
             value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+            onChange={(e) =>
+              // Strip anything that isn't an uppercase alphanumeric so
+              // copy-pasted junk (slashes, spaces, punctuation) can't land
+              // in the room code and leak into Firebase paths.
+              setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))
+            }
             placeholder="CODE"
             style={styles.input}
             maxLength={6}

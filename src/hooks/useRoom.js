@@ -6,6 +6,18 @@ import { db, ref, set, get, update, onValue, onDisconnect, runTransaction, serve
 // until its TTL expires.
 const IMPORTANT_EVENTS = ['train', 'chicken', 'dbbPipeline'];
 
+// Defense-in-depth: reject any room code containing characters that would
+// change the Firebase path shape. Firebase RTDB treats `/` as a path
+// separator, and `. # $ [ ]` are disallowed key characters — if any of
+// those slip into a code they could let a crafted URL param inject extra
+// path segments into every write. generateRoomCode always produces
+// A–Z/2–9 strings, so this check is a no-op for the legitimate flow.
+// Callers (App.getRoomFromURL, Landing.handleJoin) additionally enforce
+// the full 6-char shape before getting here.
+const ROOM_CODE_INVALID_RE = /[./#$\[\]]/;
+const isSafeRoomCode = (code) =>
+  typeof code === 'string' && code.length > 0 && !ROOM_CODE_INVALID_RE.test(code);
+
 // Fire-and-forget write helper: log errors to the console so a dropped
 // network write doesn't vanish silently (P9).
 const safeWrite = (promise) => {
@@ -40,6 +52,10 @@ export function useRoom(roomCode, playerName, role = 'player') {
 
   useEffect(() => {
     if (!roomCode || !playerName) return;
+    if (!isSafeRoomCode(roomCode)) {
+      console.error('[useRoom] refusing to mount: room code contains unsafe characters');
+      return;
+    }
 
     const roomRef = ref(db, `rooms/${roomCode}`);
     const playerRef = ref(db, `rooms/${roomCode}/players/${playerName}`);
