@@ -5,9 +5,17 @@ import Room from './components/Room';
 import FigureGallery from './components/FigureGallery';
 import ErrorBoundary from './components/ErrorBoundary';
 
+// Room codes are strictly 6 uppercase alphanumerics (see generateRoomCode).
+// We validate here to prevent a crafted `?room=FOO/bar/..` from being
+// concatenated into Firebase path templates — Firebase treats `/` as a path
+// separator, so without this guard a URL param could inject arbitrary path
+// segments into every write performed by useRoom.
+const ROOM_CODE_RE = /^[A-Z0-9]{6}$/;
+
 function getRoomFromURL() {
   const params = new URLSearchParams(window.location.search);
-  return params.get('room')?.toUpperCase() || null;
+  const raw = params.get('room')?.toUpperCase() || null;
+  return raw && ROOM_CODE_RE.test(raw) ? raw : null;
 }
 
 function getGalleryMode() {
