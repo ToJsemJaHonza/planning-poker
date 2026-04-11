@@ -1,16 +1,24 @@
 import { useMemo } from 'react';
+import { roundToCard } from './resultModal.utils';
 
 const pixel = "'Press Start 2P', monospace";
 
-function getConsensus(players, field) {
-  const votes = Object.values(players)
-    .map(p => p[field])
-    .filter(v => v != null && !isNaN(Number(v)));
-  if (votes.length === 0) return null;
-  // Most common vote
-  const counts = {};
-  votes.forEach(v => { counts[v] = (counts[v] || 0) + 1; });
-  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+// Compute the card to display on the reveal background. This is NOT the
+// mode (most-common vote) — with 2 players voting differently every vote
+// appears once and the tie-break was arbitrary. Instead we take the
+// numeric average and round to the nearest card in the planning-poker
+// deck (1,2,3,5,8,13,21), with exact ties rounding UP pessimistically.
+// See https://www.mountaingoatsoftware.com/blog/dont-average-during-planning-poker
+// for why the deck intentionally has gaps; this rule is a pragmatic
+// display fallback, not a substitute for the discussion the modal drives.
+function getDisplayCard(players, field) {
+  const nums = Object.values(players)
+    .map(p => Number(p?.[field]))
+    .filter(n => !Number.isNaN(n));
+  if (nums.length === 0) return null;
+  const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+  const card = roundToCard(avg);
+  return card == null ? null : String(card);
 }
 
 function seededRandom(seed) {
@@ -28,8 +36,8 @@ export default function RevealBackground({ players, splitMode }) {
     const count = 30;
 
     if (splitMode) {
-      const feVal = getConsensus(players, 'voteFe');
-      const beVal = getConsensus(players, 'voteBe');
+      const feVal = getDisplayCard(players, 'voteFe');
+      const beVal = getDisplayCard(players, 'voteBe');
 
       for (let i = 0; i < count; i++) {
         const isFe = i % 2 === 0;
@@ -46,7 +54,7 @@ export default function RevealBackground({ players, splitMode }) {
         });
       }
     } else {
-      const val = getConsensus(players, 'vote');
+      const val = getDisplayCard(players, 'vote');
       if (!val) return [];
 
       for (let i = 0; i < count; i++) {

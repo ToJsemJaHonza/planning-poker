@@ -3,7 +3,11 @@ import { computeStats } from './resultModal.utils';
 const pixel = "'Press Start 2P', monospace";
 
 function ResultSection({ title, titleColor, stats }) {
-  const { emoji, verdict, color, avg, distribution, maxCount, special } = stats;
+  const { emoji, verdict, color, avg, distribution, totalVotes, special } = stats;
+  // Bars are scaled to totalVotes (not section-local maxCount) so a full
+  // bar always means "everyone voted this", directly comparable between
+  // the Frontend and Backend histograms in split mode.
+  const denom = Math.max(totalVotes, 1);
 
   return (
     <div style={styles.section}>
@@ -31,7 +35,7 @@ function ResultSection({ title, titleColor, stats }) {
               <div style={styles.barCount}>{count}</div>
               <div style={{
                 ...styles.bar,
-                height: `${(count / maxCount) * 60}px`,
+                height: `${(count / denom) * 60}px`,
                 background: isNaN(Number(value)) ? '#999' : (titleColor || '#d4a853'),
               }} />
               <div style={styles.barLabel}>{value}</div>

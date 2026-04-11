@@ -8,7 +8,7 @@ import {
   RICHARD_HUNGER_THRESHOLD_MS,
   shouldRichardSpeakHunger,
 } from '../components/playerList.utils';
-import { computeStats } from '../components/resultModal.utils';
+import { computeStats, roundToCard, DECK } from '../components/resultModal.utils';
 
 // We have to mock firebase before any module that imports it (useRoom does).
 vi.mock('../firebase.js', () => import('./firebase-mock.js'));
@@ -156,6 +156,88 @@ describe('computeStats', () => {
     expect(s.distribution['3']).toBe(2);
     expect(s.distribution['5']).toBe(1);
     expect(s.maxCount).toBe(2);
+  });
+});
+
+describe('roundToCard — reveal background display rule', () => {
+  // Baseline: the deck the app actually ships.
+  it('deck matches the numeric planning-poker cards', () => {
+    expect(DECK).toEqual([1, 2, 3, 5, 8, 13, 21]);
+  });
+
+  // Exact matches are trivially themselves.
+  it('returns the exact card when avg hits one', () => {
+    expect(roundToCard(1)).toBe(1);
+    expect(roundToCard(2)).toBe(2);
+    expect(roundToCard(3)).toBe(3);
+    expect(roundToCard(5)).toBe(5);
+    expect(roundToCard(8)).toBe(8);
+    expect(roundToCard(13)).toBe(13);
+    expect(roundToCard(21)).toBe(21);
+  });
+
+  // The screenshot the user reported: 2 and 5 → avg 3.5, closer to 3 than
+  // to 5 by a full point, so the background should say "3".
+  it('rounds avg 3.5 to 3 (closer neighbor)', () => {
+    expect(roundToCard(3.5)).toBe(3);
+  });
+
+  // Same bug report: 2 and 13 → avg 7.5, closer to 8 than to 5.
+  it('rounds avg 7.5 to 8 (closer neighbor)', () => {
+    expect(roundToCard(7.5)).toBe(8);
+  });
+
+  // Tie-break rule: equidistant averages round UP (pessimistic).
+  it('rounds a 3↔5 tie (avg 4) UP to 5', () => {
+    expect(roundToCard(4)).toBe(5);
+  });
+  it('rounds a 1↔2 tie (avg 1.5) UP to 2', () => {
+    expect(roundToCard(1.5)).toBe(2);
+  });
+  it('rounds a 5↔8 tie (avg 6.5) UP to 8', () => {
+    expect(roundToCard(6.5)).toBe(8);
+  });
+  it('rounds a 13↔21 tie (avg 17) UP to 21', () => {
+    expect(roundToCard(17)).toBe(21);
+  });
+
+  // Everything below the smallest card clamps to 1; everything above the
+  // largest clamps to 21 — the background never shows an off-deck number.
+  it('clamps below the deck to 1', () => {
+    expect(roundToCard(0)).toBe(1);
+    expect(roundToCard(0.5)).toBe(1);
+    expect(roundToCard(-3)).toBe(1);
+  });
+  it('clamps above the deck to 21', () => {
+    expect(roundToCard(21.5)).toBe(21);
+    expect(roundToCard(100)).toBe(21);
+  });
+
+  // Nulls and NaN must propagate as null so the caller can skip rendering.
+  it('returns null for null/undefined/NaN input', () => {
+    expect(roundToCard(null)).toBeNull();
+    expect(roundToCard(undefined)).toBeNull();
+    expect(roundToCard(NaN)).toBeNull();
+    expect(roundToCard('abc')).toBeNull();
+  });
+
+  // String numerics are coerced because computeDisplayCard passes through
+  // Number() already, but defend against callers that forget.
+  it('coerces numeric strings', () => {
+    expect(roundToCard('3.5')).toBe(3);
+    expect(roundToCard('7.5')).toBe(8);
+  });
+
+  // Several Fibonacci averages that came up in grooming sessions.
+  it('handles common 3-player averages', () => {
+    // (1+2+3)/3 = 2 → 2
+    expect(roundToCard(2)).toBe(2);
+    // (2+3+5)/3 ≈ 3.33 → 3
+    expect(roundToCard(10 / 3)).toBe(3);
+    // (3+5+8)/3 ≈ 5.33 → 5
+    expect(roundToCard(16 / 3)).toBe(5);
+    // (5+8+13)/3 ≈ 8.67 → 8 (|8-8.67|=0.67, |13-8.67|=4.33)
+    expect(roundToCard(26 / 3)).toBe(8);
   });
 });
 
