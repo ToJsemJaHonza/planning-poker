@@ -23,6 +23,14 @@ Planning Poker is a real-time estimation tool for agile teams. Create a room, sh
 
 The entire UI is hand-crafted pixel art: deterministic player avatars, a walking PM wizard, and enough easter eggs to keep grooming sessions from feeling like grooming sessions.
 
+### Why this exists
+
+Most estimation tools are either overengineered enterprise platforms that require accounts and onboarding, or generic card apps with zero personality. Sprint planning is already one of the most dreaded ceremonies — the tool shouldn't make it worse.
+
+Planning Poker is built to be **zero-friction** (share a link, you're in) and **actually fun** (your team gets unique pixel-art avatars, a walking PM wizard drops Michael Scott quotes, and there's a small chance a chicken runs across the screen after reveal). It turns "let's get this over with" into something the team might actually look forward to.
+
+It's also **completely free and self-hostable** — no vendor lock-in, no per-seat pricing, no "upgrade to Pro for more than 5 voters". Just clone it, point it at your own Firebase, and go.
+
 ---
 
 ## Features
@@ -169,6 +177,10 @@ Pushes to `master` trigger a three-stage CI/CD pipeline (`.github/workflows/ci.y
 ---
 
 ## Contributing
+
+Got an idea? Found a bug? Want a new easter egg for your teammate? [Open an issue](https://github.com/ToJsemJaHonza/planning-poker/issues) — we'd love to hear what would make your sprint planning better.
+
+If you want to contribute code:
 
 1. Read [ARCHITECTURE.md](ARCHITECTURE.md) before touching anything
 2. Write regression tests for every change
