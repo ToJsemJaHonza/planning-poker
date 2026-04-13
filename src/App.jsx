@@ -22,10 +22,33 @@ function getGalleryMode() {
   return new URLSearchParams(window.location.search).has('gallery');
 }
 
+// Per-tab stable player identity. Two browser tabs with the same display
+// name must NOT collide inside a room — so we key each Firebase player
+// entry on an ID stored in sessionStorage (fresh per tab, preserved across
+// refreshes). localStorage would share the ID across tabs and reintroduce
+// the duplicate-name bug this was built to fix.
+function getOrCreatePlayerId() {
+  try {
+    const existing = sessionStorage.getItem('poker-player-id');
+    if (existing) return existing;
+    const id = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+      ? crypto.randomUUID()
+      : 'p_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    sessionStorage.setItem('poker-player-id', id);
+    return id;
+  } catch {
+    // sessionStorage unavailable (e.g. incognito with storage disabled).
+    // Fall back to an in-memory ID for this tab — still gives duplicate
+    // names independent slots within a single page lifecycle.
+    return 'p_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  }
+}
+
 export default function App() {
   const [playerName, setPlayerName] = useState(
     () => localStorage.getItem('poker-player-name') || null
   );
+  const [playerId] = useState(getOrCreatePlayerId);
   const [roomCode, setRoomCode] = useState(() => getRoomFromURL());
   const [role, setRole] = useState(() => localStorage.getItem('poker-role') || 'player');
 
@@ -61,7 +84,14 @@ export default function App() {
   } else if (!roomCode) {
     content = <Landing playerName={playerName} onJoinRoom={handleJoinRoom} />;
   } else {
-    content = <Room roomCode={roomCode} playerName={playerName} role={role} />;
+    content = (
+      <Room
+        roomCode={roomCode}
+        playerId={playerId}
+        playerName={playerName}
+        role={role}
+      />
+    );
   }
 
   return <ErrorBoundary>{content}</ErrorBoundary>;

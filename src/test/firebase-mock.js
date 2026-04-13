@@ -196,8 +196,11 @@ export const __mock = {
     // Notify every registered listener so subscribers see the new world
     for (const key of Array.from(listeners.keys())) _fireListener(key);
   },
-  removePlayer(roomCode, playerName) {
-    const path = `/rooms/${roomCode}/players/${playerName}`;
+  // Remove a player entry by its Firebase key. After the session-ID
+  // refactor the key is the player's session ID, but tests that use the
+  // display name as the ID (simple single-name fixtures) still work.
+  removePlayer(roomCode, playerKey) {
+    const path = `/rooms/${roomCode}/players/${playerKey}`;
     _setAt(path, undefined);
     _notify(path);
   },

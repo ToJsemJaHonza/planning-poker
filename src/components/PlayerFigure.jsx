@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import Crown from './Crown';
 
 const _ = null;
 const O = '#222';     // eyes
@@ -35,7 +36,7 @@ const ACCESSORIES = [
   'phone', 'badge', 'tie', 'pen', 'glasses',
 ];
 
-function generateSprite(name) {
+function generateSprite(name, poseOverride = null) {
   const h = hashName(name);
   const hr = pick(h, 0, HAIR_COLORS);
   const sk = pick(h, 3, SKIN_TONES);
@@ -51,7 +52,9 @@ function generateSprite(name) {
   const sc = pick(h, 6, SHIRT_COLORS);
   const pc = pick(h, 9, PANTS_COLORS);
   const acc = pick(h, 12, ACCESSORIES);
-  const pose = pick(h, 18, ['neutral', 'hips', 'pockets', 'crossed', 'lean', 'neutral']);
+  // Pose is deterministic-from-name by default; callers can override (e.g.
+  // the Crowning Machine swaps the winner to `hips` during the crowning).
+  const pose = poseOverride || pick(h, 18, ['neutral', 'hips', 'pockets', 'crossed', 'lean', 'neutral']);
   const haircut = pick(h, 24, [
     'short', 'neat', 'spiky', 'side', 'long', 'curly', 'mohawk', 'buzz', 'parted', 'messy',
   ]);
@@ -354,7 +357,10 @@ function applyWalkFrame(grid, pc, sk, sc, frame) {
  * pose / walk frame. Exported for tests so we don't have to go through
  * React render + DOM introspection (jsdom strips very long CSS values).
  */
-export function computePlayerShadow(name, { holdingCard = false, fukEyes = false, walkFrame = null } = {}) {
+export function computePlayerShadow(
+  name,
+  { holdingCard = false, fukEyes = false, walkFrame = null, pose = null } = {}
+) {
   if (fukEyes) {
     const h = hashName(name || 'default');
     const hr = pick(h, 0, HAIR_COLORS);
@@ -374,7 +380,7 @@ export function computePlayerShadow(name, { holdingCard = false, fukEyes = false
     return spriteToBoxShadow(grid, PX);
   }
 
-  const grid = generateSprite(name || 'default');
+  const grid = generateSprite(name || 'default', pose);
 
   if (holdingCard) {
     const h = hashName(name || 'default');
@@ -395,10 +401,10 @@ export function computePlayerShadow(name, { holdingCard = false, fukEyes = false
   return spriteToBoxShadow(grid, PX);
 }
 
-export default function PlayerFigure({ name, holdingCard, fukEyes, walkFrame = null }) {
+export default function PlayerFigure({ name, holdingCard, fukEyes, walkFrame = null, pose = null, showCrown = false }) {
   const shadow = useMemo(
-    () => computePlayerShadow(name, { holdingCard, fukEyes, walkFrame }),
-    [name, holdingCard, fukEyes, walkFrame]
+    () => computePlayerShadow(name, { holdingCard, fukEyes, walkFrame, pose }),
+    [name, holdingCard, fukEyes, walkFrame, pose]
   );
 
   return (
@@ -409,6 +415,11 @@ export default function PlayerFigure({ name, holdingCard, fukEyes, walkFrame = n
         position: 'absolute',
         top: 0, left: 0,
       }} />
+      {/* iter 2: Crown sprite on player-leader's head. Positioned at the
+          design doc v2 §2 head anchor offset. Crown is a child of the figure
+          wrapper so it bobs/walks with the figure. Z-index 1 = below voting
+          card (z-index 2). */}
+      {showCrown && <Crown anchorMode="head" />}
     </div>
   );
 }

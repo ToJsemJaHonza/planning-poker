@@ -11,13 +11,16 @@
 //      needs. It manages its own timers and unmounts itself cleanly.
 //
 //   2. Add an entry below with:
-//        - `type`          — Firebase syncedEvent.type string
-//        - `match(name)`   — returns true for names that trigger this entrance
-//        - `buildPayload(name)` — Firebase payload (leader rolls randomness)
-//        - `duration`      — how long Firebase should hold the flag (ms)
-//        - `Component`     — the React component to render while active
-//        - `getHiddenPlayer(payload)` — returns the player name to hide from
-//                                        the grid while this event plays
+//        - `type`                    — Firebase syncedEvent.type string
+//        - `match(name)`             — returns true for names that trigger this entrance
+//        - `buildPayload(id, name)`  — Firebase payload (leader rolls randomness).
+//                                       Stores BOTH the stable session id (for
+//                                       targeting the grid placeholder) AND the
+//                                       display name (for rendering the bubble).
+//        - `duration`                — how long Firebase should hold the flag (ms)
+//        - `Component`               — the React component to render while active
+//        - `getHiddenPlayer(payload)` — returns the player ID to hide from the grid
+//                                        while this event plays
 //
 //   3. That's it. The engine (`useEntranceEvents`) handles trigger detection,
 //      the mutual exclusion mutex, hiding the target player, and passing the
@@ -40,29 +43,31 @@ export const ENTRANCE_EVENTS = [
   {
     type: 'train',
     match: isRichardName,
-    buildPayload: (name) => ({
+    buildPayload: (id, name) => ({
       type: 'train',
+      playerId: id,
       playerName: name,
       fromRight: Math.random() > 0.5,
     }),
     duration: 12000,
     Component: Train,
-    getHiddenPlayer: (payload) => payload.playerName,
+    getHiddenPlayer: (payload) => payload.playerId,
   },
   {
     type: 'dbbPipeline',
     match: isTomasName,
-    buildPayload: (name) => {
+    buildPayload: (id, name) => {
       const sides = ['top', 'bottom', 'left', 'right'];
       return {
         type: 'dbbPipeline',
+        playerId: id,
         playerName: name,
         fromSide: sides[Math.floor(Math.random() * sides.length)],
       };
     },
     duration: 10000,
     Component: DbbPipeline,
-    getHiddenPlayer: (payload) => payload.playerName,
+    getHiddenPlayer: (payload) => payload.playerId,
   },
 ];
 

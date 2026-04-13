@@ -19,46 +19,27 @@ body {
   50% { transform: translateY(-6px); }
 }
 
-/* PM walks horizontally above the card picker, below players */
-.wizard-walk {
-  animation: wizard-path 16s linear infinite;
-  top: calc(100vh - 175px);
+/* PM idle walk — GPU-composited CSS animation. Zero React re-renders.
+   The 16s cycle walks left-to-right-to-left with 480ms edge pauses (3%).
+   Ceremony mode hides this element and reads its position once via
+   getBoundingClientRect() at ceremony start. */
+@keyframes wizard-path {
+  0%   { left: 10px; transform: scaleX(1); }
+  3%   { left: 10px; transform: scaleX(1); }
+  47%  { left: calc(100vw - 70px); transform: scaleX(1); }
+  50%  { left: calc(100vw - 70px); transform: scaleX(-1); }
+  53%  { left: calc(100vw - 70px); transform: scaleX(-1); }
+  97%  { left: 10px; transform: scaleX(-1); }
+  100% { left: 10px; transform: scaleX(1); }
 }
 
-@keyframes wizard-path {
-  /* Start left, pause */
-  0% {
-    left: 10px;
-    transform: scaleX(1);
-  }
-  3% {
-    left: 10px;
-    transform: scaleX(1);
-  }
-  /* Walk right */
-  47% {
-    left: calc(100vw - 70px);
-    transform: scaleX(1);
-  }
-  /* Pause right, flip */
-  50% {
-    left: calc(100vw - 70px);
-    transform: scaleX(-1);
-  }
-  53% {
-    left: calc(100vw - 70px);
-    transform: scaleX(-1);
-  }
-  /* Walk left */
-  97% {
-    left: 10px;
-    transform: scaleX(-1);
-  }
-  /* Flip back */
-  100% {
-    left: 10px;
-    transform: scaleX(1);
-  }
+.wizard-walk {
+  position: fixed;
+  bottom: 105px;
+  animation: wizard-path 16s linear infinite;
+  z-index: 50;
+  pointer-events: none;
+  image-rendering: pixelated;
 }
 
 /* Sparkle burst from wand */
@@ -424,8 +405,7 @@ input:focus:not(:focus-visible) {
 
 /* === Reduced motion === */
 @media (prefers-reduced-motion: reduce) {
-  .wizard-walk,
-  .wizard-walk * { animation: none !important; }
+  .wizard-walk { animation: none !important; }
   [class*="float"],
   [class*="bob"],
   [class*="idle"],
@@ -438,5 +418,171 @@ input:focus:not(:focus-visible) {
   @keyframes rm-fade-in {
     from { opacity: 0; }
     to { opacity: 1; }
+  }
+
+  /* Crowning Machine — reduced motion overrides. The phase machine
+     itself already picks a shortened table; these rules kill the
+     cabinet drop/bounce, reel streak, rumble shake, and bulb chase. */
+  .cm-cabinet-drop,
+  .cm-cabinet-bounce,
+  .cm-cabinet-exit,
+  .cm-cabinet-rumble,
+  .cm-reel-flare,
+  .cm-streak,
+  .cm-crown-bounce,
+  .cm-procession-text {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* =====================================================================
+   Crowning Machine (cm-) — PM handoff slot machine animations.
+   All keyframes prefixed cm- to avoid collisions with existing ones.
+   Tech design §4, design doc §5-§7.
+===================================================================== */
+
+/* Cabinet slide-in from the top of viewport, 300ms eased curve matching
+   DbbPipeline's slide. 2-frame bounce at landing. */
+@keyframes cm-cabinet-drop {
+  0%   { transform: translate(-50%, -200vh); }
+  100% { transform: translate(-50%, -50%); }
+}
+@keyframes cm-cabinet-bounce {
+  0%   { transform: translate(-50%, -50%) translateY(0); }
+  50%  { transform: translate(-50%, -50%) translateY(8px); }
+  100% { transform: translate(-50%, -50%) translateY(0); }
+}
+@keyframes cm-cabinet-exit {
+  0%   { transform: translate(-50%, -50%); }
+  100% { transform: translate(-50%, -200vh); }
+}
+@keyframes cm-cabinet-rumble-kf {
+  0%   { transform: translate(-50%, -50%) translateX(0); }
+  25%  { transform: translate(-50%, -50%) translateX(-3px); }
+  50%  { transform: translate(-50%, -50%) translateX(3px); }
+  75%  { transform: translate(-50%, -50%) translateX(-3px); }
+  100% { transform: translate(-50%, -50%) translateX(0); }
+}
+
+.cm-cabinet-drop {
+  animation: cm-cabinet-drop 300ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.cm-cabinet-bounce {
+  animation: cm-cabinet-bounce 100ms steps(2, end) forwards;
+}
+.cm-cabinet-exit {
+  animation: cm-cabinet-exit 400ms cubic-bezier(0.4, 0, 0.7, 1) forwards;
+}
+.cm-cabinet-rumble {
+  animation: cm-cabinet-rumble-kf 60ms steps(4, end);
+}
+
+/* Reel streak overlay — diagonal stripes slide downward to fake motion
+   blur during full-speed spin. Fades out when decelerating starts. */
+@keyframes cm-streak-slide {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 24px; }
+}
+.cm-streak {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(245, 240, 228, 0.08) 0px,
+    rgba(245, 240, 228, 0.08) 3px,
+    rgba(212, 168, 83, 0.24) 3px,
+    rgba(212, 168, 83, 0.24) 6px
+  );
+  animation: cm-streak-slide 120ms steps(4, end) infinite;
+}
+
+/* Reel click flash — the reel's gold frame pulses bright gold for one
+   frame when a click lands. Applied to the reel's border via className. */
+@keyframes cm-reel-flare-kf {
+  0%   { border-color: #f5c542; }
+  50%  { border-color: #f5c542; }
+  100% { border-color: #d4a853; }
+}
+.cm-reel-flare {
+  animation: cm-reel-flare-kf 80ms steps(2, end) 1;
+}
+
+/* v3: Old cm-wizard-farewell-slide and cm-wizard-farewell-fade DELETED.
+   Farewell walk is now JS-driven (Wizard.jsx inline position).
+   See pipeline-tech-design-v3.md section 4. */
+
+/* v5: Procession announcement text — "THE CROWN PASSES" overlay.
+   Scale-pulse version: smooth fade+scale in, gentle pulse, fade out. 1080ms. */
+@keyframes cm-procession-text {
+  0%    { opacity: 0; transform: translateX(-50%) scale(0.92); }
+  5.7%  { opacity: 1; transform: translateX(-50%) scale(1.0); }
+  50%   { opacity: 1; transform: translateX(-50%) scale(1.03); }
+  85.7% { opacity: 1; transform: translateX(-50%) scale(1.0); }
+  100%  { opacity: 0; transform: translateX(-50%) scale(1.0); }
+}
+.cm-procession-text {
+  animation: cm-procession-text 3500ms ease-in-out forwards;
+}
+
+/* Crown bounce — rare flourish variant. The crown drops onto the
+   winner's head with 3 stepped bounces. */
+@keyframes cm-crown-bounce-kf {
+  0%   { transform: translateY(0); }
+  20%  { transform: translateY(-6px); }
+  40%  { transform: translateY(0); }
+  55%  { transform: translateY(-4px); }
+  70%  { transform: translateY(0); }
+  85%  { transform: translateY(-2px); }
+  100% { transform: translateY(0); }
+}
+.cm-crown-bounce {
+  animation: cm-crown-bounce-kf 300ms steps(6, end) forwards;
+}
+
+/* Pointer-events is off on the stage entirely; but elements that want
+   to be visually "above" the grid during the ceremony should respect it. */
+[data-cm-stage] {
+  pointer-events: none;
+}
+
+/* =====================================================================
+   Iteration 2 — additional keyframes for the Crowning Machine.
+===================================================================== */
+
+/* Crown settle bounce — 2-frame bounce when crown lands on a surface.
+   100ms total, up 4px then back to 0. */
+@keyframes cm-crown-settle {
+  0%   { transform: translateY(-4px); }
+  50%  { transform: translateY(-4px); }
+  100% { transform: translateY(0); }
+}
+.cm-crown-settle {
+  animation: cm-crown-settle 100ms steps(2, end) forwards;
+}
+
+/* Crown materialize fade-in — 150ms stepped alpha fade from 0 to 1.
+   Used for both mini-ceremony and PM-creator-disconnect case. */
+@keyframes cm-crown-materialize-kf {
+  0%   { opacity: 0; }
+  33%  { opacity: 0.33; }
+  66%  { opacity: 0.66; }
+  100% { opacity: 1; }
+}
+.cm-crown-materialize {
+  animation: cm-crown-materialize-kf 150ms steps(3, end) forwards;
+}
+
+/* Wizard courier salute — 150ms CAST-pose-hold for the PM-creator case
+   acknowledgement toward the frozen ghost. This is a CSS marker class;
+   the actual pose is driven by the component. */
+.cm-wizard-courier-salute {
+  /* Driven by component pose prop, this class is a no-op placeholder */
+}
+
+/* Reduced-motion overrides for iter 2 elements */
+@media (prefers-reduced-motion: reduce) {
+  .cm-crown-settle,
+  .cm-crown-materialize {
+    animation: none !important;
+    transition: none !important;
   }
 }

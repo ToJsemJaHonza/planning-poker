@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import Crown from './Crown';
 
 const _ = null;
 const O = '#222';     // outline
@@ -142,7 +143,22 @@ const QUOTES = [
   "Let's parking lot that",
 ];
 
-export default function Wizard({ isCasting, onCastComplete, onQuote, externalQuote }) {
+export default function Wizard({
+  isCasting,
+  onCastComplete,
+  onQuote,
+  externalQuote,
+  // Two modes: 'idle' (CSS-animated walk) and 'ceremony' (parent-driven position).
+  mode = 'idle',
+  crowningPose = null,
+  crowningBubble = '',
+  crownState = null,
+  crownGlowing = false,
+  ceremonyFacing = null,
+  // Ref callback so Room.jsx can read the idle walk element's position
+  // via getBoundingClientRect() at ceremony start.
+  idleWalkRef,
+}) {
   const [walkFrame, setWalkFrame] = useState(0);
   const [showSparkles, setShowSparkles] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
@@ -155,6 +171,13 @@ export default function Wizard({ isCasting, onCastComplete, onQuote, externalQuo
   const showExtQuote = !onQuote && !!externalQuote;
 
   useEffect(() => {
+    // Ceremony mode uses its own pose driven by parent — no idle loop.
+    if (mode !== 'idle') {
+      clearInterval(walkRef.current);
+      clearTimeout(thinkRef.current);
+      setIsThinking(false);
+      return;
+    }
     if (isCasting) {
       clearInterval(walkRef.current);
       clearTimeout(thinkRef.current);
@@ -188,7 +211,7 @@ export default function Wizard({ isCasting, onCastComplete, onQuote, externalQuo
     };
     loop();
     return () => { clearInterval(walkRef.current); clearTimeout(thinkRef.current); };
-  }, [isCasting]);
+  }, [isCasting, mode]);
 
   useEffect(() => {
     if (!isCasting) return;
@@ -206,46 +229,69 @@ export default function Wizard({ isCasting, onCastComplete, onQuote, externalQuo
   const effectiveThinking = onQuote ? isThinking : showExtQuote;
   const effectiveQuote = onQuote ? quote : (externalQuote || '');
 
-  const shadow = isCasting ? sc : effectiveThinking ? st : walkFrame ? sw2 : sw1;
-  const paused = isCasting || effectiveThinking;
+  // Select sprite shadow. Ceremony mode drives pose via `crowningPose`;
+  // idle mode uses the existing logic unchanged.
+  let shadow;
+  if (mode === 'ceremony') {
+    if (crowningPose === 'cast') shadow = sc;
+    else shadow = walkFrame ? sw2 : sw1;
+  } else {
+    shadow = isCasting ? sc : effectiveThinking ? st : walkFrame ? sw2 : sw1;
+  }
 
-  const spriteRef = useRef(null);
-  const [bubblePos, setBubblePos] = useState(null);
+  // --- CEREMONY MODE (iter 4): position driven by parent, vertical movement ---
+  if (mode === 'ceremony') {
+    const facingLeft = ceremonyFacing === 'left';
+    const crownPinned = crownState?.mode === 'settled';
+    return (
+      <div
+        style={{
+          position: 'relative',
+          width: SPRITE_W,
+          height: SPRITE_H,
+          pointerEvents: 'none',
+          imageRendering: 'pixelated',
+          transform: facingLeft ? 'scaleX(-1)' : 'scaleX(1)',
+        }}
+        data-cm-wizard-ceremony
+      >
+        <div style={{ position: 'absolute', inset: 0 }}>
+          <div style={{ width: 1, height: 1, boxShadow: shadow, position: 'absolute', top: 0, left: 0 }} />
+        </div>
+        {crowningBubble && (
+          <div style={{
+            ...styles.crowningBubble,
+            // Counteract parent scaleX flip so text reads normally
+            transform: `translateX(-50%) ${facingLeft ? 'scaleX(-1)' : 'scaleX(1)'}`,
+          }}>{crowningBubble}</div>
+        )}
+        {crownState && !crownPinned && (
+          <Crown
+            glowing={crownGlowing}
+            style={{
+              left: 8 * PX,
+              top: 4 * PX,
+              transform: crownState.mode === 'arcing'
+                ? `translate(0px, ${crownState.progress * 45}px)`
+                : crownState.mode === 'lifting'
+                  ? `translate(0px, ${crownState.progress * -50}px)`
+                  : 'none',
+              transition: (crownState.mode === 'arcing' || crownState.mode === 'lifting')
+                ? 'transform 250ms steps(5, end)' : 'none',
+            }}
+          />
+        )}
+      </div>
+    );
+  }
 
-  // Track sprite position for bubble (outside flipping container).
-  // Y7: one-shot read + resize listener instead of rAF loop.
-  // Y5: clamp bubble horizontally to viewport so it doesn't clip off-screen.
-  useEffect(() => {
-    if (!effectiveThinking || !effectiveQuote) { setBubblePos(null); return; }
-    const read = () => {
-      if (!spriteRef.current) return;
-      const rect = spriteRef.current.getBoundingClientRect();
-      const BUBBLE_W = 220;
-      const MARGIN = 12;
-      const spriteX = rect.left + rect.width / 2;
-      const clampedX = Math.max(
-        MARGIN + BUBBLE_W / 2,
-        Math.min(window.innerWidth - MARGIN - BUBBLE_W / 2, spriteX)
-      );
-      setBubblePos({ x: clampedX, y: rect.top - 10 });
-    };
-    read();
-    window.addEventListener('resize', read);
-    return () => { window.removeEventListener('resize', read); setBubblePos(null); };
-  }, [effectiveThinking, effectiveQuote]);
-
+  // --- IDLE MODE (default): CSS-animated walk via .wizard-walk class -------
+  // The .wizard-walk class handles positioning (position: fixed, bottom, left
+  // via @keyframes wizard-path). The bubble is a child of the walk container
+  // so it moves with the CSS animation automatically.
   return (
-    <div style={styles.wrap}>
-      {/* Bubble rendered outside the flipping container */}
-      {effectiveThinking && effectiveQuote && bubblePos && (
-        <div style={{
-          ...styles.bubble,
-          left: bubblePos.x,
-          top: bubblePos.y,
-          transform: 'translateX(-50%)',
-        }}>{effectiveQuote}</div>
-      )}
-      <div ref={spriteRef} className="wizard-walk" style={{ ...styles.sprite, animationPlayState: paused ? 'paused' : 'running' }}>
+    <div className="wizard-walk" ref={idleWalkRef}>
+      <div style={styles.idleInner}>
         <div style={{ width: 1, height: 1, boxShadow: shadow, position: 'absolute', top: 0, left: 0 }} />
         {showSparkles && SPARKLE_DIRS.map((d, i) => (
           <span key={i} style={{
@@ -256,20 +302,29 @@ export default function Wizard({ isCasting, onCastComplete, onQuote, externalQuo
           }}>✦</span>
         ))}
       </div>
+      {effectiveThinking && effectiveQuote && (
+        <div style={styles.idleBubble}>{effectiveQuote}</div>
+      )}
     </div>
   );
 }
 
 const styles = {
-  wrap: { position: 'fixed', inset: 0, zIndex: 50, pointerEvents: 'none', overflow: 'hidden' },
-  sprite: { position: 'absolute', width: SPRITE_W, height: SPRITE_H },
+  // Idle mode: the sprite lives inside .wizard-walk (CSS-animated container).
+  // Position is relative within that container.
+  idleInner: { position: 'relative', width: SPRITE_W, height: SPRITE_H, imageRendering: 'pixelated' },
   sparkle: {
     position: 'absolute', fontSize: 18, color: '#f5c542', pointerEvents: 'none',
     animation: 'sparkle-burst 1.2s ease-out forwards',
     textShadow: '0 0 8px #f5c542, 0 0 16px #d4a853',
   },
-  bubble: {
-    position: 'fixed',
+  // Idle bubble: child of .wizard-walk so it moves with the CSS animation.
+  // Positioned above the sprite via absolute bottom.
+  idleBubble: {
+    position: 'absolute',
+    bottom: SPRITE_H + 10,
+    left: '50%',
+    transform: 'translateX(-50%)',
     zIndex: 51,
     background: '#fff',
     border: '2px solid #d4a853',
@@ -278,12 +333,32 @@ const styles = {
     fontSize: '0.65rem',
     fontFamily: "'Press Start 2P', monospace",
     color: '#2a2a3a',
-    whiteSpace: 'normal',
+    // nowrap prevents vertical text: the bubble is inside .wizard-walk
+    // which is only 50px wide, so break-word wraps after every character.
+    whiteSpace: 'nowrap',
     lineHeight: '1.6',
     animation: 'float 1.5s ease-in-out infinite',
     boxShadow: '2px 2px 0 #b8922e',
-    maxWidth: '220px',
-    wordBreak: 'break-word',
     textAlign: 'center',
+  },
+  crowningBubble: {
+    position: 'absolute',
+    bottom: '100%',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    background: '#fff',
+    border: '2px solid #d4a853',
+    padding: '5px 10px',
+    fontSize: '0.5rem',
+    fontFamily: "'Press Start 2P', monospace",
+    color: '#2a2a3a',
+    boxShadow: '2px 2px 0 #b8922e',
+    // nowrap prevents the vertical-text bug: the bubble is positioned inside
+    // a 50px-wide wizard sprite container, and break-word + normal white-space
+    // caused the browser to wrap after every character. Ceremony phrases are
+    // short (<30 chars) and never need wrapping.
+    whiteSpace: 'nowrap',
+    marginBottom: 4,
+    zIndex: 212,
   },
 };
