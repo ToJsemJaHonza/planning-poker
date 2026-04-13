@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import Wizard from './Wizard';
 
 describe('Wizard — smoke', () => {
@@ -17,45 +17,80 @@ describe('Wizard — smoke', () => {
   });
 
   it('renders externalQuote text in a bubble when shown', () => {
-    // externalQuote takes effect only when onQuote is null (non-leader path).
     const { container } = render(
       <Wizard isCasting={false} onCastComplete={() => {}} onQuote={null} externalQuote="Hello there" />
     );
-    // Bubble text lands in the DOM once the position effect runs
     expect(container.textContent).toContain('Hello there');
   });
+});
 
-  // Y7 — one-shot getBoundingClientRect read instead of rAF loop.
-  // We spy on Element.prototype.getBoundingClientRect and verify the wizard
-  // does NOT call it repeatedly once the bubble mounts (old code ran on every
-  // animation frame).
-  it('Y7: does not call getBoundingClientRect in a rAF loop', () => {
-    const origBCR = Element.prototype.getBoundingClientRect;
-    let callCount = 0;
-    Element.prototype.getBoundingClientRect = function () {
-      callCount += 1;
-      return { left: 100, top: 200, width: 50, height: 70, right: 150, bottom: 270, x: 100, y: 200, toJSON: () => ({}) };
-    };
+describe('Wizard idle positioning (JS-driven)', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
 
-    try {
-      render(
-        <Wizard isCasting={false} onCastComplete={() => {}} onQuote={null} externalQuote="Quoted!" />
-      );
+  it('renders with data-wizard-idle attribute, not .wizard-walk CSS class', () => {
+    const { container } = render(
+      <Wizard isCasting={false} position={{ x: 100, y: 500 }} facingLeft={false} />
+    );
+    expect(container.querySelector('[data-wizard-idle]')).toBeTruthy();
+    expect(container.querySelector('.wizard-walk')).toBeNull();
+  });
 
-      // Flush any immediate microtasks + one animation frame worth of time.
-      vi.advanceTimersByTime(50);
-      const countAfterMount = callCount;
+  it('positions via transform: translate() for GPU compositing', () => {
+    const { container } = render(
+      <Wizard isCasting={false} position={{ x: 200, y: 400 }} facingLeft={false} />
+    );
+    const el = container.querySelector('[data-wizard-idle]');
+    expect(el.style.transform).toBe('translate(200px, 400px)');
+    expect(el.style.position).toBe('fixed');
+  });
 
-      // If the old rAF loop were still active, this advance would stack up
-      // many additional BCR calls. The new one-shot read should NOT.
-      vi.advanceTimersByTime(500);
-      const countAfterHalfSec = callCount;
+  it('flips sprite via inner container scaleX, not outer', () => {
+    const { container } = render(
+      <Wizard isCasting={false} position={{ x: 100, y: 500 }} facingLeft={true} />
+    );
+    const outer = container.querySelector('[data-wizard-idle]');
+    // Outer uses translate only, no scaleX
+    expect(outer.style.transform).not.toContain('scaleX');
+    // Inner has the flip
+    const inner = outer.children[0];
+    expect(inner.style.transform).toBe('scaleX(-1)');
+  });
+});
 
-      // Allow at most a couple extra calls (e.g. strict mode double-mount
-      // or other library code), but definitely not hundreds.
-      expect(countAfterHalfSec - countAfterMount).toBeLessThanOrEqual(2);
-    } finally {
-      Element.prototype.getBoundingClientRect = origBCR;
-    }
+describe('Wizard speech bubble centering and flip', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('bubble uses float animation for centering (not inline translateX)', () => {
+    render(
+      <Wizard isCasting={false} position={{ x: 100, y: 500 }} facingLeft={false}
+        externalQuote="Quick sync anyone?" />
+    );
+    const bubble = screen.getByText("Quick sync anyone?").closest('div');
+    expect(bubble.style.animation).toContain('float');
+    // No inline transform that would conflict with the float animation
+    expect(bubble.style.transform).toBe('');
+  });
+
+  it('when facing left, text is in scaleX(-1) span to stay readable', () => {
+    render(
+      <Wizard isCasting={false} position={{ x: 100, y: 500 }} facingLeft={true}
+        externalQuote="Per my last email..." />
+    );
+    const span = screen.getByText("Per my last email...");
+    expect(span.tagName).toBe('SPAN');
+    expect(span.style.transform).toBe('scaleX(-1)');
+    expect(span.style.display).toBe('inline-block');
+  });
+
+  it('when facing right, text span has no transform', () => {
+    render(
+      <Wizard isCasting={false} position={{ x: 100, y: 500 }} facingLeft={false}
+        externalQuote="Action items!" />
+    );
+    const span = screen.getByText("Action items!");
+    expect(span.tagName).toBe('SPAN');
+    expect(span.style.transform).toBe('');
   });
 });

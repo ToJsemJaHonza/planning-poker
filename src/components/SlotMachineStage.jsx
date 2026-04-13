@@ -111,22 +111,24 @@ export default function SlotMachineStage({
         <div
           style={{
             position: 'absolute',
-            left: wizardPos.x,
-            top: wizardPos.y,
+            left: 0,
+            top: 0,
             // Explicit dimensions matching the Wizard sprite (12*5=60 x 14*5=70)
             // so the speech bubble can position relative to a real-sized container.
             // Without these, the container is 0x0 and wordBreak:break-word wraps
             // every character onto its own line (vertical text bug).
             width: 60,
             height: 70,
-            transform: 'translateX(-50%) translateY(-50%)',
+            // GPU-composited transform instead of left/top for smoother animation.
+            // The -50% offsets center the sprite on the computed position.
+            transform: `translate(${wizardPos.x - 30}px, ${wizardPos.y - 35}px)`,
             zIndex: 213,
             pointerEvents: 'none',
-            willChange: 'left, top',
+            willChange: 'transform',
             // Short transition smooths out frame drops without rubber-banding.
             // At 50ms linear, any React render batch that skips 1-2 frames
             // interpolates instead of jumping.
-            transition: 'left 50ms linear, top 50ms linear',
+            transition: 'transform 50ms linear',
           }}
           data-cm-wizard-ceremony
         >

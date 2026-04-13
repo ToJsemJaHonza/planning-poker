@@ -5,7 +5,6 @@ import {
   isValidCeremonyPayload,
   isStalePayload,
   nonPmCandidatesSorted,
-  CEREMONY_TTL_MS,
   SCHEMA_VERSION,
 } from '../events/slotMachine';
 
@@ -288,9 +287,12 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
           firingRef.current = false;
           return;
         }
-        // Transaction landed — reset the guard after the ceremony TTL so
-        // subsequent ceremonies can fire in this room.
-        setTimeout(() => { firingRef.current = false; }, CEREMONY_TTL_MS);
+        // Transaction landed — reset the guard after a short cooldown so
+        // subsequent ceremonies can fire in this room. 5s is long enough
+        // to cover the Firebase round-trip for clearPmRoulette + leader
+        // promotion, but short enough to not block legitimate consecutive
+        // ceremonies (the previous 30s TTL was excessive).
+        setTimeout(() => { firingRef.current = false; }, 5000);
       } catch (err) {
         console.error('[useRoom] firePmRoulette failed', err);
         firingRef.current = false;
@@ -298,14 +300,20 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
     })();
   }, [players, roomCode, playerId, pmRoulette]);
 
-  // Reset the firing guard when a ceremony clears so consecutive disconnects
-  // can each trigger their own ceremony. The transaction itself provides
-  // atomic exclusion — firingRef is only a local rendering guard.
+  // Reset the firing guard when a ceremony clears AND the leader has been
+  // promoted. Without the hasLeader check, the guard resets too early:
+  // clearPmRoulette (which nulls pmRoulette) can arrive before
+  // resolvePmRoulettePromotion (which sets isLeader=true) propagates back
+  // through Firebase, causing the trigger effect to see no leader + guard
+  // false and fire a duplicate ceremony.
   useEffect(() => {
     if (!pmRoulette) {
-      firingRef.current = false;
+      const hasLeader = Object.values(players).some(p => p.isLeader);
+      if (hasLeader) {
+        firingRef.current = false;
+      }
     }
-  }, [pmRoulette]);
+  }, [pmRoulette, players]);
 
   // === Room cleanup: delete from Firebase when all players leave ===========
   //

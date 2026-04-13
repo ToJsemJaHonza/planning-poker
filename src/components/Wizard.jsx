@@ -138,16 +138,17 @@ export default function Wizard({
   onCastComplete,
   onQuote,
   externalQuote,
-  // Two modes: 'idle' (CSS-animated walk) and 'ceremony' (parent-driven position).
+  // Two modes: 'idle' (JS-driven walk) and 'ceremony' (parent-driven position).
   mode = 'idle',
   crowningPose = null,
   crowningBubble = '',
   crownState = null,
   crownGlowing = false,
   ceremonyFacing = null,
-  // Ref callback so Room.jsx can read the idle walk element's position
-  // via getBoundingClientRect() at ceremony start.
-  idleWalkRef,
+  // JS-driven position from useWizardPosition hook (idle mode).
+  // When mode='idle', parent passes { x, y, facingLeft }.
+  position = null,
+  facingLeft = false,
 }) {
   const [walkFrame, setWalkFrame] = useState(0);
   const [showSparkles, setShowSparkles] = useState(false);
@@ -275,13 +276,30 @@ export default function Wizard({
     );
   }
 
-  // --- IDLE MODE (default): CSS-animated walk via .wizard-walk class -------
-  // The .wizard-walk class handles positioning (position: fixed, bottom, left
-  // via @keyframes wizard-path). The bubble is a child of the walk container
-  // so it moves with the CSS animation automatically.
+  // --- IDLE MODE (default): JS-driven walk via useWizardPosition ----------
+  // Position is controlled by the parent via the `position` and `facingLeft`
+  // props from the useWizardPosition hook. No CSS keyframes involved.
+  // The wizard is positioned with `position: fixed` and `transform: translate`
+  // for GPU-composited movement.
+  const idleFacingLeft = facingLeft;
   return (
-    <div className="wizard-walk" ref={idleWalkRef}>
-      <div style={styles.idleInner}>
+    <div
+      style={{
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        transform: `translate(${position?.x ?? 10}px, ${position?.y ?? 0}px)`,
+        zIndex: 50,
+        pointerEvents: 'none',
+        imageRendering: 'pixelated',
+        willChange: 'transform',
+      }}
+      data-wizard-idle
+    >
+      <div style={{
+        ...styles.idleInner,
+        transform: idleFacingLeft ? 'scaleX(-1)' : 'scaleX(1)',
+      }}>
         <div style={{ ...SPRITE_PIXEL_STYLE, boxShadow: shadow }} />
         {showSparkles && SPARKLE_DIRS.map((d, i) => (
           <span key={i} style={{
@@ -293,14 +311,18 @@ export default function Wizard({
         ))}
       </div>
       {effectiveThinking && effectiveQuote && (
-        <div style={styles.idleBubble}>{effectiveQuote}</div>
+        <div style={styles.idleBubble}>
+          <span style={idleFacingLeft ? { display: 'inline-block', transform: 'scaleX(-1)' } : undefined}>
+            {effectiveQuote}
+          </span>
+        </div>
       )}
     </div>
   );
 }
 
 const styles = {
-  // Idle mode: the sprite lives inside .wizard-walk (CSS-animated container).
+  // Idle mode: the sprite lives inside a JS-positioned fixed container.
   // Position is relative within that container.
   idleInner: { position: 'relative', width: SPRITE_W, height: SPRITE_H, imageRendering: 'pixelated' },
   sparkle: {
@@ -308,8 +330,10 @@ const styles = {
     animation: 'sparkle-burst 1.2s ease-out forwards',
     textShadow: '0 0 8px #f5c542, 0 0 16px #d4a853',
   },
-  // Idle bubble: child of .wizard-walk so it moves with the CSS animation.
-  // Positioned above the sprite via absolute bottom.
+  // Idle bubble: positioned above the sprite. The parent container uses
+  // JS-driven positioning (not CSS keyframes), so the bubble flipping is
+  // handled inline via the `facingLeft` prop instead of the old
+  // wizard-bubble-unflip CSS animation.
   idleBubble: {
     position: 'absolute',
     bottom: SPRITE_H + 10,
@@ -324,9 +348,7 @@ const styles = {
     color: '#2a2a3a',
     whiteSpace: 'nowrap',
     lineHeight: '1.6',
-    // wizard-bubble-unflip counteracts the parent .wizard-walk scaleX(-1)
-    // so text stays readable when the wizard walks left.
-    animation: 'wizard-bubble-unflip 16s linear infinite, float 1.5s ease-in-out infinite',
+    animation: 'float 1.5s ease-in-out infinite',
     boxShadow: '2px 2px 0 #b8922e',
     textAlign: 'center',
   },

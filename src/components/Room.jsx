@@ -3,6 +3,7 @@ import { useRoom } from '../hooks/useRoom';
 import { useRoomStartCrowning } from '../hooks/useRoomStartCrowning';
 import { useSlotMachine } from '../hooks/useSlotMachine';
 import { useCrownOwnership } from '../hooks/useCrownOwnership';
+import { useWizardPosition } from '../hooks/useWizardPosition';
 import {
   isValidCeremonyPayload,
   isStalePayload,
@@ -36,33 +37,20 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
     toggleSplit, revealCards, newRound, updateTask,
   } = useRoom(roomCode, playerId, playerName, role);
 
-  // --- Ceremony position snapshotting ---
-  const idleWalkRef = useRef(null);
-  const ceremonyStartPosRef = useRef(null);
-
-  useEffect(() => {
-    if (!pmRoulette && !roomStartCrowning) {
-      ceremonyStartPosRef.current = null;
-      return;
-    }
-    if (ceremonyStartPosRef.current) return;
-    const el = idleWalkRef.current;
-    if (el) {
-      const rect = el.getBoundingClientRect();
-      ceremonyStartPosRef.current = { x: rect.left, y: rect.top };
-    } else {
-      ceremonyStartPosRef.current = {
-        x: typeof window !== 'undefined' ? window.innerWidth / 2 : 720,
-        y: typeof window !== 'undefined' ? window.innerHeight - 175 : 725,
-      };
-    }
-  }, [pmRoulette, roomStartCrowning]);
+  // --- Unified wizard positioning (JS-driven) ---
+  // The useWizardPosition hook owns the wizard's canonical position.
+  // During idle mode it runs a rAF ping-pong walk. When a ceremony starts,
+  // it freezes the current position and returns it as `startPos` for the
+  // ceremony to use. No more getBoundingClientRect needed.
+  const ceremonyActive = !!(pmRoulette || roomStartCrowning);
+  const wizardPos = useWizardPosition({ ceremonyActive });
+  const ceremonyStartPos = wizardPos.startPos;
 
   // --- Room-start mini-ceremony ---
   const roomStartState = useRoomStartCrowning({
     roomCode, playerId, role, connected, isLeader,
     players, roomStartCrowning, pmRoulette,
-    ceremonyStartPos: ceremonyStartPosRef.current,
+    ceremonyStartPos,
   });
 
   // --- Slot machine ceremony validation ---
@@ -94,7 +82,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
 
   const slotMachinePhaseState = useSlotMachine(ceremonyForHook, {
     onLeaderPromote, onCeremonyComplete,
-    ceremonyStartPos: ceremonyStartPosRef.current, players,
+    ceremonyStartPos, players,
   });
 
   const crownOwnership = useCrownOwnership({
@@ -197,14 +185,16 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
 
   return (
     <div style={{ ...styles.container, paddingBottom, transition: 'padding-bottom 0.3s ease' }}>
-      {/* Idle PM sprite — hidden during ceremonies */}
-      {!pmRoulette && !roomStartState.active && (
+      {/* Idle PM sprite — hidden during ceremonies. Position driven by
+          useWizardPosition hook (JS-driven, no CSS keyframes). */}
+      {!ceremonyActive && (
         <Wizard
           isCasting={false}
           onCastComplete={() => {}}
           onQuote={canControl ? setPmQuote : null}
           externalQuote={!canControl ? pmQuote : null}
-          idleWalkRef={idleWalkRef}
+          position={{ x: wizardPos.x, y: wizardPos.y }}
+          facingLeft={wizardPos.facingLeft}
         />
       )}
 
