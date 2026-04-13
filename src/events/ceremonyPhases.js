@@ -58,12 +58,11 @@ export const IDLE_STATE = {
   matchedHoldPhaseStart: 0,
   reel3StillSpinning: false,
   nudgeActive: false,
-  // v3 additions
   matchConfirmed: null,
   matchingReelIndices: [],
   nonMatchReelIndex: null,
   isTripleJackpot: false,
-  // v4: crown ceremony state (replaces ghost + procession)
+  // Crown ceremony state
   crownRemovalState: null,
   crownDeliveryState: null,
   wizardCeremonyPosition: null,

@@ -2,17 +2,13 @@ import SlotMachine from './SlotMachine';
 import Wizard from './Wizard';
 
 /**
- * SlotMachineStage — the root overlay for the PM crowning ceremony.
+ * SlotMachineStage -- the root overlay for the PM crowning ceremony.
  *
- * --- ITERATION 4 ---
  * 3-act ceremony: crownRemoval (Act 1) -> cabinet (Act 2) -> crownDelivery (Act 3).
- * PM walks vertically into grid during Acts 1 and 3.
- * Ghost figure eliminated. Leader stays during Act 1 until crown taken.
- * "THE CROWN PASSES" overlay during Act 3.
- * Spotlight tracks PM during Act 3.
+ * PM walks into the player grid during Acts 1 and 3. The slot machine cabinet
+ * drops in during Act 2. "THE CROWN PASSES" overlay appears during Act 3.
  *
- * useSlotMachine is lifted to Room.jsx; this component receives phaseState
- * and crownOwnership as props and is a pure renderer.
+ * Pure renderer -- receives phaseState and crownOwnership as props.
  */
 export default function SlotMachineStage({
   pmRoulette,

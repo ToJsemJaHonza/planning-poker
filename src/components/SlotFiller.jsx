@@ -3,7 +3,7 @@ import { spriteToBoxShadow, PX, SPRITE_PIXEL_STYLE } from '../engine/sprite';
 
 const _ = null;
 
-// Palette — reuses existing tokens from `index.css` + design doc §1.
+// Palette -- matches the cabinet color scheme.
 const OUT = '#0a0b11';       // cabinet outline
 const GOLD_B = '#f5c542';     // gold bright
 const GOLD_P = '#d4a853';     // gold primary

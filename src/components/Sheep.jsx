@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import { spriteToBoxShadow } from '../engine/sprite';
+import { pixel } from './room/styles';
 
 const _ = null;
 const W = '#f0f0f0'; // wool white
@@ -7,7 +9,7 @@ const B = '#222';     // face/legs black
 const P = '#ffb6c1'; // pink nose/ears
 const E = '#111';     // eyes
 
-// 10×8 pixel art sheep
+// 10x8 pixel art sheep
 const SHEEP = [
   [_,_,W,W,W,W,W,W,_,_],
   [_,W,C,W,W,W,C,W,W,_],
@@ -20,17 +22,6 @@ const SHEEP = [
 ];
 
 const PX = 5;
-
-function spriteToBoxShadow(grid, px) {
-  const shadows = [];
-  for (let y = 0; y < grid.length; y++) {
-    for (let x = 0; x < grid[y].length; x++) {
-      const c = grid[y][x];
-      if (c) shadows.push(`${x * px}px ${y * px}px 0 ${Math.ceil(px / 2)}px ${c}`);
-    }
-  }
-  return shadows.join(',');
-}
 
 export default function Sheep() {
   const shadow = useMemo(() => spriteToBoxShadow(SHEEP, PX), []);
@@ -48,8 +39,6 @@ export default function Sheep() {
     </div>
   );
 }
-
-const pixel = "'Press Start 2P', monospace";
 
 const styles = {
   container: {

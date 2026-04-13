@@ -73,24 +73,26 @@ describe('Wizard speech bubble centering and flip', () => {
     expect(bubble.style.transform).toBe('');
   });
 
-  it('when facing left, text is in scaleX(-1) span to stay readable', () => {
+  it('bubble text is readable when facing left (no scaleX flip needed)', () => {
     render(
       <Wizard isCasting={false} position={{ x: 100, y: 500 }} facingLeft={true}
         externalQuote="Per my last email..." />
     );
-    const span = screen.getByText("Per my last email...");
-    expect(span.tagName).toBe('SPAN');
-    expect(span.style.transform).toBe('scaleX(-1)');
-    expect(span.style.display).toBe('inline-block');
+    // Bubble is a sibling of the flipped sprite container, not a child.
+    // So it needs NO counteraction — text is naturally readable.
+    const bubble = screen.getByText("Per my last email...");
+    const bubbleDiv = bubble.closest('div');
+    // No scaleX transform on the bubble
+    expect(bubbleDiv.style.transform).toBe('');
   });
 
-  it('when facing right, text span has no transform', () => {
+  it('bubble text is readable when facing right', () => {
     render(
       <Wizard isCasting={false} position={{ x: 100, y: 500 }} facingLeft={false}
         externalQuote="Action items!" />
     );
-    const span = screen.getByText("Action items!");
-    expect(span.tagName).toBe('SPAN');
-    expect(span.style.transform).toBe('');
+    const bubble = screen.getByText("Action items!");
+    const bubbleDiv = bubble.closest('div');
+    expect(bubbleDiv.style.transform).toBe('');
   });
 });

@@ -1,6 +1,5 @@
 import { computeStats } from './resultModal.utils';
-
-const pixel = "'Press Start 2P', monospace";
+import { pixel } from './room/styles';
 
 function ResultSection({ title, titleColor, stats }) {
   const { emoji, verdict, color, avg, distribution, totalVotes, special } = stats;

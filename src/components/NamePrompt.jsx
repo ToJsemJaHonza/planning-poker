@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { pixel } from './room/styles';
 
 export default function NamePrompt({ onSubmit }) {
   const [name, setName] = useState('');
@@ -39,8 +40,6 @@ export default function NamePrompt({ onSubmit }) {
     </div>
   );
 }
-
-const pixel = "'Press Start 2P', monospace";
 
 const styles = {
   container: {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import PlayerFigure from './PlayerFigure';
 import { useCinematicHandoff } from '../events/useCinematicHandoff';
+import { pixel } from './room/styles';
 
 const _ = null;
 // Shinkansen E5 series colors
@@ -57,9 +58,7 @@ const NUM_MID = 3;
 // Train: nose + 3 mid + nose(flipped)
 const TOTAL_W = NOSE_W + MID_W * NUM_MID + NOSE_W;
 
-const pixel = "'Press Start 2P', monospace";
-
-// Tree: 6w × 8h
+// Tree: 6w x 8h
 const TG = '#22c55e';
 const TD = '#16a34a';
 const TT = '#78350f';

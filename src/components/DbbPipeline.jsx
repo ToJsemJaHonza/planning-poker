@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import PlayerFigure from './PlayerFigure';
 import { useCinematicHandoff } from '../events/useCinematicHandoff';
+import { pixel } from './room/styles';
 
 /**
- * GH issue #2 — Tomáš DBB entrance (pixel-art L-pipe rewrite).
+ * Tomas DBB entrance (pixel-art L-pipe).
  *
  * The pipe is a segmented L-shape: one end is flush with a screen edge, it
  * bends twice, and its mouth opens inside the viewport. Tomáš EMERGES from
@@ -571,7 +572,6 @@ function ArrivalBubble({ targetKey }) {
 // ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
-const pixel = "'Press Start 2P', monospace";
 const styles = {
   container: {
     position: 'fixed',

@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { roundToCard } from './resultModal.utils';
-
-const pixel = "'Press Start 2P', monospace";
+import { pixel } from './room/styles';
 
 // Compute the card to display on the reveal background. This is NOT the
 // mode (most-common vote) — with 2 players voting differently every vote

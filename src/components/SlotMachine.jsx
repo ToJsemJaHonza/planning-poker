@@ -1,22 +1,15 @@
 import { useMemo } from 'react';
 import SlotReel from './SlotReel';
 import { buildReelOrder, placeEntryAt } from '../events/slotMachine';
+import { pixel } from './room/styles';
 
 /**
- * SlotMachine — the cabinet visual. Pure, dumb renderer. Consumes the
+ * SlotMachine -- the cabinet visual. Pure, dumb renderer. Consumes the
  * phase state from `useSlotMachine` and the ceremony payload. Builds the
  * three reels once per ceremony via the deterministic seeded shuffle.
  *
- * --- ITERATION 2 ---
- * - Removed ON_A_ROLL_PHRASES / onARoll marquee variant (gamification dropped)
- * - Passes matchedHoldActive to reels for pulse glow
- * - Phase names updated: winnerFreeze/winnerEmphasis replace beat1/beat2
- *
- * --- ITERATION 3 ---
- * - Reel orders now use winnerReelPair + nonMatchReelPlayerId
- * - Connecting bar between matching reels during match confirmation
- * - Triple jackpot marquee text
- * - Sparkle burst on triple jackpot
+ * Features: winner reel-pair matching, connecting bar between matching reels,
+ * triple jackpot sparkle burst, pulse glow during matched-hold phase.
  */
 
 const CABINET_W = 560;
@@ -35,7 +28,7 @@ const NEARMISS_RED = '#c0392b';
 const PARCHMENT = '#f5f0e4';
 const SLOT_W = 140; // matches SlotReel SLOT_W
 
-// v3: sparkle positions for triple jackpot (4 per reel frame, at corners)
+// Sparkle positions for triple jackpot (4 per reel frame, at corners)
 const SPARKLE_POSITIONS = [
   { x: -5, y: -5, dx: -18, dy: -25 },
   { x: SLOT_W + 5, y: -5, dx: 18, dy: -25 },
@@ -52,7 +45,7 @@ const MARQUEE_TEXTS = {
 };
 
 export default function SlotMachine({ phaseState, ceremony, players }) {
-  // Build the 3 reel orders once per ceremony ID. v3: uses winnerReelPair
+  // Build the 3 reel orders once per ceremony ID. Uses winnerReelPair
   // to place winner or nonMatch in reels 0/1, winner/near-miss in reel 2.
   const reelOrders = useMemo(() => {
     if (!ceremony) return [[], [], []];
@@ -62,7 +55,7 @@ export default function SlotMachine({ phaseState, ceremony, players }) {
     const raw = (ceremony.reelSeeds || [0, 0, 0]).map((seed) => buildReelOrder(pool, seed));
     if (ceremony.wasCompressed) return raw;
 
-    // v3: Place winner or nonMatch in reels 0 and 1 based on winnerReelPair
+    // Place winner or nonMatch in reels 0 and 1 based on winnerReelPair
     let reel0 = raw[0];
     let reel1 = raw[1];
     if (ceremony.winnerReelPair) {
@@ -93,7 +86,7 @@ export default function SlotMachine({ phaseState, ceremony, players }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ceremony?.ceremonyId]);
 
-  // iter 2: simplified marquee — no onARoll variant
+  // Select marquee text based on ceremony phase
   const marqueeText = useMemo(() => {
     if (!phaseState || !ceremony) return '';
     return MARQUEE_TEXTS[phaseState.marqueeText] || MARQUEE_TEXTS.choosing;
@@ -163,7 +156,7 @@ export default function SlotMachine({ phaseState, ceremony, players }) {
           ))}
         </div>
 
-        {/* v3: Connecting bar between matching reels during match confirmation */}
+        {/* Connecting bar between matching reels during match confirmation */}
         {phaseState.matchConfirmed && (
           <div style={{
             position: 'absolute',
@@ -177,7 +170,7 @@ export default function SlotMachine({ phaseState, ceremony, players }) {
           }} data-cm-match-bar />
         )}
 
-        {/* v3: Triple jackpot sparkle burst on all 3 reel frames */}
+        {/* Triple jackpot sparkle burst on all 3 reel frames */}
         {phaseState.isTripleJackpot && phaseState.matchConfirmed?.isTriple && (
           [0, 1, 2].map(ri => (
             SPARKLE_POSITIONS.map((pos, si) => (
@@ -261,8 +254,6 @@ function computeBulbs(phaseState) {
     }
   }
 }
-
-const pixel = "'Press Start 2P', monospace";
 
 const styles = {
   cabinet: {

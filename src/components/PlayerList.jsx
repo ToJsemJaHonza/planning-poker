@@ -10,6 +10,25 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
     .filter(([, data]) => data.role !== 'pm')
     .sort((a, b) => a[1].joinedAt - b[1].joinedAt);
 
+  // --- Act 1: Outgoing leader figure retention ---
+  // Defined before join/leave tracking so the guards below can reference
+  // outgoingId and isInCrownRemoval to prevent duplicate figures.
+  const outgoingId = pmRoulette?.outgoingLeaderId || null;
+  const outgoingData = pmRoulette?.outgoingLeaderLastData || null;
+
+  const [crownRemovalElapsed, setCrownRemovalElapsed] = useState(0);
+  useEffect(() => {
+    if (!pmRoulette?.startedAt) { setCrownRemovalElapsed(0); return; }
+    const tick = () => setCrownRemovalElapsed(Date.now() - pmRoulette.startedAt);
+    tick();
+    const id = setInterval(tick, 50);
+    const timeout = setTimeout(() => clearInterval(id), 5500);
+    return () => { clearInterval(id); clearTimeout(timeout); };
+  }, [pmRoulette?.ceremonyId, pmRoulette?.startedAt]);
+
+  const isInCrownRemoval = pmRoulette && crownRemovalElapsed < 5000;
+  const leaderWalkOff = crownRemovalElapsed >= 3000;
+
   // --- Join/leave tracking ---
   const knownRef = useRef(new Set());
   const lastPlayerDataRef = useRef({});
@@ -49,6 +68,10 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
 
     for (const id of knownRef.current) {
       if (!currentSet.has(id)) {
+        // Skip players whose exit is handled by the crown ceremony.
+        // The pmRoulette ceremony renders a "synthetic leader" figure that
+        // manages its own walk-off animation. Adding the same player to
+        // leavingPlayers would render a duplicate figure.
         if (pmRoulette?.outgoingLeaderId === id) continue;
         if (crownOwnership?.playerId === id) continue;
         const data = lastPlayerDataRef.current[id] || { name: id };
@@ -86,22 +109,18 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
     knownRef.current = currentSet;
   }, [playerEntries.map(([id]) => id).join(',')]);
 
-  // --- Act 1: Outgoing leader figure retention ---
-  const outgoingId = pmRoulette?.outgoingLeaderId || null;
-  const outgoingData = pmRoulette?.outgoingLeaderLastData || null;
-
-  const [crownRemovalElapsed, setCrownRemovalElapsed] = useState(0);
+  // If a ceremony starts targeting a player that's already in leavingPlayers,
+  // remove them immediately to avoid rendering both the leaving animation and
+  // the synthetic leader figure simultaneously.
   useEffect(() => {
-    if (!pmRoulette?.startedAt) { setCrownRemovalElapsed(0); return; }
-    const tick = () => setCrownRemovalElapsed(Date.now() - pmRoulette.startedAt);
-    tick();
-    const id = setInterval(tick, 50);
-    const timeout = setTimeout(() => clearInterval(id), 5500);
-    return () => { clearInterval(id); clearTimeout(timeout); };
-  }, [pmRoulette?.ceremonyId, pmRoulette?.startedAt]);
-
-  const isInCrownRemoval = pmRoulette && crownRemovalElapsed < 5000;
-  const leaderWalkOff = crownRemovalElapsed >= 3000;
+    if (!outgoingId) return;
+    setLeavingPlayers(prev => {
+      if (!prev[outgoingId]) return prev;
+      const next = { ...prev };
+      delete next[outgoingId];
+      return next;
+    });
+  }, [outgoingId]);
 
   // --- PlayerCard props factory ---
   const getPlayerCardProps = (id, data, opts = {}) => {

@@ -1,4 +1,4 @@
-const pixel = "'Press Start 2P', monospace";
+import { pixel } from '../room/styles';
 
 const hiddenPattern = {
   background: `

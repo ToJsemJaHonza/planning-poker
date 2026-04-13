@@ -46,7 +46,7 @@ export function isTomasName(name) {
 }
 
 // Quotes Richard cycles through when a room has been open for more than an
-// hour and he's clearly starving. Pulled from GH issue #1.
+// hour and he's clearly starving.
 export const RICHARD_HUNGER_QUOTES = [
   "Guys, I'm hungry",
   "Is it lunch time yet?",

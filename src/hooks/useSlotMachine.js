@@ -191,7 +191,7 @@ export function useSlotMachine(ceremony, { onLeaderPromote, onCeremonyComplete, 
       const now = Date.now();
       const elapsed = now - phaseClockOriginRef.current;
 
-      // v4: Fire leader-promote at crownDelivery t=1500ms (not cabinetOut start).
+      // Fire leader-promote at crownDelivery t=1500ms.
       if (!promotedRef.current) {
         const row = currentPhaseRow(table, elapsed);
         if (row.phase === 'crownDelivery') {

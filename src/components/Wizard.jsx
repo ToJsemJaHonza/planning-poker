@@ -230,7 +230,7 @@ export default function Wizard({
     shadow = isCasting ? sc : effectiveThinking ? st : walkFrame ? sw2 : sw1;
   }
 
-  // --- CEREMONY MODE (iter 4): position driven by parent, vertical movement ---
+  // --- CEREMONY MODE: position driven by parent ---
   if (mode === 'ceremony') {
     const facingLeft = ceremonyFacing === 'left';
     const crownPinned = crownState?.mode === 'settled';
@@ -311,11 +311,7 @@ export default function Wizard({
         ))}
       </div>
       {effectiveThinking && effectiveQuote && (
-        <div style={styles.idleBubble}>
-          <span style={idleFacingLeft ? { display: 'inline-block', transform: 'scaleX(-1)' } : undefined}>
-            {effectiveQuote}
-          </span>
-        </div>
+        <div style={styles.idleBubble}>{effectiveQuote}</div>
       )}
     </div>
   );

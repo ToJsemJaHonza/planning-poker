@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { generateRoomCode } from '../hooks/useRoom';
-
-const pixel = "'Press Start 2P', monospace";
+import { pixel } from './room/styles';
 
 export default function Landing({ playerName, onJoinRoom }) {
   const [joinCode, setJoinCode] = useState('');

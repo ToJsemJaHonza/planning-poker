@@ -8,7 +8,7 @@
 import { easeInOutCubic } from '../engine/animation';
 
 // ---------------------------------------------------------------------------
-// Vertical walk path computation (tech design v4 §3.3)
+// Vertical walk path computation for ceremony wizard movement
 // ---------------------------------------------------------------------------
 
 /**
@@ -33,7 +33,7 @@ export function computeWizardWalkPosition(progress, startX, startY, targetX, tar
 }
 
 // ---------------------------------------------------------------------------
-// Math-based grid position (replaces DOM query — tech design v5)
+// Math-based grid position (no DOM queries needed)
 // ---------------------------------------------------------------------------
 
 /**

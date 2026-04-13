@@ -6,7 +6,6 @@
  * NO reels, NO matched-hold, NO near-miss. It is a completely different
  * phase table (Wizard walk + crown materialize + crown place + Wizard exit).
  *
- * Tech design v2 §7.
  *
  * Payload shape (rooms/{code}/meta/roomStartCrowning):
  *   { ceremonyId, startedAt, winnerId, schemaVersion: 1 }
@@ -48,7 +47,6 @@ const IDLE_STATE = {
   phase: 'idle',
   elapsed: 0,
   winnerId: null,
-  // iter 4: vertical movement position for PM during room-start crowning
   wizardPosition: null,
   wizardPose: null,
 };

@@ -1,8 +1,7 @@
 import PlayerFigure from '../PlayerFigure';
 import WalkingFigure from './WalkingFigure';
 import { SingleCard, SplitCards } from './VotingCards';
-
-const pixel = "'Press Start 2P', monospace";
+import { pixel } from '../room/styles';
 
 /**
  * A single player entry in the grid — figure, card(s), name tag, speech bubble.

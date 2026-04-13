@@ -1,4 +1,5 @@
 import { Component } from 'react';
+import { pixel } from './room/styles';
 
 /**
  * App-wide error boundary.
@@ -63,7 +64,6 @@ export default class ErrorBoundary extends Component {
   }
 }
 
-const pixel = "'Press Start 2P', monospace";
 const styles = {
   wrap: {
     position: 'fixed', inset: 0, display: 'flex',

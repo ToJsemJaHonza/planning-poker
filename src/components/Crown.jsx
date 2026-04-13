@@ -8,9 +8,8 @@ const SHADOW = '#b8922e';  // --cm-gold-shadow
 const OUTLINE = '#0a0b11'; // --cm-cabinet-outline
 const JEWEL = '#c0392b';   // --cm-nearmiss-red
 
-// iter 2: 6 columns x 5 rows grid. Column 5 is intentionally blank
-// (breathing room so center tooth reads as tallest). Visible footprint
-// is effectively 5x5 grid units = 25x25 px at PX=5.
+// 6 columns x 5 rows grid. Column 5 is intentionally blank (breathing room
+// so center tooth reads as tallest). Visible footprint is 5x5 grid units.
 const GRID = [
   // Row 0 — three teeth tips: left short, center tall (col 2), right short
   [BRIGHT,  _,       PRIMARY,  _,       BRIGHT,  _],
@@ -29,7 +28,7 @@ const ROWS = 5;
 const CROWN_W = COLS * PX; // 30
 const CROWN_H = ROWS * PX; // 25
 
-// Anchor offset constants from design doc v2 §2
+// Anchor offset constants for different placement modes
 const ANCHOR_OFFSETS = {
   // head: relative to PlayerFigure wrapper top-left
   // (60-25)/2 = 17.5 -> 17px left, -22px top
@@ -60,7 +59,7 @@ export default function Crown({
     top: anchor.top,
     // Crown always renders below voting card (z-index 1 vs card z-index 2)
     zIndex: anchorMode === 'head' ? 1 : undefined,
-    // v3: gold glow during crown transport (deliberate exception to no-blur rule)
+    // Gold glow during crown transport
     boxShadow: glowing ? '0 0 8px 2px #f5c542' : undefined,
     ...style,
   };

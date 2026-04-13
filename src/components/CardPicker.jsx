@@ -1,6 +1,6 @@
-const CARD_VALUES = ['1', '2', '3', '5', '8', '13', '21', '?', '☕'];
+import { pixel } from './room/styles';
 
-const pixel = "'Press Start 2P', monospace";
+const CARD_VALUES = ['1', '2', '3', '5', '8', '13', '21', '?', '☕'];
 
 export default function CardPicker({ selectedVote, onVote, disabled, label, accentColor, bottomOffset = 0 }) {
   return (
