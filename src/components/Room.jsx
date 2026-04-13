@@ -131,7 +131,11 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
   );
 
   useEffect(() => {
-    if (!canControl || phase !== 'voting') {
+    // Only the leader manages the shame timer — non-leaders must never
+    // write to Firebase (they'd clear the timer the leader wrote).
+    if (!canControl) return;
+
+    if (phase !== 'voting') {
       if (shameTimer) setShameTimer(null);
       shameHoldoutRef.current = null;
       return;
@@ -143,7 +147,6 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
       const holdout = notVoted[0];
       const holdoutEntry = Object.entries(players).find(([, d]) => d === holdout);
       if (holdoutEntry && shameHoldoutRef.current !== holdoutEntry[0]) {
-        // New holdout (or first detection) — write timer with fresh startedAt
         shameHoldoutRef.current = holdoutEntry[0];
         setShameTimer({
           holdoutName: holdout.name,
@@ -152,7 +155,6 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
         });
       }
     } else {
-      // No holdout (everyone voted or 0-1 players) — clear timer
       if (shameTimer || shameHoldoutRef.current) {
         setShameTimer(null);
         shameHoldoutRef.current = null;
