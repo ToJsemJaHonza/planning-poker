@@ -51,17 +51,17 @@ const DEV_QUOTES = [
 // MUST be declared at module scope — if defined inside PlayerList, React
 // treats each render as a new component type and unmounts/remounts on
 // every parent re-render, so the interval never has time to tick.
-function WalkingFigure({ name, fukEyes }) {
+function WalkingFigure({ name, fukEyes, showCrown }) {
   const [frame, setFrame] = useState(0);
   useEffect(() => {
     // 500 ms per frame, matching the PM (Wizard) walk cadence.
     const id = setInterval(() => setFrame(f => f ^ 1), 500);
     return () => clearInterval(id);
   }, []);
-  return <PlayerFigure name={name} holdingCard={false} fukEyes={fukEyes} walkFrame={frame} />;
+  return <PlayerFigure name={name} holdingCard={false} fukEyes={fukEyes} walkFrame={frame} showCrown={showCrown} />;
 }
 
-export default function PlayerList({ players, phase, currentPlayer, splitMode, syncedEvent, fireSyncedEvent, isLeader, createdAt = 0 }) {
+export default function PlayerList({ players, phase, currentPlayer, splitMode, syncedEvent, fireSyncedEvent, isLeader, createdAt = 0, pmRoulette = null, phaseState = null, crownOwnership = null }) {
   // Entries are [playerId, data]; `data.name` holds the display name.
   // Players are keyed by a per-tab session ID so two browsers with the same
   // display name coexist as separate entries — everything below (join/leave
@@ -118,6 +118,14 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
     // Detect disconnected players — they should walk off instead of vanishing
     for (const id of knownRef.current) {
       if (!currentSet.has(id)) {
+        // Outgoing leader of an active ceremony can't walk off — the
+        // ceremony's synthetic figure and timed walk-off handle their exit.
+        // This guard is timing-immune: outgoingLeaderId is set once in the
+        // payload and never changes, unlike crownOwnership.location which
+        // transitions through phases and caused race conditions.
+        if (pmRoulette?.outgoingLeaderId === id) continue;
+        if (crownOwnership?.playerId === id) continue;
+
         const data = lastPlayerDataRef.current[id] || { name: id };
         const info = hashDir(data.name || id);
         // Exit in the opposite direction they came from for a "walked through" feel
@@ -239,21 +247,66 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
   // Tomáš DBB trigger is handled in the unified entrance dispatcher above
   // (same useEffect as Richard's train) so the two are mutually exclusive.
 
+  // iter 4: Leader figure retention during Act 1 (crownRemoval phase).
+  // When a pmRoulette ceremony is active, the outgoing leader's figure stays
+  // from payload data (not live players) until 1500ms after ceremony start
+  // (when PM takes the crown). After that, the figure walks off.
+  // No rendering during Acts 2+3 (ghost eliminated).
+  const outgoingId = pmRoulette?.outgoingLeaderId || null;
+  const outgoingData = pmRoulette?.outgoingLeaderLastData || null;
+  const outgoingHadCrown = pmRoulette?.outgoingLeaderHadCrown || false;
+
+  // Derive crown-removal state from ceremony timing (deterministic).
+  // crownRemoval phase is t=0 to t=2500ms from ceremony start.
+  const [crownRemovalElapsed, setCrownRemovalElapsed] = useState(0);
+  useEffect(() => {
+    if (!pmRoulette?.startedAt) { setCrownRemovalElapsed(0); return; }
+    const tick = () => {
+      const elapsed = Date.now() - pmRoulette.startedAt;
+      setCrownRemovalElapsed(elapsed);
+    };
+    tick();
+    const id = setInterval(tick, 50);
+    // Only need to track during crown removal (first 5000ms)
+    const timeout = setTimeout(() => clearInterval(id), 5500);
+    return () => { clearInterval(id); clearTimeout(timeout); };
+  }, [pmRoulette?.ceremonyId, pmRoulette?.startedAt]);
+
+  const isInCrownRemoval = pmRoulette && crownRemovalElapsed < 5000;
+  const crownLifted = crownRemovalElapsed >= 2500; // crown lift starts at 2500ms
+  const leaderWalkOff = crownRemovalElapsed >= 3000; // leader walks off at 3000ms
+
   // Render a single player box (or a frozen "leaving" copy) — keeps the grid + leaving layer DRY.
   // `id` is the stable Firebase key (session ID); `data.name` is the display name.
   // `currentPlayer` is the current viewer's ID so "me" highlighting is exact even
   // when two viewers share a display name.
   const renderPlayer = (id, data, opts = {}) => {
-    const { className = '', style = {}, keySuffix = '', walking = false, testIdOverride } = opts;
+    const { className = '', style = {}, keySuffix = '', walking = false, testIdOverride, isSyntheticLeader = false } = opts;
     const displayName = data.name || id;
     const isMe = id === currentPlayer;
-    const isSpeaking = activeQuote && activeQuote.name === displayName;
+    const isSpeaking = !isSyntheticLeader && activeQuote && activeQuote.name === displayName;
     const justArrived = recentArrivals.has(id);
     const nameTagClass = justArrived ? 'name-tag-arrived' : '';
     const testId = testIdOverride ?? `player-${displayName}`;
+
+    // Crown controlled by the centralized useCrownOwnership hook.
+    // A player shows a crown only when crownOwnership says the crown is
+    // on 'player-head' for THIS player's id. Synthetic leader during
+    // Act 1 retains crown until the hook transitions it away (rule 1).
+    const showCrown = crownOwnership
+      ? crownOwnership.location === 'player-head' && crownOwnership.playerId === id
+        && !keySuffix?.includes('leaving')  // walk-off copies never show crown
+      : false;
+
+    // v3: non-match reel player wipe-brow relief during near-miss hold
+    const isNonMatchRelief = !isSyntheticLeader
+      && phaseState?.nonMatchRelief
+      && phaseState.nonMatchReliefPlayerId === id;
+    const fukEyes = !isSyntheticLeader && (fukEyesSet.has(displayName) || isNonMatchRelief);
+
     const figureSlot = walking
-      ? <WalkingFigure name={displayName} fukEyes={fukEyesSet.has(displayName)} />
-      : <PlayerFigure name={displayName} holdingCard={false} fukEyes={fukEyesSet.has(displayName)} />;
+      ? <WalkingFigure name={displayName} fukEyes={fukEyes} showCrown={showCrown} />
+      : <PlayerFigure name={displayName} holdingCard={false} fukEyes={fukEyes} showCrown={showCrown} />;
 
     if (splitMode) {
       const hasVotedFe = data.voteFe != null;
@@ -265,35 +318,38 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
           className={className}
           style={{ ...styles.player, ...style }}
           data-testid={testId}
+          data-player-id={id}
         >
-          <div style={styles.splitCardRow}>
-            <div style={styles.splitSlot}>
-              <div style={styles.splitLabel}>FE</div>
-              {hasVotedFe ? (
-                <div style={{
-                  ...styles.splitCard,
-                  ...(phase === 'revealed' ? styles.cardRevealed : styles.cardHiddenFe),
-                }}>
-                  {phase === 'revealed' ? data.voteFe : '?'}
-                </div>
-              ) : (
-                <div style={styles.splitCardEmpty} />
-              )}
+          {!isSyntheticLeader && (
+            <div style={styles.splitCardRow}>
+              <div style={styles.splitSlot}>
+                <div style={styles.splitLabel}>FE</div>
+                {hasVotedFe ? (
+                  <div style={{
+                    ...styles.splitCard,
+                    ...(phase === 'revealed' ? styles.cardRevealed : styles.cardHiddenFe),
+                  }}>
+                    {phase === 'revealed' ? data.voteFe : '?'}
+                  </div>
+                ) : (
+                  <div style={styles.splitCardEmpty} />
+                )}
+              </div>
+              <div style={styles.splitSlot}>
+                <div style={styles.splitLabel}>BE</div>
+                {hasVotedBe ? (
+                  <div style={{
+                    ...styles.splitCard,
+                    ...(phase === 'revealed' ? styles.cardRevealed : styles.cardHiddenBe),
+                  }}>
+                    {phase === 'revealed' ? data.voteBe : '?'}
+                  </div>
+                ) : (
+                  <div style={styles.splitCardEmpty} />
+                )}
+              </div>
             </div>
-            <div style={styles.splitSlot}>
-              <div style={styles.splitLabel}>BE</div>
-              {hasVotedBe ? (
-                <div style={{
-                  ...styles.splitCard,
-                  ...(phase === 'revealed' ? styles.cardRevealed : styles.cardHiddenBe),
-                }}>
-                  {phase === 'revealed' ? data.voteBe : '?'}
-                </div>
-              ) : (
-                <div style={styles.splitCardEmpty} />
-              )}
-            </div>
-          </div>
+          )}
 
           <div style={{ position: 'relative' }}>
             {figureSlot}
@@ -303,7 +359,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
           <div
             data-player-tag
             className={nameTagClass}
-            style={{ ...styles.nameTag, ...(isMe ? styles.nameTagMe : {}), maxWidth: 160 }}
+            style={{ ...styles.nameTag, ...(isMe ? styles.nameTagMe : {}), maxWidth: 160, position: 'relative' }}
           >
             {data.isLeader ? '👑 ' : ''}{displayName}
           </div>
@@ -320,17 +376,20 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
         className={className}
         style={{ ...styles.player, ...style }}
         data-testid={testId}
+        data-player-id={id}
       >
-        <div style={styles.cardSlot}>
-          {hasVoted && (
-            <div style={{
-              ...styles.card,
-              ...(phase === 'revealed' ? styles.cardRevealed : styles.cardHidden),
-            }}>
-              {phase === 'revealed' ? data.vote : '?'}
-            </div>
-          )}
-        </div>
+        {!isSyntheticLeader && (
+          <div style={styles.cardSlot}>
+            {hasVoted && (
+              <div style={{
+                ...styles.card,
+                ...(phase === 'revealed' ? styles.cardRevealed : styles.cardHidden),
+              }}>
+                {phase === 'revealed' ? data.vote : '?'}
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ position: 'relative' }}>
           {figureSlot}
@@ -340,7 +399,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
         <div
           className={nameTagClass}
           data-player-tag
-          style={{ ...styles.nameTag, ...(isMe ? styles.nameTagMe : {}), maxWidth: 160 }}
+          style={{ ...styles.nameTag, ...(isMe ? styles.nameTagMe : {}), maxWidth: 160, position: 'relative' }}
         >
           {data.isLeader ? '👑 ' : ''}{displayName}
         </div>
@@ -366,6 +425,28 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
       <EntranceStage activeEntrance={activeEntrance} onPlayerExit={handlePlayerExit} />
 
       <div style={styles.grid}>
+        {/* iter 4: Leader figure retention during Act 1 (crownRemoval).
+            When the outgoing leader's Firebase node is gone but we're in
+            crownRemoval phase, render a synthetic entry from the payload's
+            snapshot. Figure stays at full opacity until crown is taken,
+            then walks off. No rendering during Acts 2+3 (ghost eliminated). */}
+        {outgoingId && outgoingData && outgoingData.role !== 'pm'
+          && isInCrownRemoval
+          && !playerEntries.some(([id]) => id === outgoingId)
+          && renderPlayer(outgoingId, { ...outgoingData, isLeader: !leaderWalkOff }, {
+            keySuffix: '__synthetic-leader',
+            isSyntheticLeader: true,
+            testIdOverride: `player-${outgoingData.name}-outgoing`,
+            // Trigger walk-off animation once PM takes crown.
+            // Use a fixed 0.6s duration (not the variable hashDir duration) so
+            // the leader is guaranteed to be gone before the cabinet drops at
+            // t=2500ms. The walk-off starts at t=1500ms, 600ms fits cleanly
+            // within the 800ms window (1500-2300ms) before the silence gap.
+            className: leaderWalkOff ? `player-walk-out-${hashDir(outgoingData.name || '').dir === 'left' ? 'right' : 'left'}` : '',
+            style: leaderWalkOff ? { '--enter-duration': '0.6s' } : {},
+            walking: !!leaderWalkOff,
+          })
+        }
         {playerEntries.map(([id, data]) => {
           const displayName = data.name || id;
           // Engine tells us which players are currently being rendered by
@@ -472,6 +553,7 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     gap: '4px',
+    width: 80,
   },
   // Single card mode
   cardSlot: {
@@ -556,5 +638,6 @@ const styles = {
     background: '#d4a853',
     color: '#2a2a3a',
   },
+  // iter 2: crownBadge removed (gamification dropped, crownCount no longer displayed)
   devBubble: devBubbleStyle,
 };

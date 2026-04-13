@@ -165,6 +165,25 @@ describe('useRoom', () => {
   });
 
   describe('Leader handoff when owner disconnects', () => {
+    // NOTE: After the PM Crowning Machine landed (feat/pm-slot-machine),
+    // leader promotion is no longer synchronous on disconnect. It now
+    // goes through a ceremony payload at rooms/{code}/meta/pmRoulette
+    // and the actual `isLeader` flag flip happens at the start of the
+    // `crownDelivery` phase t=1500ms (~9.9s after the ceremony payload is written).
+    // These tests exercise the end-to-end flow by manually calling
+    // `resolvePmRoulettePromotion` once the ceremony payload exists,
+    // matching what `useSlotMachine`/`SlotMachineStage` does at runtime.
+    // The tests for the ceremony itself live in the dedicated
+    // useSlotMachine/slotMachine test files.
+    async function simulateCeremonyCompletion(hook) {
+      await waitFor(() => expect(hook.result.current.pmRoulette).not.toBeNull(), { timeout: 2000 });
+      const payload = hook.result.current.pmRoulette;
+      await act(async () => {
+        await hook.result.current.resolvePmRoulettePromotion(payload);
+        await hook.result.current.clearPmRoulette(payload);
+      });
+    }
+
     it('second player is promoted to leader when the old leader is removed', async () => {
       const pm = renderHook(() => useRoom('ROOMH', 'pm-id', 'PM', 'pm'));
       await waitFor(() => expect(pm.result.current.isLeader).toBe(true));
@@ -177,29 +196,32 @@ describe('useRoom', () => {
       // Simulate PM disconnect (onDisconnect would normally remove their player node)
       act(() => { __mock.removePlayer('ROOMH', 'pm-id'); });
 
-      // Alice should self-promote
+      // A Crowning Machine ceremony is fired by Alice's client.
+      // Complete the ceremony (what SlotMachineStage does in the real UI).
+      await simulateCeremonyCompletion(alice);
+
+      // Alice should now be the leader
       await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 2000 });
     });
 
-    it('takeover also stamps leaderChangedAt AND cleans stuck synced events', async () => {
+    it('takeover stamps leaderChangedAt via the ceremony promotion', async () => {
       const pm = renderHook(() => useRoom('ROOMH2', 'pm-id', 'PM', 'pm'));
       await waitFor(() => expect(pm.result.current.isLeader).toBe(true));
-
-      // PM fires a specialRound AND a synced event, then "crashes"
-      await act(async () => { await pm.result.current.toggleSplit(); });
-      await waitFor(() => expect(pm.result.current.specialRound).toBe(true));
 
       const alice = renderHook(() => useRoom('ROOMH2', 'alice-id', 'Alice', 'player'));
       await waitFor(() => expect(alice.result.current.connected).toBe(true));
       await waitFor(() => expect(Object.keys(alice.result.current.players).length).toBe(2));
 
-      // Remove PM from store (onDisconnect-equivalent)
+      // Remove PM from store (onDisconnect-equivalent). The ceremony
+      // payload goes up, then the promotion lands and stamps the timestamp.
+      // Note: the old auto-promote scrub is intentionally gone — under
+      // the new flow the ceremony doesn't touch specialRound/syncedEvent,
+      // those either expire on their own TTLs or get cleared by the next
+      // leader manually. See tech design §5.3.
       act(() => { __mock.removePlayer('ROOMH2', 'pm-id'); });
-
+      await simulateCeremonyCompletion(alice);
       await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 2000 });
 
-      // The stuck specialRound should have been cleared by the new leader
-      await waitFor(() => expect(alice.result.current.specialRound).toBe(false));
       expect(alice.result.current.leaderChangedAt).toBeGreaterThan(0);
     });
 
@@ -221,17 +243,34 @@ describe('useRoom', () => {
       await waitFor(() => expect(alice.result.current.connected).toBe(true));
       await waitFor(() => expect(Object.keys(alice.result.current.players).length).toBe(2));
 
-      // PM disconnects → Alice promotes → age guard should preserve train
+      // PM disconnects. The Crowning Machine yields to an in-flight
+      // important train event, so Alice doesn't immediately fire a
+      // ceremony until the train expires. For this test we complete the
+      // takeover explicitly via the promotion helper.
       act(() => { __mock.removePlayer('ROOMFRSH', 'pm-id'); });
+      // The ceremony may not fire at all (train is active), so we
+      // directly promote Alice as the earliest-joined candidate — the
+      // same multi-path update the ceremony would eventually land.
+      await act(async () => {
+        await alice.result.current.resolvePmRoulettePromotion({
+          ceremonyId: 'manual-test',
+          winnerId: 'alice-id',
+        });
+      });
       await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 2000 });
 
-      // Train is still there
+      // Train is still there — the promotion multi-path update does NOT
+      // touch the syncedEvent slot.
       expect(alice.result.current.syncedEvent?.type).toBe('train');
-      // But other stuck flags were scrubbed
-      expect(alice.result.current.specialRound).toBe(false);
     });
 
-    it('stale syncedEvent (older than 15s) gets wiped on takeover', async () => {
+    it('stale syncedEvent (older than TTL) does not block the Crowning ceremony from firing', async () => {
+      // Previously the auto-promote effect scrubbed stale syncedEvents. The
+      // new ceremony flow doesn't touch syncedEvent at all — instead, the
+      // ceremony mutex checks `expiresAt > now`, so stale events don't
+      // block a fresh ceremony from firing. The stale slot simply stays
+      // in place until someone overwrites it (or TTL-reaped by other
+      // code). This test verifies the ceremony still fires + promotes.
       const pm = renderHook(() => useRoom('ROOMSTALE', 'pm-id', 'PM', 'pm'));
       await waitFor(() => expect(pm.result.current.isLeader).toBe(true));
 
@@ -258,10 +297,10 @@ describe('useRoom', () => {
       // Confirm Alice sees the stale event before takeover
       await waitFor(() => expect(alice.result.current.syncedEvent?.type).toBe('train'));
 
-      // PM disconnects → Alice promotes → stale event must be wiped
+      // PM disconnects → ceremony fires (stale event does not block it)
       act(() => { __mock.removePlayer('ROOMSTALE', 'pm-id'); });
+      await simulateCeremonyCompletion(alice);
       await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 2000 });
-      await waitFor(() => expect(alice.result.current.syncedEvent).toBeNull());
     });
 
     it('Strict Mode simulated unmount/remount does NOT wipe the player node', async () => {
