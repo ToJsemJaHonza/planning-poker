@@ -1,7 +1,7 @@
 /**
  * Shared sprite rendering engine for pixel-art box-shadow sprites.
  *
- * Every sprite in the app (PlayerFigure, Wizard, Crown, SlotFiller) uses
+ * Every sprite in the app (PlayerFigure, PmSprite, Crown, SlotFiller) uses
  * the same box-shadow technique: a 1x1px element with a long box-shadow
  * string where each shadow == one pixel. This module centralizes that
  * logic so it lives in exactly one place.

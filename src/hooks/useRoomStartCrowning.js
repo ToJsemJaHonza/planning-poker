@@ -4,15 +4,15 @@
  *
  * Separate from useSlotMachine because the mini-ceremony has NO cabinet,
  * NO reels, NO matched-hold, NO near-miss. It is a completely different
- * phase table (Wizard walk + crown materialize + crown place + Wizard exit).
+ * phase table (PM walk + crown materialize + crown place + PM exit).
  *
  *
  * Payload shape (rooms/{code}/meta/roomStartCrowning):
  *   { ceremonyId, startedAt, winnerId, schemaVersion: 1 }
  *
  * Phase table (~1.7s core + ~500ms entry walk = ~2.2s total):
- *   wizardEntry (0-500ms), castAndMaterialize (500-1000ms),
- *   crownPlace (1000-1250ms), wizardExit (1250-1700ms), done.
+ *   pmEntry (0-500ms), castAndMaterialize (500-1000ms),
+ *   crownPlace (1000-1250ms), pmExit (1250-1700ms), done.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -20,35 +20,26 @@ import { db, ref, set, get, runTransaction } from '../firebase';
 import { computePlayerGridPosition } from '../engine/gridPosition';
 import { easeInOutCubic, CEREMONY_WALK_FRAME_MS } from '../engine/animation';
 import { useAnimationLoop } from '../engine/useAnimationLoop';
+import { currentPhaseRow } from '../events/slotMachine';
 
 // Slowed to ~3.5s so each phase is visually appreciable (was 1.7s — too fast
 // to distinguish walk-in, cast, crown-place, walk-out as separate steps).
 // Matches the "2x slower" design intent applied to the full crown ceremony.
 const PHASE_TABLE_ROOM_START = [
-  { phase: 'wizardEntry',        startAt:    0, duration: 1200 },
+  { phase: 'pmEntry',        startAt:    0, duration: 1200 },
   { phase: 'castAndMaterialize', startAt: 1200, duration:  800 },
   { phase: 'crownPlace',         startAt: 2000, duration:  500 },
-  { phase: 'wizardExit',         startAt: 2500, duration: 1000 },
+  { phase: 'pmExit',         startAt: 2500, duration: 1000 },
   { phase: 'done',               startAt: 3500, duration:    0 },
 ];
-
-function currentPhaseRow(table, elapsed) {
-  if (elapsed < 0) return table[0];
-  for (let i = 0; i < table.length - 1; i++) {
-    const row = table[i];
-    const next = table[i + 1];
-    if (elapsed >= row.startAt && elapsed < next.startAt) return row;
-  }
-  return table[table.length - 1];
-}
 
 const IDLE_STATE = {
   active: false,
   phase: 'idle',
   elapsed: 0,
   winnerId: null,
-  wizardPosition: null,
-  wizardPose: null,
+  pmPosition: null,
+  pmPose: null,
 };
 
 /**
@@ -151,25 +142,25 @@ export function useRoomStartCrowning({
     const { start: startPos, target: targetPos } = positionsRef.current;
     const row = currentPhaseRow(PHASE_TABLE_ROOM_START, elapsed);
 
-    let wizardPosition = null;
-    let wizardPose = 'walk1';
-    if (row.phase === 'wizardEntry') {
+    let pmPosition = null;
+    let pmPose = 'walk1';
+    if (row.phase === 'pmEntry') {
       const t = easeInOutCubic(Math.min(1, elapsed / 1200));
-      wizardPosition = {
+      pmPosition = {
         x: startPos.x + (targetPos.x - startPos.x) * t,
         y: startPos.y + (targetPos.y - startPos.y) * t,
       };
-      wizardPose = Math.floor(elapsed / CEREMONY_WALK_FRAME_MS) % 2 === 0 ? 'walk1' : 'walk2';
+      pmPose = Math.floor(elapsed / CEREMONY_WALK_FRAME_MS) % 2 === 0 ? 'walk1' : 'walk2';
     } else if (row.phase === 'castAndMaterialize' || row.phase === 'crownPlace') {
-      wizardPosition = targetPos;
-      wizardPose = 'cast';
-    } else if (row.phase === 'wizardExit') {
+      pmPosition = targetPos;
+      pmPose = 'cast';
+    } else if (row.phase === 'pmExit') {
       const t = easeInOutCubic(Math.min(1, (elapsed - 2500) / 1000));
-      wizardPosition = {
+      pmPosition = {
         x: targetPos.x + (startPos.x - targetPos.x) * t,
         y: targetPos.y + (startPos.y - targetPos.y) * t,
       };
-      wizardPose = Math.floor(elapsed / CEREMONY_WALK_FRAME_MS) % 2 === 0 ? 'walk1' : 'walk2';
+      pmPose = Math.floor(elapsed / CEREMONY_WALK_FRAME_MS) % 2 === 0 ? 'walk1' : 'walk2';
     }
 
     setPhaseState({
@@ -177,8 +168,8 @@ export function useRoomStartCrowning({
       phase: row.phase,
       elapsed,
       winnerId: roomStartCrowning.winnerId,
-      wizardPosition,
-      wizardPose,
+      pmPosition,
+      pmPose,
     });
 
     if (row.phase === 'done') {

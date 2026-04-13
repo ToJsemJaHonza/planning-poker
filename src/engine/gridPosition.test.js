@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computePlayerGridPosition, computeWizardWalkPosition } from './gridPosition';
+import { computePlayerGridPosition, computePmWalkPosition } from './gridPosition';
 
 describe('computePlayerGridPosition', () => {
   it('single player is centered', () => {
@@ -31,33 +31,33 @@ describe('computePlayerGridPosition', () => {
   });
 });
 
-describe('computeWizardWalkPosition', () => {
+describe('computePmWalkPosition', () => {
   it('returns start at progress=0', () => {
-    const pos = computeWizardWalkPosition(0, 100, 200, 500, 600);
+    const pos = computePmWalkPosition(0, 100, 200, 500, 600);
     expect(pos.x).toBe(100);
     expect(pos.y).toBe(200);
   });
 
   it('returns target at progress=1', () => {
-    const pos = computeWizardWalkPosition(1, 100, 200, 500, 600);
+    const pos = computePmWalkPosition(1, 100, 200, 500, 600);
     expect(pos.x).toBe(500);
     expect(pos.y).toBe(600);
   });
 
   it('clamps negative progress', () => {
-    const pos = computeWizardWalkPosition(-1, 100, 200, 500, 600);
+    const pos = computePmWalkPosition(-1, 100, 200, 500, 600);
     expect(pos.x).toBe(100);
     expect(pos.y).toBe(200);
   });
 
   it('clamps progress above 1', () => {
-    const pos = computeWizardWalkPosition(2, 100, 200, 500, 600);
+    const pos = computePmWalkPosition(2, 100, 200, 500, 600);
     expect(pos.x).toBe(500);
     expect(pos.y).toBe(600);
   });
 
   it('applies easing (midpoint is at 0.5 due to cubic)', () => {
-    const pos = computeWizardWalkPosition(0.5, 0, 0, 400, 400);
+    const pos = computePmWalkPosition(0.5, 0, 0, 400, 400);
     // easeInOutCubic(0.5) = 0.5 -> x=200, y=200
     expect(pos.x).toBeCloseTo(200, 0);
     expect(pos.y).toBeCloseTo(200, 0);

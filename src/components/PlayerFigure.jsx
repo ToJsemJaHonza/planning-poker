@@ -321,7 +321,7 @@ const ROWS = 14;
 const SPRITE_W = COLS * PX;
 const SPRITE_H = ROWS * PX;
 
-// Subtle two-frame walk cycle matching the PM (Wizard) style: only the
+// Subtle two-frame walk cycle matching the PM sprite style: only the
 // bottom three rows (pants hem + legs + shoes) change between frames.
 // Both frames are intentionally chosen so they don't coincide with ANY
 // idle leg stance, guaranteeing every player visibly animates.

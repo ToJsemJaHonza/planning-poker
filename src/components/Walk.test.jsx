@@ -17,7 +17,7 @@ import { computePlayerShadow } from './PlayerFigure';
 //      (roughly the same number of painted pixels per frame) so the figure
 //      doesn't pulse in silhouette area.
 //   4. Only the legs/feet region changes — head, torso and arms should be
-//      identical between frame 0 and frame 1, matching the PM (Wizard) style
+//      identical between frame 0 and frame 1, matching the PM sprite style
 //      the user explicitly asked for.
 // ---------------------------------------------------------------------------
 
@@ -65,7 +65,7 @@ describe('Walking animation contract (user approved)', () => {
     // Pixel grid is 14 rows tall, each row is 5 px high. Head/torso/arms live
     // in rows 0–10 (Y pixel offsets 0..50). Legs/shoes live in rows 11–13
     // (Y pixel offsets 55..65). This test enforces that only the bottom
-    // region actually changes — matching the Wizard pose style.
+    // region actually changes — matching the PM sprite pose style.
     for (const n of names) {
       const f0 = segmentsByY(computePlayerShadow(n, { walkFrame: 0 }));
       const f1 = segmentsByY(computePlayerShadow(n, { walkFrame: 1 }));

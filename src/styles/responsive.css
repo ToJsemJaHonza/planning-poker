@@ -1,7 +1,7 @@
-/* === Mobile wizard position ===
- * The wizard's bottom position is now handled by useWizardPosition.js which
- * checks window.innerWidth at runtime. The old .wizard-walk { bottom: 165px }
- * mobile override has been removed.
+/* === Mobile PM position ===
+ * The PM's bottom position is now handled by usePmPosition.js which
+ * checks window.innerWidth at runtime. The old mobile override
+ * has been removed.
  */
 
 /* === Mobile header === */

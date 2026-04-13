@@ -1,6 +1,6 @@
 /**
  * Pure math helpers for computing positions in the player grid and
- * wizard walk paths during crown ceremonies.
+ * PM walk paths during crown ceremonies.
  *
  * Zero React imports. No DOM access. All functions are pure.
  */
@@ -8,7 +8,7 @@
 import { easeInOutCubic } from '../engine/animation';
 
 // ---------------------------------------------------------------------------
-// Vertical walk path computation for ceremony wizard movement
+// Vertical walk path computation for ceremony PM movement
 // ---------------------------------------------------------------------------
 
 /**
@@ -23,7 +23,7 @@ import { easeInOutCubic } from '../engine/animation';
  * @param {number} targetY
  * @returns {{ x: number, y: number }}
  */
-export function computeWizardWalkPosition(progress, startX, startY, targetX, targetY) {
+export function computePmWalkPosition(progress, startX, startY, targetX, targetY) {
   // Eased interpolation on both axes simultaneously for smooth movement.
   const p = Math.max(0, Math.min(1, progress));
   const t = easeInOutCubic(p);
@@ -73,7 +73,7 @@ export function computePlayerGridPosition(index, playerCount, viewportWidth) {
   const rowLeft = (viewportWidth - rowWidth) / 2;
 
   const x = rowLeft + col * slotPitch + ITEM_WIDTH / 2;
-  // The wizard should walk to the figure, not the item center.
+  // The PM should walk to the figure, not the item center.
   // Figure is typically 84px from item top (after card slot) or 0px (no card).
   // Use a compromise: aim at 70px from item top (works for both cases within ~15px).
   const FIGURE_OFFSET_FROM_TOP = 70;

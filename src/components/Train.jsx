@@ -2,92 +2,11 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import PlayerFigure from './PlayerFigure';
 import { useCinematicHandoff } from '../events/useCinematicHandoff';
 import { pixel } from './room/styles';
-
-const _ = null;
-// Shinkansen E5 series colors
-const W = '#e8e8e8'; // white body
-const L = '#f5f5f5'; // roof
-const B = '#16a34a'; // green stripe (E5 is green!)
-const D = '#15803d'; // dark green
-const K = '#1e293b'; // windows
-const R = '#dc2626'; // accent line
-const S = '#94a3b8'; // silver undercarriage
-const U = '#64748b'; // darker silver
-const N = '#334155'; // dark
-const C = '#78716c'; // connector
-const P = '#d4d4d8'; // panel line
-const H = '#f59e0b'; // headlight
-
-// Nose car (aerodynamic): 16w × 12h
-const NOSE = [
-  [_,_,_,_,_,_,_,_,_,_,_,L,L,L,L,_],
-  [_,_,_,_,_,_,_,_,_,_,L,W,W,W,W,L],
-  [_,_,_,_,_,_,_,_,_,W,W,W,W,W,W,W],
-  [_,_,_,_,_,_,_,_,W,W,K,K,K,P,W,W],
-  [_,_,_,_,_,_,R,R,B,B,B,B,B,B,B,B],
-  [_,_,_,_,R,R,R,B,B,B,B,B,B,B,B,B],
-  [_,_,H,R,R,R,D,D,D,D,D,D,D,D,D,D],
-  [_,_,_,R,R,S,S,S,S,S,S,S,S,S,S,S],
-  [_,_,_,_,U,U,U,U,U,U,U,U,U,U,U,U],
-  [_,_,_,_,_,K,K,_,_,K,K,_,_,K,K,_],
-  [_,_,_,_,_,K,K,_,_,K,K,_,_,K,K,_],
-  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
-];
-
-// Middle passenger car: 24w × 12h
-const MID = [
-  [C,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,C],
-  [C,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,C],
-  [C,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,C],
-  [C,W,K,K,K,P,K,K,K,P,K,K,K,P,K,K,K,P,K,K,K,P,W,C],
-  [C,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,C],
-  [C,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,C],
-  [C,D,D,D,N,N,D,D,D,D,D,D,D,D,D,D,D,D,N,N,D,D,D,C],
-  [C,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,C],
-  [_,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,_],
-  [_,_,K,K,_,_,K,K,_,_,_,_,_,_,K,K,_,_,K,K,_,_,_,_],
-  [_,_,K,K,_,_,K,K,_,_,_,_,_,_,K,K,_,_,K,K,_,_,_,_],
-  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
-];
-
-const PX = 4;
-const NOSE_W = 16 * PX;
-const MID_W = 24 * PX;
-const CAR_H = 12 * PX;
-const NUM_MID = 3;
-// Train: nose + 3 mid + nose(flipped)
-const TOTAL_W = NOSE_W + MID_W * NUM_MID + NOSE_W;
-
-// Tree: 6w x 8h
-const TG = '#22c55e';
-const TD = '#16a34a';
-const TT = '#78350f';
-const TREE = [
-  [_,_,TG,TG,_,_],
-  [_,TG,TD,TG,TG,_],
-  [TG,TD,TG,TG,TD,TG],
-  [TG,TG,TD,TG,TG,TG],
-  [_,TG,TG,TG,TG,_],
-  [_,_,TT,TT,_,_],
-  [_,_,TT,TT,_,_],
-  [_,_,TT,TT,_,_],
-];
-const TPX = 3;
-
-function spriteToShadows(grid, px, offX = 0) {
-  const s = [];
-  for (let y = 0; y < grid.length; y++)
-    for (let x = 0; x < grid[y].length; x++) {
-      const c = grid[y][x];
-      if (c) s.push(`${x * px + offX}px ${y * px}px 0 ${Math.ceil(px / 2)}px ${c}`);
-    }
-  return s;
-}
-
-// Flip sprite horizontally
-function flipGrid(grid) {
-  return grid.map(row => [...row].reverse());
-}
+import {
+  NOSE, MID, TREE,
+  PX, TPX, NOSE_W, MID_W, CAR_H, NUM_MID, TOTAL_W,
+  spriteToShadows, flipGrid,
+} from '../sprites/trainSprites';
 
 export default function Train({ fromRight, playerId, playerName, onPlayerExit, onDone }) {
   const [phase, setPhase] = useState('rails');
@@ -257,7 +176,7 @@ export default function Train({ fromRight, playerId, playerName, onPlayerExit, o
 const styles = {
   // No backdrop — the regular room UI stays fully visible. The rails and
   // train float high enough on the screen that they don't collide with
-  // the bottom UI strip (CardPicker + wizard walk path + pmBar ≈ 280 px).
+  // the bottom UI strip (CardPicker + PM walk path + pmBar ≈ 280 px).
   container: {
     position: 'fixed', bottom: 210, left: 0, right: 0,
     height: `${CAR_H + 90}px`,

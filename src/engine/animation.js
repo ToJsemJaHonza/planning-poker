@@ -5,7 +5,7 @@
  * animated component in the app uses consistent, smooth motion.
  */
 
-/** Walk-frame toggle interval (ms). Used by WalkingFigure and Wizard. */
+/** Walk-frame toggle interval (ms). Used by WalkingFigure and PmSprite. */
 export const WALK_FRAME_MS = 500;
 
 /** Ceremony walk-frame toggle interval (ms). Faster pace during ceremonies. */
@@ -23,7 +23,7 @@ export const EASING = {
   walk: 'cubic-bezier(0.25, 0.05, 0.25, 1)',
   /** Walk exit — slightly faster ease-out so departure feels decisive. */
   walkOut: 'cubic-bezier(0.42, 0, 0.58, 1)',
-  /** Smooth position interpolation for ceremony wizard movement. */
+  /** Smooth position interpolation for ceremony PM movement. */
   smooth: 'cubic-bezier(0.33, 0, 0.67, 1)',
   /** Bounce-settle for crown landing. */
   settle: 'cubic-bezier(0.34, 1.56, 0.64, 1)',

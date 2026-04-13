@@ -108,19 +108,19 @@ describe('Rule 3: Idle — crown on leader', () => {
 // Rule 1: Slot machine ceremony active
 // ---------------------------------------------------------------------------
 
-describe('Rule 1: Slot machine ceremony — crownCeremonyState mapping', () => {
+describe('Rule 1: Slot machine ceremony — crownCeremonyState direct format', () => {
   const pmRoulette = {
     outgoingLeaderId: 'oldLeader',
     winnerId: 'newWinner',
     outgoingLeaderHadCrown: true,
   };
 
-  it('crown on leader-head with progress=0 -> player-head on outgoing leader', () => {
+  it('crown on player-head (outgoing leader, not yet lifted) -> player-head', () => {
     const { result } = renderHook(() => useCrownOwnership(makeProps({
       players: { oldLeader: { isLeader: false, role: 'player' } },
       slotMachinePhaseState: {
         phase: 'crownRemoval',
-        crownCeremonyState: { parent: 'leader-head', progress: 0 },
+        crownCeremonyState: { location: 'player-head', playerId: 'oldLeader', progress: 1, glowing: false },
       },
       pmRoulette,
     })));
@@ -133,12 +133,12 @@ describe('Rule 1: Slot machine ceremony — crownCeremonyState mapping', () => {
     });
   });
 
-  it('crown lifting from leader-head with progress>0 -> lifting', () => {
+  it('crown lifting -> lifting', () => {
     const { result } = renderHook(() => useCrownOwnership(makeProps({
       players: {},
       slotMachinePhaseState: {
         phase: 'crownRemoval',
-        crownCeremonyState: { parent: 'leader-head', progress: 0.5 },
+        crownCeremonyState: { location: 'lifting', playerId: 'oldLeader', progress: 0.5, glowing: true },
       },
       pmRoulette,
     })));
@@ -149,17 +149,17 @@ describe('Rule 1: Slot machine ceremony — crownCeremonyState mapping', () => {
     expect(result.current.glowing).toBe(true);
   });
 
-  it('crown at wizard-hand -> wizard-hand', () => {
+  it('crown at pm-hand -> pm-hand', () => {
     const { result } = renderHook(() => useCrownOwnership(makeProps({
       players: {},
       slotMachinePhaseState: {
         phase: 'spinning',
-        crownCeremonyState: { parent: 'wizard-hand', progress: 1 },
+        crownCeremonyState: { location: 'pm-hand', playerId: null, progress: 1, glowing: true },
       },
       pmRoulette,
     })));
 
-    expect(result.current.location).toBe('wizard-hand');
+    expect(result.current.location).toBe('pm-hand');
     expect(result.current.playerId).toBeNull();
     expect(result.current.glowing).toBe(true);
   });
@@ -169,7 +169,7 @@ describe('Rule 1: Slot machine ceremony — crownCeremonyState mapping', () => {
       players: {},
       slotMachinePhaseState: {
         phase: 'crownDelivery',
-        crownCeremonyState: { parent: 'materializing', progress: 0.6 },
+        crownCeremonyState: { location: 'materializing', playerId: null, progress: 0.6, glowing: true },
       },
       pmRoulette: { ...pmRoulette, outgoingLeaderHadCrown: false },
     })));
@@ -184,7 +184,7 @@ describe('Rule 1: Slot machine ceremony — crownCeremonyState mapping', () => {
       players: {},
       slotMachinePhaseState: {
         phase: 'crownDelivery',
-        crownCeremonyState: { parent: 'new-leader-head', progress: 0.7 },
+        crownCeremonyState: { location: 'arcing-to-player', playerId: 'newWinner', progress: 0.7, glowing: true },
       },
       pmRoulette,
     })));
@@ -200,7 +200,7 @@ describe('Rule 1: Slot machine ceremony — crownCeremonyState mapping', () => {
       players: { newWinner: { isLeader: true, role: 'player' } },
       slotMachinePhaseState: {
         phase: 'crownDelivery',
-        crownCeremonyState: { parent: 'new-leader-head', progress: 1 },
+        crownCeremonyState: { location: 'player-head', playerId: 'newWinner', progress: 1, glowing: false },
       },
       pmRoulette,
     })));
@@ -223,8 +223,6 @@ describe('Rule 1: Slot machine ceremony — crownCeremonyState mapping', () => {
       pmRoulette: { ...pmRoulette, outgoingLeaderHadCrown: false },
     })));
 
-    // Crown is 'none' during cabinet spin — not on alice's head even though
-    // she has isLeader, because ceremony is active (Rule 1 suppresses Rule 3).
     expect(result.current.location).toBe('none');
   });
 });
@@ -242,13 +240,13 @@ describe('Priority: Rule 1 overrides Rule 3', () => {
       },
       slotMachinePhaseState: {
         phase: 'crownDelivery',
-        crownCeremonyState: { parent: 'wizard-hand', progress: 1 },
+        crownCeremonyState: { location: 'pm-hand', playerId: null, progress: 1, glowing: true },
       },
       pmRoulette: { outgoingLeaderId: 'oldLeader', winnerId: 'newWinner' },
     })));
 
-    // Crown should be wizard-hand, NOT on newWinner's head
-    expect(result.current.location).toBe('wizard-hand');
+    // Crown should be pm-hand, NOT on newWinner's head
+    expect(result.current.location).toBe('pm-hand');
     expect(result.current.playerId).toBeNull();
   });
 });
@@ -258,12 +256,12 @@ describe('Priority: Rule 1 overrides Rule 3', () => {
 // ---------------------------------------------------------------------------
 
 describe('Rule 2: Room-start ceremony', () => {
-  it('wizardEntry phase -> none (crown not yet created)', () => {
+  it('pmEntry phase -> none (crown not yet created)', () => {
     const { result } = renderHook(() => useCrownOwnership(makeProps({
       players: { alice: { isLeader: true, role: 'player' } },
       roomStartState: {
         active: true,
-        phase: 'wizardEntry',
+        phase: 'pmEntry',
         elapsed: 500,
         winnerId: 'alice',
       },
@@ -303,12 +301,12 @@ describe('Rule 2: Room-start ceremony', () => {
     expect(result.current.glowing).toBe(true);
   });
 
-  it('wizardExit phase -> player-head on winner', () => {
+  it('pmExit phase -> player-head on winner', () => {
     const { result } = renderHook(() => useCrownOwnership(makeProps({
       players: { alice: { isLeader: true, role: 'player' } },
       roomStartState: {
         active: true,
-        phase: 'wizardExit',
+        phase: 'pmExit',
         elapsed: 3000,
         winnerId: 'alice',
       },
@@ -350,13 +348,13 @@ describe('Priority: Rule 2 overrides Rule 3', () => {
       },
       roomStartState: {
         active: true,
-        phase: 'wizardEntry',
+        phase: 'pmEntry',
         elapsed: 200,
         winnerId: 'alice',
       },
     })));
 
-    // During wizardEntry, crown is 'none', not 'player-head' on alice
+    // During pmEntry, crown is 'none', not 'player-head' on alice
     expect(result.current.location).toBe('none');
   });
 });
@@ -371,7 +369,7 @@ describe('Priority: Rule 1 overrides Rule 2', () => {
       players: {},
       slotMachinePhaseState: {
         phase: 'crownDelivery',
-        crownCeremonyState: { parent: 'wizard-hand', progress: 1 },
+        crownCeremonyState: { location: 'pm-hand', playerId: null, progress: 1, glowing: true },
       },
       roomStartState: {
         active: true,
@@ -382,8 +380,8 @@ describe('Priority: Rule 1 overrides Rule 2', () => {
       pmRoulette: { outgoingLeaderId: 'x', winnerId: 'bob' },
     })));
 
-    // Slot machine wins — crown at wizard-hand, not arcing to alice
-    expect(result.current.location).toBe('wizard-hand');
+    // Slot machine wins — crown at pm-hand, not arcing to alice
+    expect(result.current.location).toBe('pm-hand');
   });
 });
 
@@ -407,7 +405,7 @@ describe('Transition edge: ceremony end to idle', () => {
           players: { winner: { isLeader: true, role: 'player' } },
           slotMachinePhaseState: {
             phase: 'crownDelivery',
-            crownCeremonyState: { parent: 'new-leader-head', progress: 1 },
+            crownCeremonyState: { location: 'player-head', playerId: 'winner', progress: 1, glowing: false },
           },
           pmRoulette,
         }),
@@ -437,7 +435,7 @@ describe('Transition edge: ceremony end to idle', () => {
 describe('Invariant: exactly one location at a time', () => {
   it('every valid state has exactly one location string', () => {
     const validLocations = new Set([
-      'player-head', 'wizard-hand', 'lifting',
+      'player-head', 'pm-hand', 'lifting',
       'arcing-to-player', 'materializing', 'none',
     ]);
 
@@ -446,7 +444,7 @@ describe('Invariant: exactly one location at a time', () => {
       makeProps({ players: { a: { isLeader: true, role: 'player' } } }),
       // Ceremony lifting
       makeProps({
-        slotMachinePhaseState: { phase: 'crownRemoval', crownCeremonyState: { parent: 'leader-head', progress: 0.5 } },
+        slotMachinePhaseState: { phase: 'crownRemoval', crownCeremonyState: { location: 'lifting', playerId: 'a', progress: 0.5, glowing: true } },
         pmRoulette: { outgoingLeaderId: 'a', winnerId: 'b' },
       }),
       // Room-start materializing

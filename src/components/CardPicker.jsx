@@ -1,6 +1,6 @@
 import { pixel } from './room/styles';
 
-const CARD_VALUES = ['1', '2', '3', '5', '8', '13', '21', '?', '☕'];
+const CARD_VALUES = ['3', '5', '8', '13', '21', '?', '☕'];
 
 export default function CardPicker({ selectedVote, onVote, disabled, label, accentColor, bottomOffset = 0 }) {
   return (

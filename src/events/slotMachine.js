@@ -69,7 +69,7 @@ export const FAREWELL_PHRASES = [
   "Deprecated.",
 ];
 
-// Parting words the Wizard says as he walks off after crowning.
+// Parting words the PM says as he walks off after crowning.
 export const CROWNING_BUBBLES = [
   "Carry on, young padawan.",
   "Inbox zero: achieved.",
@@ -509,4 +509,104 @@ export function isValidCeremonyPayload(payload) {
 export function isStalePayload(payload, now = Date.now()) {
   if (!payload || typeof payload.expiresAt !== 'number') return true;
   return now > payload.expiresAt + CEREMONY_STALE_GRACE_MS;
+}
+
+// ---------------------------------------------------------------------------
+// Pre-computed reel orders — shared between useSlotMachine and SlotMachine
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the three reel orders for a ceremony, placing the winner and
+ * near-miss at their expected landing positions. Pure function — same
+ * ceremony always produces the same result.
+ *
+ * @param {object} ceremony  frozen Firebase payload
+ * @returns {{ reelOrders: string[][], winnerIndexInReel2: number, nearMissIndexInReel2: number|null, reel0LandingIdx: number, reel1LandingIdx: number, nonMatchReelIndex: number|null }}
+ */
+export function precomputeReelOrders(ceremony) {
+  if (!ceremony) {
+    return {
+      reelOrders: [[], [], []],
+      winnerIndexInReel2: 0,
+      nearMissIndexInReel2: null,
+      reel0LandingIdx: 0,
+      reel1LandingIdx: 0,
+      nonMatchReelIndex: null,
+    };
+  }
+
+  const pool = ceremony.wasCompressed
+    ? [ceremony.winnerId]
+    : [...ceremony.candidateIds, ...(ceremony.reelFillerIds || [])];
+  const raw = (ceremony.reelSeeds || [0, 0, 0]).map((seed) => buildReelOrder(pool, seed));
+
+  if (ceremony.wasCompressed) {
+    return {
+      reelOrders: raw,
+      winnerIndexInReel2: 0,
+      nearMissIndexInReel2: null,
+      reel0LandingIdx: 0,
+      reel1LandingIdx: 0,
+      nonMatchReelIndex: null,
+    };
+  }
+
+  let reel0 = raw[0];
+  let reel1 = raw[1];
+  let reel2 = raw[2];
+
+  const nonMatchReelIndex = ceremony.winnerReelPair
+    ? [0, 1, 2].find(i => !ceremony.winnerReelPair.includes(i))
+    : null;
+
+  if (ceremony.winnerReelPair) {
+    const midIdx0 = Math.max(1, Math.min(reel0.length - 1, 4));
+    const midIdx1 = Math.max(1, Math.min(reel1.length - 1, 4));
+
+    if (ceremony.winnerReelPair.includes(0)) {
+      reel0 = placeEntryAt(reel0, ceremony.winnerId, midIdx0);
+    } else if (ceremony.nonMatchReelPlayerId) {
+      reel0 = placeEntryAt(reel0, ceremony.nonMatchReelPlayerId, midIdx0);
+    }
+
+    if (ceremony.winnerReelPair.includes(1)) {
+      reel1 = placeEntryAt(reel1, ceremony.winnerId, midIdx1);
+    } else if (ceremony.nonMatchReelPlayerId) {
+      reel1 = placeEntryAt(reel1, ceremony.nonMatchReelPlayerId, midIdx1);
+    }
+  }
+
+  const finalStopIndex = Math.max(1, Math.min(reel2.length - 1, 6));
+  if (ceremony.winnerId) {
+    reel2 = placeEntryAt(reel2, ceremony.winnerId, finalStopIndex);
+  }
+  if (ceremony.nearMissTargetId) {
+    reel2 = placeEntryAt(reel2, ceremony.nearMissTargetId, Math.max(0, finalStopIndex - 1));
+  }
+
+  const reelOrders = [reel0, reel1, reel2];
+
+  let reel0LandingIdx = 0;
+  let reel1LandingIdx = 0;
+  if (ceremony.winnerReelPair) {
+    if (ceremony.winnerReelPair.includes(0)) {
+      reel0LandingIdx = reel0.indexOf(ceremony.winnerId);
+    } else if (ceremony.nonMatchReelPlayerId) {
+      reel0LandingIdx = reel0.indexOf(ceremony.nonMatchReelPlayerId);
+    }
+    if (ceremony.winnerReelPair.includes(1)) {
+      reel1LandingIdx = reel1.indexOf(ceremony.winnerId);
+    } else if (ceremony.nonMatchReelPlayerId) {
+      reel1LandingIdx = reel1.indexOf(ceremony.nonMatchReelPlayerId);
+    }
+  }
+
+  return {
+    reelOrders,
+    winnerIndexInReel2: reel2.indexOf(ceremony.winnerId),
+    nearMissIndexInReel2: ceremony.nearMissTargetId ? reel2.indexOf(ceremony.nearMissTargetId) : null,
+    reel0LandingIdx,
+    reel1LandingIdx,
+    nonMatchReelIndex,
+  };
 }

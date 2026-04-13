@@ -74,4 +74,4 @@
 }
 .cm-crown-materialize { animation: cm-crown-materialize-kf 150ms steps(3, end) forwards; }
 
-.cm-wizard-courier-salute { /* Driven by component pose prop */ }
+.cm-pm-courier-salute { /* Driven by component pose prop */ }

@@ -1,6 +1,6 @@
 /* Feature-scoped CSS modules — each file owns one concern. */
 @import './styles/base.css';
-@import './styles/wizard.css';
+@import './styles/pm.css';
 @import './styles/walk.css';
 @import './styles/events.css';
 @import './styles/ceremony.css';

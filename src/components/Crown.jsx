@@ -33,7 +33,7 @@ const ANCHOR_OFFSETS = {
   // head: relative to PlayerFigure wrapper top-left
   // (60-25)/2 = 17.5 -> 17px left, -22px top
   head: { left: 17, top: -22 },
-  // hand: relative to Wizard sprite top-left (CAST pose hand pixel)
+  // hand: relative to PM sprite top-left (CAST pose hand pixel)
   hand: { left: 43, top: 18 },
   // reel: centered in 140x120 slot, slightly below top
   reel: { left: 58, top: 6 },

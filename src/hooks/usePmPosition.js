@@ -1,12 +1,12 @@
 /**
- * useWizardPosition - unified JS-driven wizard positioning.
+ * usePmPosition - unified JS-driven PM sprite positioning.
  *
  * Replaces the dual CSS-keyframe / JS-position system with a single source
- * of truth for the wizard's { x, y, facingLeft } coordinates.
+ * of truth for the PM sprite's { x, y, facingLeft } coordinates.
  *
- * In "idle" mode, uses requestAnimationFrame to ping-pong the wizard between
+ * In "idle" mode, uses requestAnimationFrame to ping-pong the PM between
  * x=10 and x=viewportWidth-70 over 16 seconds (matching the old CSS
- * animation timing from @keyframes wizard-path).
+ * animation timing).
  *
  * When a ceremony starts, freezes the current idle position and returns it
  * as the ceremony start position. When the ceremony ends, resumes idle walk
@@ -21,7 +21,7 @@
 import { useState, useRef, useEffect } from 'react';
 
 // Desktop bottom: 105px from bottom, Mobile: 165px from bottom.
-// These match the old CSS values from wizard.css and responsive.css.
+// These match the old CSS values from pm.css and responsive.css.
 const DESKTOP_BOTTOM = 105;
 const MOBILE_BOTTOM = 165;
 const MOBILE_BREAKPOINT = 560;
@@ -85,10 +85,10 @@ function computeIdlePosition(cycleTime, vw) {
  * @param {object} opts
  * @param {boolean} opts.ceremonyActive - true when a ceremony (pmRoulette or roomStartCrowning) is active
  * @returns {{ x: number, y: number, facingLeft: boolean, startPos: { x: number, y: number } | null }}
- *   - x, y, facingLeft: current wizard position and direction
+ *   - x, y, facingLeft: current PM position and direction
  *   - startPos: snapshot of position when ceremony started (for ceremony use)
  */
-export function useWizardPosition({ ceremonyActive }) {
+export function usePmPosition({ ceremonyActive }) {
   // Cycle origin: the absolute time corresponding to cycleTime=0.
   // Persists across idle/ceremony transitions.
   const cycleOriginRef = useRef(Date.now());
@@ -127,7 +127,7 @@ export function useWizardPosition({ ceremonyActive }) {
       const clampedX = Math.max(minX, Math.min(maxX, position.x));
       const fraction = range > 0 ? (clampedX - minX) / range : 0;
 
-      // Place the wizard at the matching position in the cycle
+      // Place the PM at the matching position in the cycle
       let cycleT;
       if (position.facingLeft) {
         // Moving left: 53%-97% range

@@ -1,9 +1,8 @@
-/* === PM Wizard idle walk ===
- * The wizard's idle walk is now driven by JS (useWizardPosition hook) instead
- * of CSS keyframes. The old @keyframes wizard-path, .wizard-walk class, and
- * @keyframes wizard-bubble-unflip have been removed.
+/* === PM sprite idle walk ===
+ * The PM's idle walk is now driven by JS (usePmPosition hook) instead
+ * of CSS keyframes. The old @keyframes were removed.
  *
- * Position: { x, y, facingLeft } computed in useWizardPosition.js
+ * Position: { x, y, facingLeft } computed in usePmPosition.js
  * Sprite flip: inline scaleX(-1) on the sprite inner container
  * Bubble flip: inline scaleX(-1) counteracting the sprite flip
  */

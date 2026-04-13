@@ -13,23 +13,17 @@
  * See `.claude/pipeline-tech-design-v4.md` for the canonical spec.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  PHASE_TABLE_STANDARD,
-  PHASE_TABLE_COMPRESSED,
-  PHASE_TABLE_REDUCED,
   currentPhaseRow,
   phaseTableFor,
   totalDurationFor,
-  buildReelOrder,
-  placeEntryAt,
+  precomputeReelOrders,
 } from '../events/slotMachine';
 import { shallowEqual } from '../engine/shallowEqual';
-import { computePhaseState, IDLE_STATE, REEL2_CLICK_MOMENTS } from '../events/ceremonyPhases';
-import { computePlayerGridPosition } from '../engine/gridPosition';
+import { computePhaseState, IDLE_STATE } from '../events/ceremonyPhases';
+import { useAnimationLoop } from '../engine/useAnimationLoop';
 
-// Re-export for backward compatibility (consumed by test file and other hooks)
-export { computePhaseState, computePlayerGridPosition, REEL2_CLICK_MOMENTS };
 
 const SKIP_AFTER_MS = 2000;
 const DRIFT_TOLERANCE_MS = 500;
@@ -47,11 +41,12 @@ const DRIFT_TOLERANCE_MS = 500;
  */
 export function useSlotMachine(ceremony, { onLeaderPromote, onCeremonyComplete, ceremonyStartPos, players } = {}) {
   const [phaseState, setPhaseState] = useState(IDLE_STATE);
-  const rafRef = useRef(null);
   const onLeaderPromoteRef = useRef(onLeaderPromote);
   const onCeremonyCompleteRef = useRef(onCeremonyComplete);
   const promotedRef = useRef(false);
   const completedRef = useRef(false);
+  const skipOffsetRef = useRef(0);
+  const contextRef = useRef(null);
 
   const playersRef = useRef(players);
   useEffect(() => { playersRef.current = players; }, [players]);
@@ -63,16 +58,13 @@ export function useSlotMachine(ceremony, { onLeaderPromote, onCeremonyComplete, 
   useEffect(() => {
     promotedRef.current = false;
     completedRef.current = false;
+    skipOffsetRef.current = 0;
   }, [ceremony?.ceremonyId]);
 
-
+  // Precompute context once per ceremony (stable across ticks).
   useEffect(() => {
-    if (!ceremony) {
-      setPhaseState(IDLE_STATE);
-      return;
-    }
+    if (!ceremony) { contextRef.current = null; return; }
 
-    // Detect per-client reduced-motion.
     const reducedMotion = typeof window !== 'undefined'
       && typeof window.matchMedia === 'function'
       && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -81,97 +73,18 @@ export function useSlotMachine(ceremony, { onLeaderPromote, onCeremonyComplete, 
       wasCompressed: !!ceremony.wasCompressed,
       reducedMotion,
     });
-    const totalDuration = totalDurationFor(table);
 
-    // Clock-drift correction.
-    const observedAt = Date.now();
-    const clientElapsedAtObservation = observedAt - (ceremony.startedAt || observedAt);
-
-    // Too late to play the ceremony — jump to done.
-    if (clientElapsedAtObservation > totalDuration + DRIFT_TOLERANCE_MS) {
-      setPhaseState({ ...IDLE_STATE, phase: 'done' });
-      if (!completedRef.current) {
-        completedRef.current = true;
-        Promise.resolve().then(() => onCeremonyCompleteRef.current?.());
-      }
-      return;
-    }
-
-    const startingElapsed = Math.max(0, clientElapsedAtObservation);
-    const phaseClockOriginRef = { current: observedAt - startingElapsed };
-
-    // Capture viewport dimensions for position computation
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1440;
     const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900;
 
-    // Pre-compute reel orders (seeded shuffle) for this ceremony.
-    const reelPool = ceremony.wasCompressed
-      ? [ceremony.winnerId]
-      : [...ceremony.candidateIds, ...(ceremony.reelFillerIds || [])];
-    const reelOrdersRaw = ceremony.reelSeeds.map((seed) => buildReelOrder(reelPool, seed));
-
-    let reel0 = reelOrdersRaw[0];
-    let reel1 = reelOrdersRaw[1];
-    let reel2 = reelOrdersRaw[2];
-
-    const nonMatchReelIndex = ceremony.wasCompressed ? null
-      : (ceremony.winnerReelPair
-        ? [0, 1, 2].find(i => !ceremony.winnerReelPair.includes(i))
-        : null);
-
-    if (!ceremony.wasCompressed && ceremony.winnerReelPair) {
-      const midIdx0 = Math.max(1, Math.min(reel0.length - 1, 4));
-      const midIdx1 = Math.max(1, Math.min(reel1.length - 1, 4));
-
-      if (ceremony.winnerReelPair.includes(0)) {
-        reel0 = placeEntryAt(reel0, ceremony.winnerId, midIdx0);
-      } else if (ceremony.nonMatchReelPlayerId) {
-        reel0 = placeEntryAt(reel0, ceremony.nonMatchReelPlayerId, midIdx0);
-      }
-
-      if (ceremony.winnerReelPair.includes(1)) {
-        reel1 = placeEntryAt(reel1, ceremony.winnerId, midIdx1);
-      } else if (ceremony.nonMatchReelPlayerId) {
-        reel1 = placeEntryAt(reel1, ceremony.nonMatchReelPlayerId, midIdx1);
-      }
-    }
-
-    if (!ceremony.wasCompressed) {
-      const finalStopIndex = Math.max(1, Math.min(reel2.length - 1, 6));
-      if (ceremony.winnerId) {
-        reel2 = placeEntryAt(reel2, ceremony.winnerId, finalStopIndex);
-      }
-      if (ceremony.nearMissTargetId) {
-        reel2 = placeEntryAt(reel2, ceremony.nearMissTargetId, Math.max(0, finalStopIndex - 1));
-      }
-    }
-    const reelOrders = [reel0, reel1, reel2];
-    const winnerIndexInReel2 = ceremony.wasCompressed
-      ? 0
-      : reel2.indexOf(ceremony.winnerId);
-    const nearMissIndexInReel2 = ceremony.wasCompressed
-      ? null
-      : (ceremony.nearMissTargetId ? reel2.indexOf(ceremony.nearMissTargetId) : null);
-
-    let reel0LandingIdx = 0;
-    let reel1LandingIdx = 0;
-    if (!ceremony.wasCompressed && ceremony.winnerReelPair) {
-      if (ceremony.winnerReelPair.includes(0)) {
-        reel0LandingIdx = reel0.indexOf(ceremony.winnerId);
-      } else if (ceremony.nonMatchReelPlayerId) {
-        reel0LandingIdx = reel0.indexOf(ceremony.nonMatchReelPlayerId);
-      }
-      if (ceremony.winnerReelPair.includes(1)) {
-        reel1LandingIdx = reel1.indexOf(ceremony.winnerId);
-      } else if (ceremony.nonMatchReelPlayerId) {
-        reel1LandingIdx = reel1.indexOf(ceremony.nonMatchReelPlayerId);
-      }
-    }
+    const {
+      reelOrders, winnerIndexInReel2, nearMissIndexInReel2,
+      reel0LandingIdx, reel1LandingIdx, nonMatchReelIndex,
+    } = precomputeReelOrders(ceremony);
 
     const matchedHoldRow = table.find((r) => r.phase === 'matchedHold');
-    const matchedHoldAbsoluteStart = matchedHoldRow ? matchedHoldRow.startAt : 9900;
 
-    const context = {
+    contextRef.current = {
       ceremony,
       reelOrders,
       table,
@@ -181,77 +94,118 @@ export function useSlotMachine(ceremony, { onLeaderPromote, onCeremonyComplete, 
       reel0LandingIdx,
       reel1LandingIdx,
       nonMatchReelIndex,
-      matchedHoldAbsoluteStart,
+      matchedHoldAbsoluteStart: matchedHoldRow ? matchedHoldRow.startAt : 9900,
       viewportWidth,
       viewportHeight,
       ceremonyStartPos,
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ceremony?.ceremonyId]);
 
-    const tick = () => {
-      const now = Date.now();
-      const elapsed = now - phaseClockOriginRef.current;
+  // Check for stale ceremony — jump to done if too late to play.
+  const staleChecked = useRef(false);
+  useEffect(() => {
+    staleChecked.current = false;
+  }, [ceremony?.ceremonyId]);
 
-      // Fire leader-promote at crownDelivery t=1500ms.
-      if (!promotedRef.current) {
-        const row = currentPhaseRow(table, elapsed);
-        if (row.phase === 'crownDelivery') {
-          const phaseEl = elapsed - row.startAt;
-          if (phaseEl >= 1500) {
-            promotedRef.current = true;
-            try { onLeaderPromoteRef.current?.(); } catch (err) {
-              console.error('[useSlotMachine] leader promote failed', err);
-            }
-          }
-        } else if (row.phase === 'done') {
+  useEffect(() => {
+    if (!ceremony || staleChecked.current) return;
+    staleChecked.current = true;
+
+    const table = phaseTableFor({
+      wasCompressed: !!ceremony.wasCompressed,
+      reducedMotion: typeof window !== 'undefined'
+        && typeof window.matchMedia === 'function'
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    });
+    const totalDuration = totalDurationFor(table);
+    const clientElapsedAtObservation = Date.now() - (ceremony.startedAt || Date.now());
+
+    if (clientElapsedAtObservation > totalDuration + DRIFT_TOLERANCE_MS) {
+      setPhaseState({ ...IDLE_STATE, phase: 'done' });
+      if (!completedRef.current) {
+        completedRef.current = true;
+        Promise.resolve().then(() => onCeremonyCompleteRef.current?.());
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ceremony?.ceremonyId]);
+
+  // The animation tick — called every frame by useAnimationLoop.
+  const ceremonyTick = useCallback((rawElapsed) => {
+    const ctx = contextRef.current;
+    if (!ctx || !ceremony) return;
+
+    const elapsed = rawElapsed + skipOffsetRef.current;
+    const { table } = ctx;
+
+    // Fire leader-promote at crownDelivery t=1500ms.
+    if (!promotedRef.current) {
+      const row = currentPhaseRow(table, elapsed);
+      if (row.phase === 'crownDelivery') {
+        const phaseEl = elapsed - row.startAt;
+        if (phaseEl >= 1500) {
           promotedRef.current = true;
           try { onLeaderPromoteRef.current?.(); } catch (err) {
             console.error('[useSlotMachine] leader promote failed', err);
           }
         }
-      }
-
-      // Inject live players on each tick so crown removal/delivery resolve
-      // positions from the current grid, not the frozen ceremony snapshot.
-      context.players = playersRef.current;
-
-      const nextState = computePhaseState(elapsed, ceremony, context);
-
-      setPhaseState((prev) => (shallowEqual(prev, nextState) ? prev : nextState));
-
-      if (nextState.phase === 'done') {
-        if (rafRef.current) {
-          cancelAnimationFrame(rafRef.current);
-          rafRef.current = null;
-        }
-        if (!completedRef.current) {
-          completedRef.current = true;
-          try { onCeremonyCompleteRef.current?.(); } catch (err) {
-            console.error('[useSlotMachine] ceremony complete callback failed', err);
-          }
+      } else if (row.phase === 'done') {
+        promotedRef.current = true;
+        try { onLeaderPromoteRef.current?.(); } catch (err) {
+          console.error('[useSlotMachine] leader promote failed', err);
         }
       }
-    };
+    }
 
-    const loop = () => {
-      tick();
-      if (rafRef.current !== null) {
-        rafRef.current = requestAnimationFrame(loop);
+    // Inject live players on each tick so crown removal/delivery resolve
+    // positions from the current grid, not the frozen ceremony snapshot.
+    ctx.players = playersRef.current;
+
+    const nextState = computePhaseState(elapsed, ceremony, ctx);
+    setPhaseState((prev) => (shallowEqual(prev, nextState) ? prev : nextState));
+
+    if (nextState.phase === 'done' && !completedRef.current) {
+      completedRef.current = true;
+      try { onCeremonyCompleteRef.current?.(); } catch (err) {
+        console.error('[useSlotMachine] ceremony complete callback failed', err);
       }
-    };
-    rafRef.current = requestAnimationFrame(loop);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ceremony?.ceremonyId]);
 
-    // Skip keybind (Escape) — gated on elapsed > 2000ms.
+  // Idle state when no ceremony.
+  useEffect(() => {
+    if (!ceremony) setPhaseState(IDLE_STATE);
+  }, [ceremony?.ceremonyId]);
+
+  // Drive the ceremony with useAnimationLoop (rAF-based).
+  useAnimationLoop(
+    ceremony ? ceremonyTick : null,
+    ceremony?.startedAt,
+  );
+
+  // Skip keybind (Escape) — gated on elapsed > 2000ms.
+  useEffect(() => {
+    if (!ceremony) return;
+
+    const table = contextRef.current?.table;
+    if (!table) return;
+    const totalDuration = totalDurationFor(table);
+
     const onKeyDown = (e) => {
       if (e.key !== 'Escape') return;
-      const now = Date.now();
-      const elapsed = now - phaseClockOriginRef.current;
+      const rawElapsed = Date.now() - (ceremony.startedAt || Date.now());
+      const elapsed = rawElapsed + skipOffsetRef.current;
       if (elapsed < SKIP_AFTER_MS) return;
+
       const cabinetOutStart = table.find((r) => r.phase === 'cabinetOut')?.startAt ?? 0;
       const doneStart = table.find((r) => r.phase === 'done')?.startAt ?? totalDuration;
+
       if (elapsed >= cabinetOutStart) {
-        phaseClockOriginRef.current = now - (doneStart - 50);
+        skipOffsetRef.current = (doneStart - 50) - rawElapsed;
       } else {
-        phaseClockOriginRef.current = now - cabinetOutStart;
+        skipOffsetRef.current = cabinetOutStart - rawElapsed;
       }
       if (!promotedRef.current) {
         promotedRef.current = true;
@@ -261,19 +215,10 @@ export function useSlotMachine(ceremony, { onLeaderPromote, onCeremonyComplete, 
       }
     };
     window.addEventListener('keydown', onKeyDown);
-
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-    };
+    return () => window.removeEventListener('keydown', onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ceremony?.ceremonyId]);
 
   return phaseState;
 }
 
-// Exported for tests
-export { PHASE_TABLE_STANDARD, PHASE_TABLE_COMPRESSED, PHASE_TABLE_REDUCED };

@@ -12,7 +12,7 @@ import {
   isRichardName,
   FUKNAMES,
   RICHARD_HUNGER_QUOTES,
-  RICHARD_HUNGER_THRESHOLD_MS,
+  shouldRichardSpeakHunger,
 } from '../components/playerList.utils';
 
 const DEV_QUOTES = [
@@ -117,8 +117,13 @@ export function useAmbientEvents({
     if (!richardEntry) return;
     const interval = setInterval(() => {
       if (syncedEvent) return;
-      const age = Date.now() - createdAt;
-      if (age < RICHARD_HUNGER_THRESHOLD_MS) return;
+      const now = Date.now();
+      if (!shouldRichardSpeakHunger({
+        hasRichard: true,
+        roomAgeMs: now - createdAt,
+        now,
+        syncedEvent,
+      })) return;
       if (Math.random() >= 0.4) return;
       const text = RICHARD_HUNGER_QUOTES[Math.floor(Math.random() * RICHARD_HUNGER_QUOTES.length)];
       fireSyncedEvent?.({ type: 'devQuote', name: richardEntry[1].name, text }, 4000);

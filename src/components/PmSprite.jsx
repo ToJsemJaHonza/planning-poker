@@ -133,19 +133,19 @@ const QUOTES = [
   "Let's parking lot that",
 ];
 
-export default function Wizard({
+export default function PmSprite({
   isCasting,
   onCastComplete,
   onQuote,
   externalQuote,
   // Two modes: 'idle' (JS-driven walk) and 'ceremony' (parent-driven position).
   mode = 'idle',
-  crowningPose = null,
-  crowningBubble = '',
+  pmPose = null,
+  pmBubble = '',
   crownState = null,
   crownGlowing = false,
   ceremonyFacing = null,
-  // JS-driven position from useWizardPosition hook (idle mode).
+  // JS-driven position from usePmPosition hook (idle mode).
   // When mode='idle', parent passes { x, y, facingLeft }.
   position = null,
   facingLeft = false,
@@ -220,11 +220,11 @@ export default function Wizard({
   const effectiveThinking = onQuote ? isThinking : showExtQuote;
   const effectiveQuote = onQuote ? quote : (externalQuote || '');
 
-  // Select sprite shadow. Ceremony mode drives pose via `crowningPose`;
+  // Select sprite shadow. Ceremony mode drives pose via `pmPose`;
   // idle mode uses the existing logic unchanged.
   let shadow;
   if (mode === 'ceremony') {
-    if (crowningPose === 'cast') shadow = sc;
+    if (pmPose === 'cast') shadow = sc;
     else shadow = walkFrame ? sw2 : sw1;
   } else {
     shadow = isCasting ? sc : effectiveThinking ? st : walkFrame ? sw2 : sw1;
@@ -244,17 +244,17 @@ export default function Wizard({
           imageRendering: 'pixelated',
           transform: facingLeft ? 'scaleX(-1)' : 'scaleX(1)',
         }}
-        data-cm-wizard-ceremony
+        data-cm-pm-ceremony
       >
         <div style={{ position: 'absolute', inset: 0 }}>
           <div style={{ ...SPRITE_PIXEL_STYLE, boxShadow: shadow }} />
         </div>
-        {crowningBubble && (
+        {pmBubble && (
           <div style={{
             ...styles.crowningBubble,
             // Counteract parent scaleX flip so text reads normally
             transform: `translateX(-50%) ${facingLeft ? 'scaleX(-1)' : 'scaleX(1)'}`,
-          }}>{crowningBubble}</div>
+          }}>{pmBubble}</div>
         )}
         {crownState && !crownPinned && (
           <Crown
@@ -276,10 +276,10 @@ export default function Wizard({
     );
   }
 
-  // --- IDLE MODE (default): JS-driven walk via useWizardPosition ----------
+  // --- IDLE MODE (default): JS-driven walk via usePmPosition ----------
   // Position is controlled by the parent via the `position` and `facingLeft`
-  // props from the useWizardPosition hook. No CSS keyframes involved.
-  // The wizard is positioned with `position: fixed` and `transform: translate`
+  // props from the usePmPosition hook. No CSS keyframes involved.
+  // The PM sprite is positioned with `position: fixed` and `transform: translate`
   // for GPU-composited movement.
   const idleFacingLeft = facingLeft;
   return (
@@ -294,7 +294,7 @@ export default function Wizard({
         imageRendering: 'pixelated',
         willChange: 'transform',
       }}
-      data-wizard-idle
+      data-pm-idle
     >
       <div style={{
         ...styles.idleInner,
@@ -329,7 +329,7 @@ const styles = {
   // Idle bubble: positioned above the sprite. The parent container uses
   // JS-driven positioning (not CSS keyframes), so the bubble flipping is
   // handled inline via the `facingLeft` prop instead of the old
-  // wizard-bubble-unflip CSS animation.
+  // pm-bubble-unflip CSS animation.
   idleBubble: {
     position: 'absolute',
     bottom: SPRITE_H + 10,
@@ -361,7 +361,7 @@ const styles = {
     color: '#2a2a3a',
     boxShadow: '2px 2px 0 #b8922e',
     // nowrap prevents the vertical-text bug: the bubble is positioned inside
-    // a 50px-wide wizard sprite container, and break-word + normal white-space
+    // a 50px-wide PM sprite container, and break-word + normal white-space
     // caused the browser to wrap after every character. Ceremony phrases are
     // short (<30 chars) and never need wrapping.
     whiteSpace: 'nowrap',

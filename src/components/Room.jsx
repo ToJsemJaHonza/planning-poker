@@ -3,7 +3,7 @@ import { useRoom } from '../hooks/useRoom';
 import { useRoomStartCrowning } from '../hooks/useRoomStartCrowning';
 import { useSlotMachine } from '../hooks/useSlotMachine';
 import { useCrownOwnership } from '../hooks/useCrownOwnership';
-import { useWizardPosition } from '../hooks/useWizardPosition';
+import { usePmPosition } from '../hooks/usePmPosition';
 import {
   isValidCeremonyPayload,
   isStalePayload,
@@ -11,7 +11,7 @@ import {
 import CardPicker, { SplitCardPicker } from './CardPicker';
 import PlayerList from './PlayerList';
 import ResultModal from './ResultModal';
-import Wizard from './Wizard';
+import PmSprite from './PmSprite';
 import RevealBackground from './RevealBackground';
 import Chicken from './Chicken';
 import Sheep from './Sheep';
@@ -37,14 +37,14 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
     toggleSplit, revealCards, newRound, updateTask,
   } = useRoom(roomCode, playerId, playerName, role);
 
-  // --- Unified wizard positioning (JS-driven) ---
-  // The useWizardPosition hook owns the wizard's canonical position.
+  // --- Unified PM positioning (JS-driven) ---
+  // The usePmPosition hook owns the PM's canonical position.
   // During idle mode it runs a rAF ping-pong walk. When a ceremony starts,
   // it freezes the current position and returns it as `startPos` for the
   // ceremony to use. No more getBoundingClientRect needed.
   const ceremonyActive = !!(pmRoulette || roomStartCrowning);
-  const wizardPos = useWizardPosition({ ceremonyActive });
-  const ceremonyStartPos = wizardPos.startPos;
+  const pmPos = usePmPosition({ ceremonyActive });
+  const ceremonyStartPos = pmPos.startPos;
 
   // --- Room-start mini-ceremony ---
   const roomStartState = useRoomStartCrowning({
@@ -186,15 +186,15 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
   return (
     <div style={{ ...styles.container, paddingBottom, transition: 'padding-bottom 0.3s ease' }}>
       {/* Idle PM sprite — hidden during ceremonies. Position driven by
-          useWizardPosition hook (JS-driven, no CSS keyframes). */}
+          usePmPosition hook (JS-driven, no CSS keyframes). */}
       {!ceremonyActive && (
-        <Wizard
+        <PmSprite
           isCasting={false}
           onCastComplete={() => {}}
           onQuote={canControl ? setPmQuote : null}
           externalQuote={!canControl ? pmQuote : null}
-          position={{ x: wizardPos.x, y: wizardPos.y }}
-          facingLeft={wizardPos.facingLeft}
+          position={{ x: pmPos.x, y: pmPos.y }}
+          facingLeft={pmPos.facingLeft}
         />
       )}
 
@@ -241,19 +241,19 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
       {phase === 'revealed' && <RevealBackground players={players} splitMode={splitMode} />}
 
       {/* Room-start crown delivery mini-ceremony */}
-      {roomStartState.active && roomStartState.wizardPosition && (
+      {roomStartState.active && roomStartState.pmPosition && (
         <div
           style={{
             position: 'fixed', left: 0, top: 0,
             width: 60, height: 70,
-            transform: `translate(${roomStartState.wizardPosition.x - 30}px, ${roomStartState.wizardPosition.y - 35}px)`,
+            transform: `translate(${roomStartState.pmPosition.x - 30}px, ${roomStartState.pmPosition.y - 35}px)`,
             zIndex: 55, pointerEvents: 'none', willChange: 'transform',
           }}
-          data-room-start-wizard
+          data-room-start-pm
         >
-          <Wizard
+          <PmSprite
             mode="ceremony"
-            crowningPose={roomStartState.wizardPose}
+            pmPose={roomStartState.pmPose}
             crownState={
               crownOwnership.location === 'arcing-to-player'
                 ? { mode: 'arcing', progress: crownOwnership.progress }

@@ -1,5 +1,5 @@
 import SlotMachine from './SlotMachine';
-import Wizard from './Wizard';
+import PmSprite from './PmSprite';
 
 /**
  * SlotMachineStage -- the root overlay for the PM crowning ceremony.
@@ -23,30 +23,30 @@ export default function SlotMachineStage({
   const showCabinet = phaseState.cabinetTransform !== 'gone'
     && phaseState.cabinetTransform !== 'offscreen';
 
-  // === Ceremony Wizard (Acts 1 and 3) ======================================
-  const showCeremonyWizard = phaseState.wizardMode === 'ceremony';
-  const wizardPos = phaseState.wizardCeremonyPosition;
-  const wizardPose = phaseState.wizardCeremonyPose || 'walk1';
-  const wizardBubble = phaseState.wizardCeremonyBubble;
-  const wizardFacing = phaseState.wizardCeremonyFacing;
+  // === Ceremony PM (Acts 1 and 3) ======================================
+  const showCeremonyPm = phaseState.pmMode === 'ceremony';
+  const pmPos = phaseState.pmCeremonyPosition;
+  const pmPose = phaseState.pmCeremonyPose || 'walk1';
+  const pmBubble = phaseState.pmCeremonyBubble;
+  const pmFacing = phaseState.pmCeremonyFacing;
 
   // Crown rendering driven by centralized crownOwnership.
-  // The Wizard shows a crown when the ownership location is one of the
-  // wizard-controlled states (wizard-hand, lifting, arcing-to-player, materializing).
-  const wizardCrownLocations = new Set(['wizard-hand', 'lifting', 'arcing-to-player', 'materializing']);
-  const showCrownInHand = showCeremonyWizard && wizardCrownLocations.has(crownOwnership.location);
+  // The PM shows a crown when the ownership location is one of the
+  // pm-controlled states (pm-hand, lifting, arcing-to-player, materializing).
+  const pmCrownLocations = new Set(['pm-hand', 'lifting', 'arcing-to-player', 'materializing']);
+  const showCrownInHand = showCeremonyPm && pmCrownLocations.has(crownOwnership.location);
 
-  // Map crownOwnership location to Wizard.jsx crownState prop format
-  let wizardCrownState = null;
+  // Map crownOwnership location to PmSprite.jsx crownState prop format
+  let pmCrownState = null;
   if (showCrownInHand) {
     if (crownOwnership.location === 'lifting') {
-      wizardCrownState = { mode: 'lifting', progress: crownOwnership.progress };
-    } else if (crownOwnership.location === 'wizard-hand') {
-      wizardCrownState = { mode: 'inHand', progress: 1 };
+      pmCrownState = { mode: 'lifting', progress: crownOwnership.progress };
+    } else if (crownOwnership.location === 'pm-hand') {
+      pmCrownState = { mode: 'inHand', progress: 1 };
     } else if (crownOwnership.location === 'arcing-to-player') {
-      wizardCrownState = { mode: 'arcing', progress: crownOwnership.progress };
+      pmCrownState = { mode: 'arcing', progress: crownOwnership.progress };
     } else if (crownOwnership.location === 'materializing') {
-      wizardCrownState = { mode: 'materializing', progress: crownOwnership.progress };
+      pmCrownState = { mode: 'materializing', progress: crownOwnership.progress };
     }
   }
   const crownGlowing = crownOwnership.glowing;
@@ -102,14 +102,14 @@ export default function SlotMachineStage({
         </>
       )}
 
-      {/* Ceremony Wizard (Acts 1+3 and cabinetOut overlap) */}
-      {showCeremonyWizard && wizardPos && (
+      {/* Ceremony PM (Acts 1+3 and cabinetOut overlap) */}
+      {showCeremonyPm && pmPos && (
         <div
           style={{
             position: 'absolute',
             left: 0,
             top: 0,
-            // Explicit dimensions matching the Wizard sprite (12*5=60 x 14*5=70)
+            // Explicit dimensions matching the PM sprite (12*5=60 x 14*5=70)
             // so the speech bubble can position relative to a real-sized container.
             // Without these, the container is 0x0 and wordBreak:break-word wraps
             // every character onto its own line (vertical text bug).
@@ -117,7 +117,7 @@ export default function SlotMachineStage({
             height: 70,
             // GPU-composited transform instead of left/top for smoother animation.
             // The -50% offsets center the sprite on the computed position.
-            transform: `translate(${wizardPos.x - 30}px, ${wizardPos.y - 35}px)`,
+            transform: `translate(${pmPos.x - 30}px, ${pmPos.y - 35}px)`,
             zIndex: 213,
             pointerEvents: 'none',
             willChange: 'transform',
@@ -126,15 +126,15 @@ export default function SlotMachineStage({
             // interpolates instead of jumping.
             transition: 'transform 50ms linear',
           }}
-          data-cm-wizard-ceremony
+          data-cm-pm-ceremony
         >
-          <Wizard
+          <PmSprite
             mode="ceremony"
-            crowningPose={wizardPose}
-            crowningBubble={wizardBubble?.text || ''}
-            crownState={wizardCrownState}
+            pmPose={pmPose}
+            pmBubble={pmBubble?.text || ''}
+            crownState={pmCrownState}
             crownGlowing={crownGlowing}
-            ceremonyFacing={wizardFacing}
+            ceremonyFacing={pmFacing}
           />
         </div>
       )}

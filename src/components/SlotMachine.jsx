@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import SlotReel from './SlotReel';
-import { buildReelOrder, placeEntryAt } from '../events/slotMachine';
+import { precomputeReelOrders } from '../events/slotMachine';
 import { pixel } from './room/styles';
 
 /**
@@ -47,44 +47,11 @@ const MARQUEE_TEXTS = {
 export default function SlotMachine({ phaseState, ceremony, players }) {
   // Build the 3 reel orders once per ceremony ID. Uses winnerReelPair
   // to place winner or nonMatch in reels 0/1, winner/near-miss in reel 2.
-  const reelOrders = useMemo(() => {
-    if (!ceremony) return [[], [], []];
-    const pool = ceremony.wasCompressed
-      ? [ceremony.winnerId]
-      : [...ceremony.candidateIds, ...(ceremony.reelFillerIds || [])];
-    const raw = (ceremony.reelSeeds || [0, 0, 0]).map((seed) => buildReelOrder(pool, seed));
-    if (ceremony.wasCompressed) return raw;
-
-    // Place winner or nonMatch in reels 0 and 1 based on winnerReelPair
-    let reel0 = raw[0];
-    let reel1 = raw[1];
-    if (ceremony.winnerReelPair) {
-      const midIdx0 = Math.max(1, Math.min(reel0.length - 1, 4));
-      const midIdx1 = Math.max(1, Math.min(reel1.length - 1, 4));
-      if (ceremony.winnerReelPair.includes(0)) {
-        reel0 = placeEntryAt(reel0, ceremony.winnerId, midIdx0);
-      } else if (ceremony.nonMatchReelPlayerId) {
-        reel0 = placeEntryAt(reel0, ceremony.nonMatchReelPlayerId, midIdx0);
-      }
-      if (ceremony.winnerReelPair.includes(1)) {
-        reel1 = placeEntryAt(reel1, ceremony.winnerId, midIdx1);
-      } else if (ceremony.nonMatchReelPlayerId) {
-        reel1 = placeEntryAt(reel1, ceremony.nonMatchReelPlayerId, midIdx1);
-      }
-    }
-
-    // Pin winner/near-miss in rightmost reel (reel index 2). Always winnerId.
-    let reel2 = raw[2];
-    const finalStopIndex = Math.max(1, Math.min(reel2.length - 1, 6));
-    if (ceremony.winnerId) {
-      reel2 = placeEntryAt(reel2, ceremony.winnerId, finalStopIndex);
-    }
-    if (ceremony.nearMissTargetId) {
-      reel2 = placeEntryAt(reel2, ceremony.nearMissTargetId, Math.max(0, finalStopIndex - 1));
-    }
-    return [reel0, reel1, reel2];
+  const { reelOrders } = useMemo(
+    () => precomputeReelOrders(ceremony),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ceremony?.ceremonyId]);
+    [ceremony?.ceremonyId],
+  );
 
   // Select marquee text based on ceremony phase
   const marqueeText = useMemo(() => {
