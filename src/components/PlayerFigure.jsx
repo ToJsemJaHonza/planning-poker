@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import Crown from './Crown';
+import { spriteToBoxShadow, PX, SPRITE_PIXEL_STYLE } from '../engine/sprite';
 
 const _ = null;
 const O = '#222';     // eyes
@@ -315,22 +316,10 @@ function generateSprite(name, poseOverride = null) {
   return grid;
 }
 
-const PX = 5;
 const COLS = 12;
 const ROWS = 14;
 const SPRITE_W = COLS * PX;
 const SPRITE_H = ROWS * PX;
-
-function spriteToBoxShadow(grid, px) {
-  const shadows = [];
-  for (let y = 0; y < grid.length; y++) {
-    for (let x = 0; x < grid[y].length; x++) {
-      const c = grid[y][x];
-      if (c) shadows.push(`${x * px}px ${y * px}px 0 ${Math.ceil(px / 2)}px ${c}`);
-    }
-  }
-  return shadows.join(',');
-}
 
 // Subtle two-frame walk cycle matching the PM (Wizard) style: only the
 // bottom three rows (pants hem + legs + shoes) change between frames.
@@ -409,16 +398,7 @@ export default function PlayerFigure({ name, holdingCard, fukEyes, walkFrame = n
 
   return (
     <div style={{ width: SPRITE_W, height: SPRITE_H, position: 'relative' }}>
-      <div style={{
-        width: 1, height: 1,
-        boxShadow: shadow,
-        position: 'absolute',
-        top: 0, left: 0,
-      }} />
-      {/* iter 2: Crown sprite on player-leader's head. Positioned at the
-          design doc v2 §2 head anchor offset. Crown is a child of the figure
-          wrapper so it bobs/walks with the figure. Z-index 1 = below voting
-          card (z-index 2). */}
+      <div style={{ ...SPRITE_PIXEL_STYLE, boxShadow: shadow }} />
       {showCrown && <Crown anchorMode="head" />}
     </div>
   );

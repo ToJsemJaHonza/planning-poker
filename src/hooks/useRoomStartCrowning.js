@@ -19,9 +19,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { db, ref, set, get, runTransaction } from '../firebase';
 import { computePlayerGridPosition } from './useSlotMachine';
+import { easeInOutCubic, CEREMONY_WALK_FRAME_MS } from '../engine/animation';
 
 const TICK_MS = 16;
-const CEREMONY_WALK_FRAME_MS = 400;
 
 // Slowed to ~3.5s so each phase is visually appreciable (was 1.7s — too fast
 // to distinguish walk-in, cast, crown-place, walk-out as separate steps).
@@ -172,18 +172,20 @@ export function useRoomStartCrowning({
       let wizardPosition = null;
       let wizardPose = 'walk1';
       if (row.phase === 'wizardEntry') {
-        const p = Math.min(1, elapsed / 1200); // 1200ms entry walk (was 500)
-        const x = startPos.x + (targetPos.x - startPos.x) * p;
-        const y = startPos.y + (targetPos.y - startPos.y) * p;
+        const p = Math.min(1, elapsed / 1200);
+        const t = easeInOutCubic(p);
+        const x = startPos.x + (targetPos.x - startPos.x) * t;
+        const y = startPos.y + (targetPos.y - startPos.y) * t;
         wizardPosition = { x, y };
         wizardPose = Math.floor(elapsed / CEREMONY_WALK_FRAME_MS) % 2 === 0 ? 'walk1' : 'walk2';
       } else if (row.phase === 'castAndMaterialize' || row.phase === 'crownPlace') {
         wizardPosition = targetPos;
         wizardPose = 'cast';
       } else if (row.phase === 'wizardExit') {
-        const p = Math.min(1, (elapsed - 2500) / 1000); // starts at 2500ms, 1000ms exit walk (was 1250/450)
-        const x = targetPos.x + (startPos.x - targetPos.x) * p;
-        const y = targetPos.y + (startPos.y - targetPos.y) * p;
+        const p = Math.min(1, (elapsed - 2500) / 1000);
+        const t = easeInOutCubic(p);
+        const x = targetPos.x + (startPos.x - targetPos.x) * t;
+        const y = targetPos.y + (startPos.y - targetPos.y) * t;
         wizardPosition = { x, y };
         wizardPose = Math.floor(elapsed / CEREMONY_WALK_FRAME_MS) % 2 === 0 ? 'walk1' : 'walk2';
       }

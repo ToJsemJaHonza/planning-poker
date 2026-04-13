@@ -35,14 +35,14 @@ import {
   FAREWELL_PHRASES,
   CROWNING_BUBBLES,
 } from '../events/slotMachine';
+import { easeInOutCubic, CEREMONY_WALK_FRAME_MS } from '../engine/animation';
+import { shallowEqual } from '../engine/shallowEqual';
 
 const TICK_MS = 16;
 const SKIP_AFTER_MS = 2000;
 const DRIFT_TOLERANCE_MS = 500;
-const CEREMONY_WALK_FRAME_MS = 400;
 
 // Cumulative offsets for the 6 slowdown click moments on reel 2.
-// v4: starts at REEL2_SLOWDOWN_START (5650ms), shifted +1250ms from v3.
 export const REEL2_CLICK_MOMENTS = (() => {
   const out = [];
   let t = REEL2_SLOWDOWN_START;
@@ -52,51 +52,6 @@ export const REEL2_CLICK_MOMENTS = (() => {
   }
   return out;
 })();
-
-// ---------------------------------------------------------------------------
-// Shallow equality (hand-rolled; avoids JSON.stringify for 60fps path)
-// ---------------------------------------------------------------------------
-
-function shallowEqual(a, b) {
-  if (a === b) return true;
-  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
-  const ak = Object.keys(a);
-  const bk = Object.keys(b);
-  if (ak.length !== bk.length) return false;
-  for (let i = 0; i < ak.length; i++) {
-    const k = ak[i];
-    if (!(k in b)) return false;
-    const av = a[k];
-    const bv = b[k];
-    if (av === bv) continue;
-    // One level deep for arrays/objects we use (reelStates, positions).
-    if (Array.isArray(av) && Array.isArray(bv)) {
-      if (av.length !== bv.length) return false;
-      for (let j = 0; j < av.length; j++) {
-        if (!shallowEqualChild(av[j], bv[j])) return false;
-      }
-      continue;
-    }
-    if (typeof av === 'object' && typeof bv === 'object' && av && bv) {
-      if (!shallowEqualChild(av, bv)) return false;
-      continue;
-    }
-    return false;
-  }
-  return true;
-}
-
-function shallowEqualChild(a, b) {
-  if (a === b) return true;
-  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
-  const ak = Object.keys(a);
-  const bk = Object.keys(b);
-  if (ak.length !== bk.length) return false;
-  for (const k of ak) {
-    if (a[k] !== b[k]) return false;
-  }
-  return true;
-}
 
 // ---------------------------------------------------------------------------
 // Vertical walk path computation (tech design v4 §3.3)
@@ -115,14 +70,11 @@ function shallowEqualChild(a, b) {
  * @returns {{ x: number, y: number }}
  */
 export function computeWizardWalkPosition(progress, startX, startY, targetX, targetY) {
-  // Simple linear interpolation on both axes simultaneously.
-  // The old BLEND approach (vertical-first 70%, then horizontal 30%) had a
-  // discontinuity at the 70% boundary where Y jumped from 100% back to 70%
-  // of travel — causing visible teleporting. Same bug was fixed in
-  // useRoomStartCrowning; this is the slot-machine ceremony equivalent.
+  // Eased interpolation on both axes simultaneously for smooth movement.
   const p = Math.max(0, Math.min(1, progress));
-  const x = startX + (targetX - startX) * p;
-  const y = startY + (targetY - startY) * p;
+  const t = easeInOutCubic(p);
+  const x = startX + (targetX - startX) * t;
+  const y = startY + (targetY - startY) * t;
   return { x, y };
 }
 

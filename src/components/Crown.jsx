@@ -1,18 +1,5 @@
 import { useMemo } from 'react';
-
-/**
- * Pixel-art crown sprite — iter 2: 6 columns x 5 rows grid (30 x 25 px
- * rendered at PX=5). 3-point silhouette (center tall, two flanking short).
- *
- * Anchor modes: 'head' | 'hand' | 'reel' | 'materializing'
- *   - head: positioned above a PlayerFigure at design doc v2 §2 offsets
- *   - hand: positioned at Wizard's CAST pose hand pixel
- *   - reel: floats inside a reel slot (winner emphasis)
- *   - materializing: same as hand but with fade-in animation class
- *
- * Colors from design doc v2 §2: gold-bright top teeth, gold-primary body,
- * gold-shadow jewel band, near-miss red jewels, cabinet-outline base.
- */
+import { spriteToBoxShadow, PX, SPRITE_PIXEL_STYLE } from '../engine/sprite';
 
 const _ = null;
 const BRIGHT = '#f5c542';  // --cm-gold-bright
@@ -37,22 +24,10 @@ const GRID = [
   [OUTLINE, OUTLINE, OUTLINE,  OUTLINE, OUTLINE, _],
 ];
 
-const PX = 5;
 const COLS = 6;
 const ROWS = 5;
 const CROWN_W = COLS * PX; // 30
 const CROWN_H = ROWS * PX; // 25
-
-function spriteToBoxShadow(grid, px) {
-  const shadows = [];
-  for (let y = 0; y < grid.length; y++) {
-    for (let x = 0; x < grid[y].length; x++) {
-      const c = grid[y][x];
-      if (c) shadows.push(`${x * px}px ${y * px}px 0 ${Math.ceil(px / 2)}px ${c}`);
-    }
-  }
-  return shadows.join(',');
-}
 
 // Anchor offset constants from design doc v2 §2
 const ANCHOR_OFFSETS = {
@@ -97,16 +72,7 @@ export default function Crown({
       data-cm-crown
       data-cm-crown-anchor={anchorMode}
     >
-      <div
-        style={{
-          width: 1,
-          height: 1,
-          boxShadow: shadow,
-          position: 'absolute',
-          top: 0,
-          left: 0,
-        }}
-      />
+      <div style={{ ...SPRITE_PIXEL_STYLE, boxShadow: shadow }} />
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Crown from './Crown';
+import { spriteToBoxShadow, PX, SPRITE_PIXEL_STYLE } from '../engine/sprite';
+import { WALK_FRAME_MS } from '../engine/animation';
 
 const _ = null;
 const O = '#222';     // outline
@@ -77,22 +79,10 @@ const THINK = [
   [_,_,K,K,_,_,K,K,_,_],
 ];
 
-const PX = 5;
 const COLS = 10;
 const ROWS = 14;
 const SPRITE_W = COLS * PX;
 const SPRITE_H = ROWS * PX;
-
-function spriteToBoxShadow(grid, px) {
-  const shadows = [];
-  for (let y = 0; y < grid.length; y++) {
-    for (let x = 0; x < grid[y].length; x++) {
-      const c = grid[y][x];
-      if (c) shadows.push(`${x * px}px ${y * px}px 0 ${Math.ceil(px / 2)}px ${c}`);
-    }
-  }
-  return shadows.join(',');
-}
 
 const SPARKLE_DIRS = [
   { dx: -18, dy: -25 }, { dx: 8, dy: -30 }, { dx: 25, dy: -15 },
@@ -184,7 +174,7 @@ export default function Wizard({
       setIsThinking(false);
       return;
     }
-    walkRef.current = setInterval(() => setWalkFrame(f => f ^ 1), 500);
+    walkRef.current = setInterval(() => setWalkFrame(f => f ^ 1), WALK_FRAME_MS);
 
     // Only leader runs the thinking/quote loop
     if (!onQuote) return () => clearInterval(walkRef.current);
@@ -256,7 +246,7 @@ export default function Wizard({
         data-cm-wizard-ceremony
       >
         <div style={{ position: 'absolute', inset: 0 }}>
-          <div style={{ width: 1, height: 1, boxShadow: shadow, position: 'absolute', top: 0, left: 0 }} />
+          <div style={{ ...SPRITE_PIXEL_STYLE, boxShadow: shadow }} />
         </div>
         {crowningBubble && (
           <div style={{
@@ -277,7 +267,7 @@ export default function Wizard({
                   ? `translate(0px, ${crownState.progress * -50}px)`
                   : 'none',
               transition: (crownState.mode === 'arcing' || crownState.mode === 'lifting')
-                ? 'transform 250ms steps(5, end)' : 'none',
+                ? 'transform 300ms steps(12, end)' : 'none',
             }}
           />
         )}
@@ -292,7 +282,7 @@ export default function Wizard({
   return (
     <div className="wizard-walk" ref={idleWalkRef}>
       <div style={styles.idleInner}>
-        <div style={{ width: 1, height: 1, boxShadow: shadow, position: 'absolute', top: 0, left: 0 }} />
+        <div style={{ ...SPRITE_PIXEL_STYLE, boxShadow: shadow }} />
         {showSparkles && SPARKLE_DIRS.map((d, i) => (
           <span key={i} style={{
             ...styles.sparkle,
@@ -324,7 +314,6 @@ const styles = {
     position: 'absolute',
     bottom: SPRITE_H + 10,
     left: '50%',
-    transform: 'translateX(-50%)',
     zIndex: 51,
     background: '#fff',
     border: '2px solid #d4a853',
@@ -333,11 +322,11 @@ const styles = {
     fontSize: '0.65rem',
     fontFamily: "'Press Start 2P', monospace",
     color: '#2a2a3a',
-    // nowrap prevents vertical text: the bubble is inside .wizard-walk
-    // which is only 50px wide, so break-word wraps after every character.
     whiteSpace: 'nowrap',
     lineHeight: '1.6',
-    animation: 'float 1.5s ease-in-out infinite',
+    // wizard-bubble-unflip counteracts the parent .wizard-walk scaleX(-1)
+    // so text stays readable when the wizard walks left.
+    animation: 'wizard-bubble-unflip 16s linear infinite, float 1.5s ease-in-out infinite',
     boxShadow: '2px 2px 0 #b8922e',
     textAlign: 'center',
   },

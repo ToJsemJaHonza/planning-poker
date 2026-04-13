@@ -40,6 +40,27 @@ body {
   z-index: 50;
   pointer-events: none;
   image-rendering: pixelated;
+  will-change: left, transform;
+}
+
+/* On small screens the card picker wraps to two rows (~140px tall).
+   Push the wizard above it so it never overlaps tappable cards. */
+@media (max-width: 560px) {
+  .wizard-walk {
+    bottom: 165px;
+  }
+}
+
+/* Counter-animation for the wizard idle speech bubble. The parent
+   .wizard-walk flips via scaleX(-1) at the 50% keyframe mark (walking
+   left). This counter-flip keeps the bubble text readable at all times
+   by applying the inverse transform in sync with the parent. */
+@keyframes wizard-bubble-unflip {
+  0%   { transform: translateX(-50%) scaleX(1); }
+  47%  { transform: translateX(-50%) scaleX(1); }
+  50%  { transform: translateX(-50%) scaleX(-1); }
+  97%  { transform: translateX(-50%) scaleX(-1); }
+  100% { transform: translateX(-50%) scaleX(1); }
 }
 
 /* Sparkle burst from wand */
@@ -77,17 +98,21 @@ body {
   50% { transform: scale(1.2); opacity: 1; }
 }
 
-/* Player walk in/out — slow linear motion with visible step bobbing.
-   The inner <div> (PlayerFigure wrapper) gets a "stepping" sub-animation
-   so you can see them putting one foot in front of the other. */
+/* Player walk in/out — eased motion with subtle acceleration/deceleration
+   so the figure starts and stops naturally rather than snapping. */
 .player-walk-in-left,
-.player-walk-in-right,
-.player-walk-out-left,
-.player-walk-out-right {
-  /* Slower, steadier walk — linear so speed feels mechanical like stepping */
-  animation-timing-function: linear;
+.player-walk-in-right {
+  animation-timing-function: cubic-bezier(0.25, 0.05, 0.25, 1);
   animation-fill-mode: forwards;
   animation-iteration-count: 1;
+  will-change: transform;
+}
+.player-walk-out-left,
+.player-walk-out-right {
+  animation-timing-function: cubic-bezier(0.42, 0, 0.58, 1);
+  animation-fill-mode: forwards;
+  animation-iteration-count: 1;
+  will-change: transform;
 }
 
 .player-walk-in-left {
