@@ -119,6 +119,12 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
   // --- Shame timer: detect holdout, write/clear Firebase ---
   const shame = useShameTimer(shameTimer, playerId);
 
+  // Track the current holdout via ref to avoid race conditions where
+  // shameTimer React state is transiently null between Firebase reads.
+  // Without this, voting FE in split mode can reset the timer because
+  // the re-render sees shameTimer=null and rewrites with a new startedAt.
+  const shameHoldoutRef = useRef(null);
+
   // Stable identity string for player map — triggers when players join/leave/vote
   const playerSnapshot = JSON.stringify(
     Object.entries(players).map(([id, d]) => [id, d.vote, d.voteFe, d.voteBe]).sort()
@@ -127,6 +133,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
   useEffect(() => {
     if (!canControl || phase !== 'voting') {
       if (shameTimer) setShameTimer(null);
+      shameHoldoutRef.current = null;
       return;
     }
     const notVoted = votingPlayers.filter(p =>
@@ -135,7 +142,9 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
     if (notVoted.length === 1 && playerCount > 1) {
       const holdout = notVoted[0];
       const holdoutEntry = Object.entries(players).find(([, d]) => d === holdout);
-      if (holdoutEntry && (!shameTimer || shameTimer.holdoutId !== holdoutEntry[0])) {
+      if (holdoutEntry && shameHoldoutRef.current !== holdoutEntry[0]) {
+        // New holdout (or first detection) — write timer with fresh startedAt
+        shameHoldoutRef.current = holdoutEntry[0];
         setShameTimer({
           holdoutName: holdout.name,
           holdoutId: holdoutEntry[0],
@@ -143,7 +152,11 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
         });
       }
     } else {
-      if (shameTimer) setShameTimer(null);
+      // No holdout (everyone voted or 0-1 players) — clear timer
+      if (shameTimer || shameHoldoutRef.current) {
+        setShameTimer(null);
+        shameHoldoutRef.current = null;
+      }
     }
   // playerSnapshot covers join/leave/vote changes from the players object
   // eslint-disable-next-line react-hooks/exhaustive-deps
