@@ -1,0 +1,89 @@
+/* === Shame Timer animations === */
+
+/* Tremble stages — intensity increases with stage */
+@keyframes shameTremble1 {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-1px); }
+}
+@keyframes shameTremble2 {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-1px); }
+  75% { transform: translateX(1px); }
+}
+@keyframes shameTremble3 {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  50% { transform: translateX(1px); }
+  75% { transform: translateX(-1px); }
+}
+@keyframes shameTrembleMax {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(2px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(3px); }
+}
+.shame-tremble-1 { animation: shameTremble1 300ms steps(2, end) infinite; }
+.shame-tremble-2 { animation: shameTremble2 200ms steps(4, end) infinite; }
+.shame-tremble-3 { animation: shameTremble3 150ms steps(4, end) infinite; }
+.shame-tremble-4 { animation: shameTrembleMax 100ms steps(5, end) infinite; }
+.shame-tremble-5 { animation: shameTrembleMax 80ms steps(5, end) infinite; }
+
+/* Sweat drop fall */
+@keyframes sweatDrop {
+  0%   { transform: translateY(0); opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateY(8px); opacity: 0; }
+}
+
+/* Stress meter pulse */
+@keyframes stressMeterPulse {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(var(--pulse-scale, 1.05)); }
+}
+
+/* Floating shame text */
+@keyframes shameTextFloat {
+  0%   { opacity: 0; transform: scale(0.5) rotate(var(--rot, 0deg)); }
+  15%  { opacity: var(--max-opacity, 0.5); transform: scale(1.1) rotate(var(--rot, 0deg)); }
+  30%  { transform: scale(1) rotate(var(--rot, 0deg)); }
+  100% { opacity: 0; transform: scale(0.8) translateY(-40px) rotate(var(--rot, 0deg)); }
+}
+
+/* Exclamation blink */
+@keyframes exclamationBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Screen shake — applied to content area only, NOT card picker */
+@keyframes screenShake {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-2px, 1px); }
+  30% { transform: translate(2px, -1px); }
+  50% { transform: translate(-1px, 2px); }
+  70% { transform: translate(1px, -2px); }
+  90% { transform: translate(-2px, 0); }
+}
+.screen-shake { animation: screenShake 300ms steps(6, end) infinite; }
+
+/* Vignette fade in */
+@keyframes vignetteIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Relief bounce when holdout finally votes */
+@keyframes shameRelief {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.1); }
+  60%  { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+/* Pixel fire under feet (stage 5) */
+@keyframes pixelFireFlicker {
+  0%   { opacity: 0.9; }
+  50%  { opacity: 1; }
+  100% { opacity: 0.7; }
+}

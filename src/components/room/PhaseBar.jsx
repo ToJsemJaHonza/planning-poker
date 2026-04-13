@@ -5,11 +5,13 @@ export default function PhaseBar({
   splitMode,
   votedCount,
   playerCount,
-  canControl,
+  canControl, allVotedClean = false,
   onToggleSplit,
   onReveal,
   onNewRound,
 }) {
+  const allVoted = phase === 'voting' && votedCount === playerCount && playerCount > 0;
+
   return (
     <div style={styles.phaseBar}>
       <span style={styles.phaseLabel}>
@@ -30,6 +32,7 @@ export default function PhaseBar({
             {splitMode ? '✂ FE/BE' : '✂ Split'}
           </button>
           <button
+            className={allVotedClean ? 'reveal-btn--pulse' : ''}
             onClick={onReveal}
             style={styles.revealBtn}
             disabled={votedCount === 0}
@@ -85,6 +88,7 @@ const styles = {
     cursor: 'pointer',
     fontSize: '0.65rem',
     fontFamily: pixel,
+    boxShadow: '3px 3px 0 #b8922e',
   },
   newRoundBtn: {
     padding: '0.5rem 1rem',

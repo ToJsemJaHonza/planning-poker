@@ -59,6 +59,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
   const [connected, setConnected] = useState(false);
   const [leaderChangedAt, setLeaderChangedAt] = useState(0);
   const [roomStartCrowning, setRoomStartCrowning] = useState(null);
+  const [shameTimer, setShameTimer] = useState(null);
   const [roomDeleted, setRoomDeleted] = useState(false);
   const roomLoadedRef = useRef(false);
   const unsubscribesRef = useRef([]);
@@ -174,6 +175,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
           setPmRoulette(null);
         }
         setRoomStartCrowning(data.roomStartCrowning || null);
+        setShameTimer(data.shameTimer || null);
         roomLoadedRef.current = true;
       } else {
         setPmRoulette(null);
@@ -525,6 +527,11 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode, ceremonyId, ceremonyStartedAt]);
 
+  const setShameTimerFirebase = useCallback((value) => {
+    if (!roomCode) return;
+    safeWrite(set(ref(db, `rooms/${roomCode}/meta/shameTimer`), value));
+  }, [roomCode]);
+
   const triggerOkta = useCallback(() => {
     if (!roomCode) return;
     safeWrite(set(ref(db, `rooms/${roomCode}/meta/oktaEvent`), true));
@@ -547,6 +554,8 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
     resolvePmRoulettePromotion,
     clearPmRoulette,
     roomStartCrowning,
+    shameTimer,
+    setShameTimer: setShameTimerFirebase,
     roomDeleted,
     isLeader,
     connected,

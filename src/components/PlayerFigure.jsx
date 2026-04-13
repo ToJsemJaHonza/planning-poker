@@ -346,9 +346,73 @@ function applyWalkFrame(grid, pc, sk, sc, frame) {
  * pose / walk frame. Exported for tests so we don't have to go through
  * React render + DOM introspection (jsdom strips very long CSS values).
  */
+/** Blend two hex colors by ratio (0 = all c1, 1 = all c2) */
+function blendColor(c1, c2, ratio) {
+  if (!c1 || !c2 || c1 === c2) return c1;
+  // Expand 3-digit hex to 6-digit
+  const expand = (c) => c.length === 4 ? '#' + c[1]+c[1]+c[2]+c[2]+c[3]+c[3] : c;
+  const n1 = parseInt(expand(c1).slice(1), 16);
+  const n2 = parseInt(expand(c2).slice(1), 16);
+  const r = Math.round(((n1 >> 16) & 255) * (1 - ratio) + ((n2 >> 16) & 255) * ratio);
+  const g = Math.round(((n1 >> 8) & 255) * (1 - ratio) + ((n2 >> 8) & 255) * ratio);
+  const b = Math.round((n1 & 255) * (1 - ratio) + (n2 & 255) * ratio);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
+
+/** Apply stress visual modifications to sprite grid */
+function applyStress(grid, stressStage, sk) {
+  if (stressStage <= 0) return;
+  const W = '#fff';
+  const sweat = '#74b9ff';
+
+  // Stage 1+: Sweat drop on right side of head
+  if (stressStage >= 1 && grid[2]) {
+    grid[2][9] = sweat;
+  }
+  // Stage 2+: Second sweat drop on left side + wider eyes
+  if (stressStage >= 2) {
+    if (grid[2]) grid[2][2] = sweat;
+    // Wider eyes: add white around pupils
+    if (grid[3]) {
+      grid[3][3] = W; grid[3][5] = W;
+      grid[3][6] = W; grid[3][8] = W;
+    }
+  }
+  // Stage 3+: Third sweat drop + speed line hints + skin tint
+  if (stressStage >= 3) {
+    if (grid[1]) grid[1][10] = sweat;
+    // Tint skin toward red
+    const tintRatio = stressStage >= 5 ? 0.6 : stressStage >= 4 ? 0.5 : 0.3;
+    for (let row = 3; row <= 5; row++) {
+      if (!grid[row]) continue;
+      for (let col = 0; col < grid[row].length; col++) {
+        if (grid[row][col] === sk) {
+          grid[row][col] = blendColor(sk, '#ff6b6b', tintRatio);
+        }
+      }
+    }
+  }
+  // Stage 5: Panic pose (arms up) + fire pixels at feet
+  if (stressStage >= 5) {
+    const fire1 = '#e74c3c';
+    const fire2 = '#e67e22';
+    const fire3 = '#f1c40f';
+    // Fire under feet
+    if (grid[13]) {
+      grid[13] = [_,_,fire3,fire1,fire2,fire3,fire2,fire1,fire3,fire2,_,_];
+    }
+    // Arms raised (panic) — override rows 7-8
+    if (grid[7] && grid[8]) {
+      const sc = grid[7][2] || grid[7][3] || '#888'; // grab existing shirt color
+      grid[7] = [_,sk,sc,sc,sc,sc,sc,sc,sc,sc,sk,_];
+      grid[8] = [_,sk,_,sc,sc,sc,sc,sc,sc,_,sk,_];
+    }
+  }
+}
+
 export function computePlayerShadow(
   name,
-  { holdingCard = false, fukEyes = false, walkFrame = null, pose = null } = {}
+  { holdingCard = false, fukEyes = false, walkFrame = null, pose = null, stressStage = 0 } = {}
 ) {
   if (fukEyes) {
     const h = hashName(name || 'default');
@@ -387,19 +451,46 @@ export function computePlayerShadow(
     applyWalkFrame(grid, pc, sk, sc, walkFrame);
   }
 
+  // Apply stress effects (sweat, eyes, skin tint, fire, panic)
+  if (stressStage > 0) {
+    const h = hashName(name || 'default');
+    const sk = pick(h, 3, SKIN_TONES);
+    applyStress(grid, stressStage, sk);
+  }
+
   return spriteToBoxShadow(grid, PX);
 }
 
-export default function PlayerFigure({ name, holdingCard, fukEyes, walkFrame = null, pose = null, showCrown = false }) {
+export default function PlayerFigure({ name, holdingCard, fukEyes, walkFrame = null, pose = null, showCrown = false, stressStage = 0 }) {
   const shadow = useMemo(
-    () => computePlayerShadow(name, { holdingCard, fukEyes, walkFrame, pose }),
-    [name, holdingCard, fukEyes, walkFrame, pose]
+    () => computePlayerShadow(name, { holdingCard, fukEyes, walkFrame, pose, stressStage }),
+    [name, holdingCard, fukEyes, walkFrame, pose, stressStage]
   );
+
+  // Exclamation marks above head for stress stages
+  const exclamation = stressStage >= 4 ? '!!!' : stressStage >= 2 ? '!!' : stressStage >= 1 ? '!' : null;
 
   return (
     <div style={{ width: SPRITE_W, height: SPRITE_H, position: 'relative' }}>
       <div style={{ ...SPRITE_PIXEL_STYLE, boxShadow: shadow }} />
       {showCrown && <Crown anchorMode="head" />}
+      {exclamation && (
+        <div style={{
+          position: 'absolute',
+          top: -14,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          color: '#e74c3c',
+          fontSize: stressStage >= 4 ? '0.6rem' : '0.5rem',
+          fontFamily: "'Press Start 2P', monospace",
+          textShadow: stressStage >= 4 ? '0 0 4px #e74c3c' : 'none',
+          animation: stressStage >= 2 ? 'none' : 'exclamationBlink 600ms steps(1, end) infinite',
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+        }}>
+          {exclamation}
+        </div>
+      )}
     </div>
   );
 }

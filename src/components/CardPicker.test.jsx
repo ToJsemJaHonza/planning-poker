@@ -28,8 +28,8 @@ describe('CardPicker — normal mode', () => {
   it('highlights the selected vote', () => {
     render(<CardPicker selectedVote="8" onVote={() => {}} disabled={false} />);
     const btn = screen.getByRole('button', { name: '8' });
-    // Selected cards get a transform set on the style — assert presence
-    expect(btn.getAttribute('style') || '').toMatch(/translate/);
+    // Selected cards get the poker-card--selected CSS class
+    expect(btn.classList.contains('poker-card--selected')).toBe(true);
   });
 
   it('disabled=true prevents onVote from firing', async () => {
@@ -39,6 +39,20 @@ describe('CardPicker — normal mode', () => {
 
     await user.click(screen.getByRole('button', { name: '5' }));
     expect(onVote).not.toHaveBeenCalled();
+  });
+
+  it('all cards carry .poker-card base class', () => {
+    const { container } = render(<CardPicker selectedVote={null} onVote={() => {}} disabled={false} />);
+    const buttons = container.querySelectorAll('button');
+    buttons.forEach((btn) => {
+      expect(btn.classList.contains('poker-card')).toBe(true);
+    });
+  });
+
+  it('unselected card does NOT have --selected modifier', () => {
+    render(<CardPicker selectedVote="8" onVote={() => {}} disabled={false} />);
+    const btn3 = screen.getByRole('button', { name: '3' });
+    expect(btn3.classList.contains('poker-card--selected')).toBe(false);
   });
 });
 
@@ -84,5 +98,29 @@ describe('SplitCardPicker — FE/BE rows', () => {
 
     await user.click(fiveButtons[1]);
     expect(onVoteBe).toHaveBeenCalledWith('5');
+  });
+
+  it('split cards carry both .poker-card and .poker-card--split', () => {
+    const { container } = render(
+      <SplitCardPicker voteFe={null} voteBe={null} onVoteFe={() => {}} onVoteBe={() => {}} disabled={false} />
+    );
+    const buttons = container.querySelectorAll('button');
+    buttons.forEach((btn) => {
+      expect(btn.classList.contains('poker-card')).toBe(true);
+      expect(btn.classList.contains('poker-card--split')).toBe(true);
+    });
+  });
+
+  it('split selected card has all three CSS classes', () => {
+    const { container } = render(
+      <SplitCardPicker voteFe="5" voteBe={null} onVoteFe={() => {}} onVoteBe={() => {}} disabled={false} />
+    );
+    const fiveButtons = Array.from(container.querySelectorAll('button')).filter(
+      (b) => b.textContent === '5'
+    );
+    // First "5" button is in the FE row (selected)
+    expect(fiveButtons[0].classList.contains('poker-card')).toBe(true);
+    expect(fiveButtons[0].classList.contains('poker-card--split')).toBe(true);
+    expect(fiveButtons[0].classList.contains('poker-card--selected')).toBe(true);
   });
 });
