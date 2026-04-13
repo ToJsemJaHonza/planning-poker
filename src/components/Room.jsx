@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRoom } from '../hooks/useRoom';
+import { useShameTimer } from '../hooks/useShameTimer';
 import { useRoomStartCrowning } from '../hooks/useRoomStartCrowning';
 import { useSlotMachine } from '../hooks/useSlotMachine';
 import { useCrownOwnership } from '../hooks/useCrownOwnership';
@@ -15,6 +16,7 @@ import PmSprite from './PmSprite';
 import RevealBackground from './RevealBackground';
 import Chicken from './Chicken';
 import Sheep from './Sheep';
+import ShameOverlay from './shame/ShameOverlay';
 import SlotMachineStage from './SlotMachineStage';
 import RoomHeader from './room/RoomHeader';
 import TaskBar from './room/TaskBar';
@@ -31,7 +33,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
     oktaEvent, triggerOkta,
     syncedEvent, fireSyncedEvent,
     pmRoulette, resolvePmRoulettePromotion, clearPmRoulette,
-    roomStartCrowning, roomDeleted,
+    roomStartCrowning, shameTimer, setShameTimer, roomDeleted,
     isLeader, connected, leaderChangedAt, createdAt,
     castVote, castVoteFe, castVoteBe,
     toggleSplit, revealCards, newRound, updateTask,
@@ -103,6 +105,50 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
     : votingPlayers.filter(p => p.vote != null).length;
   const currentLeaderName = Object.values(players).find((p) => p.isLeader)?.name;
 
+  const allVoted = votedCount === playerCount && playerCount > 0;
+
+  // Celebration only fires when everyone voted with real estimates (no ? or ☕)
+  const NON_ESTIMATE_VOTES = ['?', '☕'];
+  const allVotedClean = allVoted && votingPlayers.every(p => {
+    if (splitMode) {
+      return !NON_ESTIMATE_VOTES.includes(p.voteFe) && !NON_ESTIMATE_VOTES.includes(p.voteBe);
+    }
+    return !NON_ESTIMATE_VOTES.includes(p.vote);
+  });
+
+  // --- Shame timer: detect holdout, write/clear Firebase ---
+  const shame = useShameTimer(shameTimer, playerId);
+
+  // Stable identity string for player map — triggers when players join/leave/vote
+  const playerSnapshot = JSON.stringify(
+    Object.entries(players).map(([id, d]) => [id, d.vote, d.voteFe, d.voteBe]).sort()
+  );
+
+  useEffect(() => {
+    if (!canControl || phase !== 'voting') {
+      if (shameTimer) setShameTimer(null);
+      return;
+    }
+    const notVoted = votingPlayers.filter(p =>
+      splitMode ? (p.voteFe == null || p.voteBe == null) : p.vote == null
+    );
+    if (notVoted.length === 1 && playerCount > 1) {
+      const holdout = notVoted[0];
+      const holdoutEntry = Object.entries(players).find(([, d]) => d === holdout);
+      if (holdoutEntry && (!shameTimer || shameTimer.holdoutId !== holdoutEntry[0])) {
+        setShameTimer({
+          holdoutName: holdout.name,
+          holdoutId: holdoutEntry[0],
+          startedAt: Date.now(),
+        });
+      }
+    } else {
+      if (shameTimer) setShameTimer(null);
+    }
+  // playerSnapshot covers join/leave/vote changes from the players object
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canControl, phase, playerSnapshot, playerCount, splitMode]);
+
   // --- Local UI state ---
   const [showResult, setShowResult] = useState(false);
 
@@ -111,7 +157,8 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
     if (Math.random() < 0.01) {
       fireSyncedEvent({ type: 'chicken' }, 3500);
     }
-    setTimeout(() => setShowResult(true), 300);
+    // Delay increased to let staggered card flip animation finish before modal
+    setTimeout(() => setShowResult(true), 900);
   };
 
   const handleNewRound = () => {
@@ -203,16 +250,28 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
       <PhaseBar
         phase={phase} splitMode={splitMode}
         votedCount={votedCount} playerCount={playerCount}
-        canControl={canControl}
+        canControl={canControl} allVotedClean={allVotedClean}
         onToggleSplit={toggleSplit} onReveal={handleReveal} onNewRound={handleNewRound}
       />
 
-      <PlayerList
-        players={players} phase={phase} currentPlayer={playerId}
-        splitMode={splitMode} syncedEvent={syncedEvent}
-        fireSyncedEvent={fireSyncedEvent} isLeader={isLeader}
-        createdAt={createdAt} pmRoulette={pmRoulette}
-        phaseState={slotMachinePhaseState} crownOwnership={crownOwnership}
+      <div className={shame.isHoldout && shame.stage >= 4 ? 'screen-shake' : ''}>
+        <PlayerList
+          players={players} phase={phase} currentPlayer={playerId}
+          splitMode={splitMode} syncedEvent={syncedEvent}
+          fireSyncedEvent={fireSyncedEvent} isLeader={isLeader}
+          createdAt={createdAt} pmRoulette={pmRoulette}
+          phaseState={slotMachinePhaseState} crownOwnership={crownOwnership}
+          shameTimer={shameTimer} shameStage={shame.stage} shameElapsed={shame.elapsed}
+          allVoted={allVotedClean} /* nod animation only for clean votes */
+        />
+      </div>
+
+      {/* Shame timer overlay — vignette + floating text */}
+      <ShameOverlay
+        stage={shame.stage}
+        holdoutName={shame.holdoutName}
+        isHoldout={shame.isHoldout}
+        elapsed={shame.elapsed}
       />
 
       {/* Card picker — players only */}
@@ -228,7 +287,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
       )}
 
       {/* Leader status bar */}
-      {canControl && <StatusBar phase={phase} votedCount={votedCount} playerCount={playerCount} />}
+      {canControl && <StatusBar phase={phase} votedCount={votedCount} playerCount={playerCount} allVotedClean={allVotedClean} />}
 
       <LeaderBanner leaderChangedAt={leaderChangedAt} isLeader={isLeader} currentLeaderName={currentLeaderName} />
 

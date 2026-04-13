@@ -39,10 +39,13 @@ It's also **completely free and self-hostable** — no vendor lock-in, no per-se
 
 | Feature | Description |
 |---------|-------------|
-| **Real-time voting** | Modified Fibonacci deck (1, 2, 3, 5, 8, 13, 21, ?, ☕). Cards appear above your avatar, hidden until reveal. |
+| **Real-time voting** | Modified Fibonacci deck (3, 5, 8, 13, 21, ?, ☕). Cards appear above your avatar with hover lift effects, hidden until reveal. |
+| **Card flip reveal** | Cards flip with a 3D rotation animation when revealed — staggered per player for dramatic effect. |
 | **Three roles** | **Player** votes. **Player-Leader** votes + controls rounds. **Manager** controls rounds, doesn't vote. |
 | **FE/BE Split mode** | Special round where the team votes separately for frontend and backend effort. |
 | **Results** | Verdict (Perfect match! / Good match / Some spread / Big spread!), average rounded to nearest card, vote histogram. |
+| **Celebration** | When everyone votes with real estimates, the status bar glows, sparkles burst, and the reveal button pulses. |
+| **Shame Timer** | Last voter gets progressively pressured — trembling avatar, sweat drops, stress meter, and floating text escalating over 5 stages. |
 | **Room sharing** | Create a room, get a 6-character code, share the link. `?room=CODE` in the URL for instant join. |
 
 ### Pixel Art & Personality
@@ -140,12 +143,16 @@ See [**ARCHITECTURE.md**](ARCHITECTURE.md) for the full write-up including known
 
 ```
 src/
-├── components/     # UI: Room, PlayerList, PlayerFigure, CardPicker, ResultModal, Wizard, Train, ...
-├── events/         # Entrance animation engine (registry + hook + renderer)
-├── hooks/          # useRoom.js — the only Firebase interface
-├── test/           # Test setup + in-memory Firebase mock
-├── index.css       # Keyframe animations
-└── firebase.js     # Firebase config
+├── components/        # UI: Room, PlayerList, PlayerFigure, CardPicker, ResultModal, ...
+│   ├── player/        # PlayerCard, VotingCards (flip animation), WalkingFigure
+│   ├── room/          # RoomHeader, PhaseBar, StatusBar (celebration), TaskBar
+│   └── shame/         # ShameOverlay, ShameText (floating text), StressMeter
+├── events/            # Entrance animation engine (registry + hook + renderer)
+├── hooks/             # useRoom.js (Firebase), useShameTimer.js, usePmPosition.js, ...
+├── styles/            # CSS modules: base, pm, walk, events, ceremony, shame, responsive
+├── test/              # Test setup + in-memory Firebase mock
+├── index.css          # CSS module aggregation
+└── firebase.js        # Firebase config
 ```
 
 ---

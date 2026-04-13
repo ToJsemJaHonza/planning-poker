@@ -1,6 +1,7 @@
 import PlayerFigure from '../PlayerFigure';
 import WalkingFigure from './WalkingFigure';
 import { SingleCard, SplitCards } from './VotingCards';
+import StressMeter from '../shame/StressMeter';
 import { pixel } from '../room/styles';
 
 /**
@@ -11,7 +12,8 @@ import { pixel } from '../room/styles';
 export default function PlayerCard({
   id, data, currentPlayer, phase, splitMode,
   activeQuote, fukEyes, showCrown, walking,
-  isSyntheticLeader, justArrived,
+  isSyntheticLeader, justArrived, playerIndex = 0,
+  allVoted = false, stressStage = 0, shameElapsed = 0,
   className = '', style = {}, keySuffix = '', testIdOverride,
 }) {
   const displayName = data.name || id;
@@ -22,7 +24,7 @@ export default function PlayerCard({
 
   const figureSlot = walking
     ? <WalkingFigure name={displayName} fukEyes={fukEyes} showCrown={showCrown} />
-    : <PlayerFigure name={displayName} holdingCard={false} fukEyes={fukEyes} showCrown={showCrown} />;
+    : <PlayerFigure name={displayName} holdingCard={false} fukEyes={fukEyes} showCrown={showCrown} stressStage={stressStage} />;
 
   return (
     <div
@@ -35,8 +37,8 @@ export default function PlayerCard({
       {/* Voting cards — only for real players, not synthetic leader */}
       {!isSyntheticLeader && (
         splitMode
-          ? <SplitCards data={data} phase={phase} />
-          : <SingleCard data={data} phase={phase} />
+          ? <SplitCards data={data} phase={phase} playerIndex={playerIndex} />
+          : <SingleCard data={data} phase={phase} playerIndex={playerIndex} />
       )}
 
       <div style={{ position: 'relative' }}>
@@ -51,6 +53,9 @@ export default function PlayerCard({
       >
         {data.isLeader ? '👑 ' : ''}{displayName}
       </div>
+
+      {/* Stress meter for shame holdout */}
+      {stressStage >= 2 && <StressMeter stage={stressStage} elapsed={shameElapsed} />}
     </div>
   );
 }

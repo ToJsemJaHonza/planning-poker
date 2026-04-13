@@ -44,4 +44,19 @@
     animation: none !important;
     transition: none !important;
   }
+
+  /* Card interactions */
+  .poker-card { transition: none !important; }
+  .poker-card:hover { transform: none !important; box-shadow: 3px 3px 0 #b8922e !important; }
+
+  /* Card flip */
+  .card-flip-out, .card-flip-in, .card-flip-bounce { animation: none !important; }
+
+  /* Celebration */
+  .status-bar--celebrate, .reveal-btn--pulse, .player-nod, .celebrate-text-pop { animation: none !important; }
+
+  /* Shame timer */
+  .shame-tremble-1, .shame-tremble-2, .shame-tremble-3,
+  .shame-tremble-4, .shame-tremble-5 { animation: none !important; }
+  .screen-shake { animation: none !important; }
 }

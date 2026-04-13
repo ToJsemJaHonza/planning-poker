@@ -14,12 +14,12 @@ export default function CardPicker({ selectedVote, onVote, disabled, label, acce
         {CARD_VALUES.map((value) => (
           <button
             key={value}
+            className={`poker-card${selectedVote === value ? ' poker-card--selected' : ''}`}
             onClick={() => onVote(value)}
             disabled={disabled}
             style={{
               ...styles.card,
-              ...(selectedVote === value ? { ...styles.selected, border: `3px solid ${accentColor || '#d4a853'}` } : {}),
-              ...(disabled ? styles.disabled : {}),
+              ...(selectedVote === value ? { border: `3px solid ${accentColor || '#d4a853'}` } : {}),
             }}
           >
             {value}
@@ -40,12 +40,12 @@ export function SplitCardPicker({ voteFe, voteBe, onVoteFe, onVoteBe, disabled, 
           {CARD_VALUES.map((value) => (
             <button
               key={value}
+              className={`poker-card poker-card--split${voteFe === value ? ' poker-card--selected' : ''}`}
               onClick={() => onVoteFe(value)}
               disabled={disabled}
               style={{
                 ...styles.splitCard,
-                ...(voteFe === value ? { ...styles.selected, border: '3px solid #3498db' } : {}),
-                ...(disabled ? styles.disabled : {}),
+                ...(voteFe === value ? { border: '3px solid #3498db' } : {}),
               }}
             >
               {value}
@@ -59,12 +59,12 @@ export function SplitCardPicker({ voteFe, voteBe, onVoteFe, onVoteBe, disabled, 
           {CARD_VALUES.map((value) => (
             <button
               key={value}
+              className={`poker-card poker-card--split${voteBe === value ? ' poker-card--selected' : ''}`}
               onClick={() => onVoteBe(value)}
               disabled={disabled}
               style={{
                 ...styles.splitCard,
-                ...(voteBe === value ? { ...styles.selected, border: '3px solid #27ae60' } : {}),
-                ...(disabled ? styles.disabled : {}),
+                ...(voteBe === value ? { border: '3px solid #27ae60' } : {}),
               }}
             >
               {value}
@@ -111,7 +111,6 @@ const styles = {
     borderRadius: '0',
     background: '#f5f0e4',
     cursor: 'pointer',
-    transition: 'all 0.1s ease',
     color: '#2a2a3a',
     boxShadow: '3px 3px 0 #b8922e',
   },
@@ -160,18 +159,7 @@ const styles = {
     borderRadius: '0',
     background: '#f5f0e4',
     cursor: 'pointer',
-    transition: 'all 0.1s ease',
     color: '#2a2a3a',
     boxShadow: '2px 2px 0 #b8922e',
-  },
-  selected: {
-    background: '#d4a853',
-    color: '#2a2a3a',
-    transform: 'translate(2px, 2px)',
-    boxShadow: '1px 1px 0 #b8922e',
-  },
-  disabled: {
-    opacity: 0.5,
-    cursor: 'default',
   },
 };

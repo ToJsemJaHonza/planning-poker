@@ -5,7 +5,7 @@ import { useAmbientEvents } from '../hooks/useAmbientEvents';
 import EntranceStage from '../events/EntranceStage';
 import PlayerCard from './player/PlayerCard';
 
-export default function PlayerList({ players, phase, currentPlayer, splitMode, syncedEvent, fireSyncedEvent, isLeader, createdAt = 0, pmRoulette = null, phaseState = null, crownOwnership = null }) {
+export default function PlayerList({ players, phase, currentPlayer, splitMode, syncedEvent, fireSyncedEvent, isLeader, createdAt = 0, pmRoulette = null, phaseState = null, crownOwnership = null, shameTimer = null, shameStage = 0, shameElapsed = 0, allVoted = false }) {
   const playerEntries = Object.entries(players)
     .filter(([, data]) => data.role !== 'pm')
     .sort((a, b) => a[1].joinedAt - b[1].joinedAt);
@@ -134,10 +134,14 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
         && !opts.keySuffix?.includes('leaving')
       : false;
 
+    // Shame timer: determine if this player is the holdout
+    const playerStressStage = shameTimer && shameTimer.holdoutId === id ? shameStage : 0;
+
     return {
       id, data, currentPlayer, phase, splitMode,
       activeQuote, fukEyes, showCrown,
       justArrived: recentArrivals.has(id),
+      allVoted, stressStage: playerStressStage, shameElapsed: playerStressStage > 0 ? shameElapsed : 0,
       ...opts,
     };
   };
@@ -167,7 +171,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
         }
 
         {/* Active player grid */}
-        {playerEntries.map(([id, data]) => {
+        {playerEntries.map(([id, data], index) => {
           if (hiddenPlayers.has(id)) {
             const displayName = data.name || id;
             return (
@@ -179,16 +183,30 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
                 <PlayerCard {...getPlayerCardProps(id, data, {
                   keySuffix: '__placeholder',
                   testIdOverride: `player-${displayName}-placeholder`,
+                  playerIndex: index,
                 })} />
               </div>
             );
           }
 
           const enterInfo = enteringPlayers[id];
+          const isHoldout = shameTimer && shameTimer.holdoutId === id && shameStage > 0;
+          const trembleClass = isHoldout ? `shame-tremble-${Math.min(shameStage, 5)}` : '';
+          const nodClass = allVoted && !enterInfo ? 'player-nod' : '';
+          const extraClass = [
+            enterInfo ? `player-walk-in-${enterInfo.dir}` : '',
+            trembleClass,
+            nodClass,
+          ].filter(Boolean).join(' ');
+
           return <PlayerCard key={id} {...getPlayerCardProps(id, data, {
-            className: enterInfo ? `player-walk-in-${enterInfo.dir}` : '',
-            style: enterInfo ? { '--enter-duration': `${enterInfo.duration}s` } : {},
+            className: extraClass,
+            style: {
+              ...(enterInfo ? { '--enter-duration': `${enterInfo.duration}s` } : {}),
+              ...(nodClass ? { animationDelay: `${index * 60}ms` } : {}),
+            },
             walking: !!enterInfo,
+            playerIndex: index,
           })} />;
         })}
 

@@ -43,6 +43,14 @@ Every player must see the same thing at the same time. Never use local `Math.ran
 - Richard's train entrance
 - Tomáš DBB pipeline entrance
 - Alan coffee quote
+- Shame timer (last voter pressure) — `meta/shameTimer`
+
+### Client-local effects (no Firebase sync needed):
+- Card picker hover/active CSS states
+- Card reveal flip animation (triggered by synced phase change)
+- "Everyone Voted" celebration (glow, sparkles, nod — triggered by synced vote counts)
+- Shame floating text (holdout-only, private to the last voter's screen)
+- Shame vignette + screen shake (holdout-only)
 
 ### Events that need Firebase sync:
 - Any NEW visual event must follow this pattern
@@ -62,11 +70,42 @@ Every player must see the same thing at the same time. Never use local `Math.ran
 - **Player-Leader**: Player who created the room — can vote AND control voting.
 
 ### Voting Flow
-1. Players select cards from bottom picker (Fibonacci: 1,2,3,5,8,13,21,?,☕)
+1. Players select cards from bottom picker (Fibonacci: 3,5,8,13,21,?,☕) — cards have hover lift + glow effect
 2. Cards appear above player figures (hidden pattern until reveal)
-3. PM/leader clicks "Reveal Cards" → all cards flip face-up
+3. PM/leader clicks "Reveal Cards" → cards flip with 3D rotateY animation (staggered 80ms per player)
 4. Result modal shows verdict (Perfect match / Good match / Some spread / Big spread), average, and vote distribution histogram
 5. "New Round" resets all votes
+
+### Card Interactions
+- **Hover**: Cards lift up (translateY -4px, scale 1.05) with gold glow shadow
+- **Active/Press**: Cards press down (scale 0.98)
+- **Selected**: Gold background, translate(2px, 2px)
+- **Reveal flip**: 3D rotateY animation — 250ms flip-out, content swap, 250ms flip-in, bounce finish
+- **Split mode**: FE card flips first, BE card 100ms later
+- CSS classes: `.poker-card`, `.poker-card--selected`, `.poker-card--split`
+
+### "Everyone Voted!" Celebration
+- Triggers when all players voted with real estimates (NOT ? or ☕)
+- Status bar glow pulse (gold tint, 3 cycles)
+- Sparkle particles (8 gold ✦ stars) burst from status bar
+- Reveal button pulses with expanding shadow ring
+- All player figures do a small nod (translateY -3px, staggered 60ms)
+- Text "✓ Everyone voted!" always shows when count matches (even with ?/☕)
+- Celebration animation is client-local (no Firebase sync needed)
+
+### Last Voter "Shame Timer"
+- Activates when exactly 1 voting player hasn't voted (requires 2+ players)
+- Firebase-synced: leader writes `meta/shameTimer = {holdoutName, holdoutId, startedAt}`
+- 5 progressive stages based on elapsed time:
+  - **Stage 1** (30s): Gentle tremble, 1 sweat drop, blinking ! above head
+  - **Stage 2** (45s): 2 sweat drops, wide eyes, stress meter bar, !!
+  - **Stage 3** (60s): Skin tint toward red, floating text (holdout only), vignette
+  - **Stage 4** (80s): Heavy shake, screen shake (holdout only), !!!
+  - **Stage 5** (100s): Panic pose (arms up), fire under feet, chaotic text
+- **Figure effects** (tremble, sweat, eyes, stress meter, !): visible to ALL players
+- **Screen effects** (floating text, vignette, screen shake): ONLY on holdout's screen
+- Clears instantly when holdout votes, new round, or phase change
+- `prefers-reduced-motion: reduce` disables all shame animations
 
 ### FE/BE Split Mode
 - PM/leader clicks "✂ Split" → "SPECIAL ROUND!" fullscreen animation (synced via Firebase)
