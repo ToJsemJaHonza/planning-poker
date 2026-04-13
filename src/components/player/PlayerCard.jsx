@@ -13,7 +13,7 @@ export default function PlayerCard({
   id, data, currentPlayer, phase, splitMode,
   activeQuote, fukEyes, showCrown, walking,
   isSyntheticLeader, justArrived, playerIndex = 0,
-  allVoted = false, stressStage = 0, shameElapsed = 0,
+  allVoted = false, stressStage = 0, shameStartedAt = 0,
   className = '', style = {}, keySuffix = '', testIdOverride,
 }) {
   const displayName = data.name || id;
@@ -55,7 +55,7 @@ export default function PlayerCard({
       </div>
 
       {/* Stress meter for shame holdout */}
-      {stressStage >= 2 && <StressMeter stage={stressStage} elapsed={shameElapsed} />}
+      {stressStage >= 2 && <StressMeter stage={stressStage} startedAt={shameStartedAt} />}
     </div>
   );
 }

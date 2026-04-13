@@ -61,6 +61,41 @@ describe('useShameTimer', () => {
     expect(result.current.elapsed).toBe(0);
   });
 
+  it('preserves elapsed when shameTimer reference changes but startedAt stays the same', () => {
+    const now = Date.now();
+    const timer1 = { holdoutName: 'Karel', holdoutId: 'p2', startedAt: now - 50000 };
+    const { result, rerender } = renderHook(
+      ({ timer, pid }) => useShameTimer(timer, pid),
+      { initialProps: { timer: timer1, pid: 'p1' } },
+    );
+    expect(result.current.stage).toBe(2); // 50s = stage 2
+
+    // Simulate a new object reference with the SAME startedAt and holdoutId
+    // (this happens when Firebase meta listener fires due to unrelated changes)
+    const timer2 = { holdoutName: 'Karel', holdoutId: 'p2', startedAt: now - 50000 };
+    rerender({ timer: timer2, pid: 'p1' });
+
+    // Stage should remain the same — timer must NOT have reset
+    expect(result.current.stage).toBe(2);
+    expect(result.current.elapsed).toBeGreaterThanOrEqual(49000);
+  });
+
+  it('resets when holdoutId changes (different player becomes holdout)', () => {
+    const now = Date.now();
+    const timer1 = { holdoutName: 'Karel', holdoutId: 'p2', startedAt: now - 60000 };
+    const { result, rerender } = renderHook(
+      ({ timer, pid }) => useShameTimer(timer, pid),
+      { initialProps: { timer: timer1, pid: 'p1' } },
+    );
+    expect(result.current.stage).toBe(3); // 60s = stage 3
+
+    // Different holdout with fresh startedAt
+    const timer2 = { holdoutName: 'Jana', holdoutId: 'p3', startedAt: now };
+    rerender({ timer: timer2, pid: 'p1' });
+    expect(result.current.stage).toBe(0); // fresh timer = stage 0
+    expect(result.current.holdoutName).toBe('Jana');
+  });
+
   it('elapsed increases over time via interval', () => {
     const now = Date.now();
     const timer = { holdoutName: 'Karel', holdoutId: 'p2', startedAt: now };
