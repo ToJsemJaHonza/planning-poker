@@ -16,12 +16,11 @@
  *   crownPlace (1000-1250ms), wizardExit (1250-1700ms), done.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { db, ref, set, get, runTransaction } from '../firebase';
-import { computePlayerGridPosition } from './useSlotMachine';
+import { computePlayerGridPosition } from '../engine/gridPosition';
 import { easeInOutCubic, CEREMONY_WALK_FRAME_MS } from '../engine/animation';
-
-const TICK_MS = 16;
+import { useAnimationLoop } from '../engine/useAnimationLoop';
 
 // Slowed to ~3.5s so each phase is visually appreciable (was 1.7s — too fast
 // to distinguish walk-in, cast, crown-place, walk-out as separate steps).
@@ -80,7 +79,6 @@ export function useRoomStartCrowning({
   ceremonyStartPos,
 }) {
   const [phaseState, setPhaseState] = useState(IDLE_STATE);
-  const intervalRef = useRef(null);
   const firedRef = useRef(false);
   // Walk-in delay: wait 3s after connection so the player figure's walk-in
   // animation finishes before the PM ceremony starts.
@@ -137,89 +135,74 @@ export function useRoomStartCrowning({
     });
   }, [roomCode, playerId, role, connected, isLeader, players, roomStartCrowning, pmRoulette, walkInReady]);
 
-  // Phase machine: animate the mini-ceremony when payload exists
+  // Precompute positions once when payload arrives (stable across ticks)
+  const positionsRef = useRef(null);
   useEffect(() => {
-    if (!roomStartCrowning) {
-      setPhaseState(IDLE_STATE);
-      return;
-    }
-
-    const observedAt = Date.now();
-    const startingElapsed = Math.max(0, observedAt - (roomStartCrowning.startedAt || observedAt));
-
-    // Too late — ceremony already done
-    if (startingElapsed > 3500 + 500) {
-      setPhaseState(IDLE_STATE);
-      // Cleanup stale payload
-      cleanupPayload(roomCode, roomStartCrowning.ceremonyId);
-      return;
-    }
-
-    const phaseClockOriginRef = { current: observedAt - startingElapsed };
-
-    // Compute player grid position with pure math (no DOM query)
+    if (!roomStartCrowning) { positionsRef.current = null; return; }
     const vw = typeof window !== 'undefined' ? window.innerWidth : 1440;
     const vh = typeof window !== 'undefined' ? window.innerHeight : 900;
-    const startPos = ceremonyStartPos || { x: vw / 2, y: vh - 140 };
-    const targetPos = computePlayerGridPosition(0, 1, vw);
-
-    const tick = () => {
-      const now = Date.now();
-      const elapsed = now - phaseClockOriginRef.current;
-      const row = currentPhaseRow(PHASE_TABLE_ROOM_START, elapsed);
-
-      // iter 4: compute vertical walk position
-      let wizardPosition = null;
-      let wizardPose = 'walk1';
-      if (row.phase === 'wizardEntry') {
-        const p = Math.min(1, elapsed / 1200);
-        const t = easeInOutCubic(p);
-        const x = startPos.x + (targetPos.x - startPos.x) * t;
-        const y = startPos.y + (targetPos.y - startPos.y) * t;
-        wizardPosition = { x, y };
-        wizardPose = Math.floor(elapsed / CEREMONY_WALK_FRAME_MS) % 2 === 0 ? 'walk1' : 'walk2';
-      } else if (row.phase === 'castAndMaterialize' || row.phase === 'crownPlace') {
-        wizardPosition = targetPos;
-        wizardPose = 'cast';
-      } else if (row.phase === 'wizardExit') {
-        const p = Math.min(1, (elapsed - 2500) / 1000);
-        const t = easeInOutCubic(p);
-        const x = targetPos.x + (startPos.x - targetPos.x) * t;
-        const y = targetPos.y + (startPos.y - targetPos.y) * t;
-        wizardPosition = { x, y };
-        wizardPose = Math.floor(elapsed / CEREMONY_WALK_FRAME_MS) % 2 === 0 ? 'walk1' : 'walk2';
-      }
-
-      setPhaseState({
-        active: row.phase !== 'done',
-        phase: row.phase,
-        elapsed,
-        winnerId: roomStartCrowning.winnerId,
-        wizardPosition,
-        wizardPose,
-      });
-
-      if (row.phase === 'done') {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-        // Cleanup the Firebase payload
-        cleanupPayload(roomCode, roomStartCrowning.ceremonyId);
-      }
+    positionsRef.current = {
+      start: ceremonyStartPos || { x: vw / 2, y: vh - 140 },
+      target: computePlayerGridPosition(0, 1, vw),
     };
+  }, [roomStartCrowning?.ceremonyId]);
 
-    tick();
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(tick, TICK_MS);
+  // Phase machine tick — computes visual state from elapsed time
+  const ceremonyTick = useCallback((elapsed) => {
+    if (!roomStartCrowning || !positionsRef.current) return;
+    const { start: startPos, target: targetPos } = positionsRef.current;
+    const row = currentPhaseRow(PHASE_TABLE_ROOM_START, elapsed);
 
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
+    let wizardPosition = null;
+    let wizardPose = 'walk1';
+    if (row.phase === 'wizardEntry') {
+      const t = easeInOutCubic(Math.min(1, elapsed / 1200));
+      wizardPosition = {
+        x: startPos.x + (targetPos.x - startPos.x) * t,
+        y: startPos.y + (targetPos.y - startPos.y) * t,
+      };
+      wizardPose = Math.floor(elapsed / CEREMONY_WALK_FRAME_MS) % 2 === 0 ? 'walk1' : 'walk2';
+    } else if (row.phase === 'castAndMaterialize' || row.phase === 'crownPlace') {
+      wizardPosition = targetPos;
+      wizardPose = 'cast';
+    } else if (row.phase === 'wizardExit') {
+      const t = easeInOutCubic(Math.min(1, (elapsed - 2500) / 1000));
+      wizardPosition = {
+        x: targetPos.x + (startPos.x - targetPos.x) * t,
+        y: targetPos.y + (startPos.y - targetPos.y) * t,
+      };
+      wizardPose = Math.floor(elapsed / CEREMONY_WALK_FRAME_MS) % 2 === 0 ? 'walk1' : 'walk2';
+    }
+
+    setPhaseState({
+      active: row.phase !== 'done',
+      phase: row.phase,
+      elapsed,
+      winnerId: roomStartCrowning.winnerId,
+      wizardPosition,
+      wizardPose,
+    });
+
+    if (row.phase === 'done') {
+      cleanupPayload(roomCode, roomStartCrowning.ceremonyId);
+    }
   }, [roomStartCrowning?.ceremonyId, roomCode]);
+
+  // Stale payload check — must run before the animation loop
+  useEffect(() => {
+    if (!roomStartCrowning) { setPhaseState(IDLE_STATE); return; }
+    const startingElapsed = Math.max(0, Date.now() - (roomStartCrowning.startedAt || Date.now()));
+    if (startingElapsed > 3500 + 500) {
+      setPhaseState(IDLE_STATE);
+      cleanupPayload(roomCode, roomStartCrowning.ceremonyId);
+    }
+  }, [roomStartCrowning?.ceremonyId, roomCode]);
+
+  // Drive the ceremony with requestAnimationFrame
+  useAnimationLoop(
+    roomStartCrowning ? ceremonyTick : null,
+    roomStartCrowning?.startedAt,
+  );
 
   // Expose walkInReady so useCrownOwnership can suppress the crown
   // during the 3s walk-in delay (before ceremony fires, isLeader is

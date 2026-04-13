@@ -1,47 +1,9 @@
-import { useRef, useState, useEffect, useMemo } from 'react';
-import {
-  isRichardName,
-  hashDir,
-  FUKNAMES,
-  RICHARD_HUNGER_QUOTES,
-  RICHARD_HUNGER_THRESHOLD_MS,
-} from './playerList.utils';
+import { useRef, useState, useEffect } from 'react';
+import { hashDir } from './playerList.utils';
 import { useEntranceEvents } from '../events/useEntranceEvents';
+import { useAmbientEvents } from '../hooks/useAmbientEvents';
 import EntranceStage from '../events/EntranceStage';
 import PlayerCard from './player/PlayerCard';
-
-const DEV_QUOTES = [
-  "It works on my machine",
-  "It's not a bug, it's a feature",
-  "Have you tried turning it off and on?",
-  "// TODO: fix this later",
-  "99 bugs in the code... fix one... 127 bugs in the code",
-  "There's no place like 127.0.0.1",
-  "I don't always test my code, but when I do, I do it in production",
-  "git commit -m 'fixed stuff'",
-  "Stackoverflow said so",
-  "Works on my machine ¯\\_(ツ)_/¯",
-  "sudo make me a sandwich",
-  "!false — it's funny because it's true",
-  "There are 10 types of people...",
-  "It compiled! Ship it!",
-  "My code doesn't have bugs, it has features",
-  "Sleep is for the weak. We have coffee",
-  "Real programmers count from 0",
-  "The code is self-documenting",
-  "I'll refactor this later...",
-  "Who needs tests anyway?",
-  "Tabs > Spaces. Fight me",
-  "In my defense, it passed CI",
-  "Can't reproduce. Closing ticket",
-  "That's a layer 8 problem",
-  "rm -rf node_modules && npm i",
-  "Hello world!",
-  "null pointer? I barely know her!",
-  "Merge conflict. Again.",
-  "LGTM 👍",
-  "This should be a 2-pointer, right?",
-];
 
 export default function PlayerList({ players, phase, currentPlayer, splitMode, syncedEvent, fireSyncedEvent, isLeader, createdAt = 0, pmRoulette = null, phaseState = null, crownOwnership = null }) {
   const playerEntries = Object.entries(players)
@@ -56,6 +18,12 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
 
   const { activeEntrance, hiddenPlayers, markArrived, recentArrivals } = useEntranceEvents({
     playerEntries, isLeader, syncedEvent, fireSyncedEvent,
+  });
+
+  // Ambient events (fuk eyes, dev quotes, Alan coffee, Richard hunger)
+  // run only on the leader client; all results synced via Firebase.
+  const { fukEyesSet, activeQuote } = useAmbientEvents({
+    playerEntries, phase, isLeader, syncedEvent, fireSyncedEvent, createdAt,
   });
 
   useEffect(() => {
@@ -118,71 +86,6 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
     knownRef.current = currentSet;
   }, [playerEntries.map(([id]) => id).join(',')]);
 
-  // --- Firebase-synced events ---
-
-  const fukEyesSet = useMemo(
-    () => new Set(syncedEvent?.type === 'fukEyes' ? syncedEvent.names : []),
-    [syncedEvent]
-  );
-
-  useEffect(() => {
-    if (!isLeader) return;
-    const fuk = [];
-    playerEntries.forEach(([, data]) => {
-      const displayName = data.name || '';
-      if (FUKNAMES.has(displayName.toLowerCase()) && Math.random() < 0.1) {
-        fuk.push(displayName);
-      }
-    });
-    if (fuk.length > 0) {
-      fireSyncedEvent?.({ type: 'fukEyes', names: fuk }, 60000);
-    }
-  }, [phase, isLeader]);
-
-  useEffect(() => {
-    if (!isLeader || phase !== 'revealed') return;
-    playerEntries.forEach(([, data]) => {
-      const displayName = data.name || '';
-      if (displayName.toLowerCase() === 'alan' && data.vote === '☕' && Math.random() < 0.1) {
-        setTimeout(() => {
-          fireSyncedEvent?.({ type: 'devQuote', name: displayName, text: 'Fullstack FE developer' }, 4000);
-        }, 1500);
-      }
-    });
-  }, [phase, isLeader]);
-
-  const activeQuote = syncedEvent?.type === 'devQuote' ? syncedEvent : null;
-
-  useEffect(() => {
-    if (!isLeader) return;
-    const names = playerEntries.map(([, data]) => data.name).filter(Boolean);
-    if (names.length === 0) return;
-    const interval = setInterval(() => {
-      if (syncedEvent) return;
-      if (Math.random() < 0.02) {
-        const name = names[Math.floor(Math.random() * names.length)];
-        const text = DEV_QUOTES[Math.floor(Math.random() * DEV_QUOTES.length)];
-        fireSyncedEvent?.({ type: 'devQuote', name, text }, 3000);
-      }
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [playerEntries.length, isLeader, syncedEvent]);
-
-  useEffect(() => {
-    if (!isLeader || typeof createdAt !== 'number' || !createdAt) return;
-    const richardEntry = playerEntries.find(([, data]) => isRichardName(data.name));
-    if (!richardEntry) return;
-    const interval = setInterval(() => {
-      if (syncedEvent) return;
-      const age = Date.now() - createdAt;
-      if (age < RICHARD_HUNGER_THRESHOLD_MS) return;
-      if (Math.random() >= 0.4) return;
-      const text = RICHARD_HUNGER_QUOTES[Math.floor(Math.random() * RICHARD_HUNGER_QUOTES.length)];
-      fireSyncedEvent?.({ type: 'devQuote', name: richardEntry[1].name, text }, 4000);
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [isLeader, createdAt, playerEntries.length, syncedEvent]);
-
   // --- Act 1: Outgoing leader figure retention ---
   const outgoingId = pmRoulette?.outgoingLeaderId || null;
   const outgoingData = pmRoulette?.outgoingLeaderLastData || null;
@@ -200,7 +103,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
   const isInCrownRemoval = pmRoulette && crownRemovalElapsed < 5000;
   const leaderWalkOff = crownRemovalElapsed >= 3000;
 
-  // --- Helpers for PlayerCard props ---
+  // --- PlayerCard props factory ---
   const getPlayerCardProps = (id, data, opts = {}) => {
     const displayName = data.name || id;
     const isNonMatchRelief = !opts.isSyntheticLeader
@@ -230,7 +133,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
       <EntranceStage activeEntrance={activeEntrance} onPlayerExit={handlePlayerExit} />
 
       <div style={styles.grid}>
-        {/* Synthetic outgoing leader during Act 1 crown removal */}
+        {/* Synthetic outgoing leader during Act 1 */}
         {outgoingId && outgoingData && outgoingData.role !== 'pm'
           && isInCrownRemoval
           && !playerEntries.some(([id]) => id === outgoingId)
@@ -270,7 +173,7 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
           })} />;
         })}
 
-        {/* Leaving players — frozen last-known figure walks off */}
+        {/* Leaving players */}
         {Object.entries(leavingPlayers).map(([id, { info, data }]) => (
           <PlayerCard key={id + '__leaving'} {...getPlayerCardProps(id, data, {
             className: `player-walk-out-${info.dir}`,

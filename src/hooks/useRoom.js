@@ -298,6 +298,15 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
     })();
   }, [players, roomCode, playerId, pmRoulette]);
 
+  // Reset the firing guard when a ceremony clears so consecutive disconnects
+  // can each trigger their own ceremony. The transaction itself provides
+  // atomic exclusion — firingRef is only a local rendering guard.
+  useEffect(() => {
+    if (!pmRoulette) {
+      firingRef.current = false;
+    }
+  }, [pmRoulette]);
+
   // === Room cleanup: delete from Firebase when all players leave ===========
   //
   // The ceremony trigger effect above early-returns when players is empty

@@ -1,0 +1,77 @@
+/* === Crowning Machine (cm-) — PM handoff slot machine === */
+
+@keyframes cm-cabinet-drop {
+  0%   { transform: translate(-50%, -200vh); }
+  100% { transform: translate(-50%, -50%); }
+}
+@keyframes cm-cabinet-bounce {
+  0%   { transform: translate(-50%, -50%) translateY(0); }
+  50%  { transform: translate(-50%, -50%) translateY(8px); }
+  100% { transform: translate(-50%, -50%) translateY(0); }
+}
+@keyframes cm-cabinet-exit {
+  0%   { transform: translate(-50%, -50%); }
+  100% { transform: translate(-50%, -200vh); }
+}
+@keyframes cm-cabinet-rumble-kf {
+  0%   { transform: translate(-50%, -50%) translateX(0); }
+  25%  { transform: translate(-50%, -50%) translateX(-3px); }
+  50%  { transform: translate(-50%, -50%) translateX(3px); }
+  75%  { transform: translate(-50%, -50%) translateX(-3px); }
+  100% { transform: translate(-50%, -50%) translateX(0); }
+}
+
+.cm-cabinet-drop    { animation: cm-cabinet-drop 300ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+.cm-cabinet-bounce  { animation: cm-cabinet-bounce 100ms steps(2, end) forwards; }
+.cm-cabinet-exit    { animation: cm-cabinet-exit 400ms cubic-bezier(0.4, 0, 0.7, 1) forwards; }
+.cm-cabinet-rumble  { animation: cm-cabinet-rumble-kf 60ms steps(4, end); }
+
+/* Reel streak overlay */
+@keyframes cm-streak-slide {
+  0% { background-position: 0 0; } 100% { background-position: 0 24px; }
+}
+.cm-streak {
+  background-image: repeating-linear-gradient(to bottom, rgba(245,240,228,0.08) 0px, rgba(245,240,228,0.08) 3px, rgba(212,168,83,0.24) 3px, rgba(212,168,83,0.24) 6px);
+  animation: cm-streak-slide 120ms steps(4, end) infinite;
+}
+
+/* Reel click flash */
+@keyframes cm-reel-flare-kf {
+  0% { border-color: #f5c542; } 50% { border-color: #f5c542; } 100% { border-color: #d4a853; }
+}
+.cm-reel-flare { animation: cm-reel-flare-kf 80ms steps(2, end) 1; }
+
+/* Procession announcement text */
+@keyframes cm-procession-text {
+  0%    { opacity: 0; transform: translateX(-50%) scale(0.92); }
+  5.7%  { opacity: 1; transform: translateX(-50%) scale(1.0); }
+  50%   { opacity: 1; transform: translateX(-50%) scale(1.03); }
+  85.7% { opacity: 1; transform: translateX(-50%) scale(1.0); }
+  100%  { opacity: 0; transform: translateX(-50%) scale(1.0); }
+}
+.cm-procession-text { animation: cm-procession-text 3500ms ease-in-out forwards; }
+
+/* Crown bounce flourish */
+@keyframes cm-crown-bounce-kf {
+  0% { transform: translateY(0); } 20% { transform: translateY(-6px); }
+  40% { transform: translateY(0); } 55% { transform: translateY(-4px); }
+  70% { transform: translateY(0); } 85% { transform: translateY(-2px); }
+  100% { transform: translateY(0); }
+}
+.cm-crown-bounce { animation: cm-crown-bounce-kf 300ms steps(6, end) forwards; }
+
+[data-cm-stage] { pointer-events: none; }
+
+/* Crown settle bounce */
+@keyframes cm-crown-settle {
+  0% { transform: translateY(-4px); } 50% { transform: translateY(-4px); } 100% { transform: translateY(0); }
+}
+.cm-crown-settle { animation: cm-crown-settle 100ms steps(2, end) forwards; }
+
+/* Crown materialize fade-in */
+@keyframes cm-crown-materialize-kf {
+  0% { opacity: 0; } 33% { opacity: 0.33; } 66% { opacity: 0.66; } 100% { opacity: 1; }
+}
+.cm-crown-materialize { animation: cm-crown-materialize-kf 150ms steps(3, end) forwards; }
+
+.cm-wizard-courier-salute { /* Driven by component pose prop */ }

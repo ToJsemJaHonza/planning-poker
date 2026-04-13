@@ -1,0 +1,55 @@
+/* === Global reset and defaults === */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #e8dcc8;
+  font-family: 'Press Start 2P', monospace;
+  color: #2a2a3a;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* === Global pixel defaults === */
+button, input, textarea, select {
+  border-radius: 0;
+}
+
+/* === Disabled buttons === */
+button:disabled,
+button[disabled] {
+  opacity: 0.45;
+  filter: saturate(0.4);
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+button:disabled:hover,
+button[disabled]:hover {
+  opacity: 0.45;
+  transform: none !important;
+}
+
+/* === Focus indicators (keyboard only) === */
+button:focus-visible {
+  outline: 3px solid #2a2a3a;
+  outline-offset: 2px;
+}
+input:focus-visible {
+  outline: 3px solid #d4a853;
+  outline-offset: 2px;
+}
+button:focus:not(:focus-visible),
+input:focus:not(:focus-visible) {
+  outline: none;
+}
