@@ -5,7 +5,7 @@ import { useAmbientEvents } from '../hooks/useAmbientEvents';
 import EntranceStage from '../events/EntranceStage';
 import PlayerCard from './player/PlayerCard';
 
-export default function PlayerList({ players, phase, currentPlayer, splitMode, syncedEvent, fireSyncedEvent, isLeader, createdAt = 0, pmRoulette = null, phaseState = null, crownOwnership = null, shameTimer = null, shameStage = 0, shameElapsed = 0, allVoted = false }) {
+export default function PlayerList({ players, phase, currentPlayer, splitMode, syncedEvent, fireSyncedEvent, isLeader, createdAt = 0, pmRoulette = null, phaseState = null, crownOwnership = null, shameTimer = null, shameStage = 0, allVoted = false }) {
   const playerEntries = Object.entries(players)
     .filter(([, data]) => data.role !== 'pm')
     .sort((a, b) => a[1].joinedAt - b[1].joinedAt);
@@ -141,7 +141,8 @@ export default function PlayerList({ players, phase, currentPlayer, splitMode, s
       id, data, currentPlayer, phase, splitMode,
       activeQuote, fukEyes, showCrown,
       justArrived: recentArrivals.has(id),
-      allVoted, stressStage: playerStressStage, shameElapsed: playerStressStage > 0 ? shameElapsed : 0,
+      allVoted, stressStage: playerStressStage,
+      shameStartedAt: playerStressStage > 0 && shameTimer ? shameTimer.startedAt : 0,
       ...opts,
     };
   };

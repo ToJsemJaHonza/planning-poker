@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { pixel } from '../room/styles';
 
 const STRESS_METER_CONFIG = {
@@ -8,22 +9,34 @@ const STRESS_METER_CONFIG = {
   5: { fillColor: '#c0392b', label: 'MAX STRESS' },
 };
 
+const STAGE_THRESHOLDS = [0, 30, 45, 60, 80, 100];
+
 /**
- * Pixel-art stress meter bar that appears below the holdout's name tag.
- * percentage: 0–100 within current stage range.
+ * Pixel-art stress meter bar below the holdout's name tag.
+ * Self-updating: owns its own 1s interval based on startedAt so it never
+ * freezes even if parent re-renders are delayed.
  */
-export default function StressMeter({ stage, elapsed }) {
-  if (stage < 2) return null;
+export default function StressMeter({ stage, startedAt }) {
+  if (stage < 2 || !startedAt) return null;
+
+  const [elapsed, setElapsed] = useState(() => Date.now() - startedAt);
+
+  useEffect(() => {
+    const tick = () => setElapsed(Date.now() - startedAt);
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
 
   const config = STRESS_METER_CONFIG[stage] || STRESS_METER_CONFIG[2];
 
   // Compute fill percentage based on where we are within the stage range
-  const stageRanges = [0, 30, 45, 60, 80, 100];
-  const currentMin = stageRanges[stage] || 0;
-  const nextMin = stageRanges[Math.min(stage + 1, 5)] || 120;
+  const currentMin = STAGE_THRESHOLDS[stage] || 0;
+  const nextMin = STAGE_THRESHOLDS[Math.min(stage + 1, 5)] || 120;
   const elapsedSec = elapsed / 1000;
-  const stageProgress = Math.min(1, (elapsedSec - currentMin) / (nextMin - currentMin));
-  // Global percentage across all stages
+  const stageProgress = nextMin > currentMin
+    ? Math.min(1, (elapsedSec - currentMin) / (nextMin - currentMin))
+    : 1;
   const globalPercent = Math.min(100, ((stage - 1) * 20) + stageProgress * 20);
 
   const pulseScale = stage >= 5 ? 1.08 : stage >= 4 ? 1.05 : stage >= 3 ? 1.03 : 1;

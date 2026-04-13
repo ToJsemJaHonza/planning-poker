@@ -274,7 +274,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
           fireSyncedEvent={fireSyncedEvent} isLeader={isLeader}
           createdAt={createdAt} pmRoulette={pmRoulette}
           phaseState={slotMachinePhaseState} crownOwnership={crownOwnership}
-          shameTimer={shameTimer} shameStage={shame.stage} shameElapsed={shame.elapsed}
+          shameTimer={shameTimer} shameStage={shame.stage}
           allVoted={allVotedClean} /* nod animation only for clean votes */
         />
       </div>
