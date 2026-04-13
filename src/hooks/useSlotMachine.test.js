@@ -9,7 +9,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { computePhaseState, computePlayerGridPosition, REEL2_CLICK_MOMENTS } from './useSlotMachine';
+import { computePhaseState, REEL2_CLICK_MOMENTS } from '../events/ceremonyPhases';
+import { computePlayerGridPosition } from '../engine/gridPosition';
 import {
   PHASE_TABLE_STANDARD,
   PHASE_TABLE_COMPRESSED,
@@ -275,12 +276,12 @@ describe('computePhaseState — standard ceremony phase progression', () => {
     expect(state.winnerEmphasis).toBe('crowned');
   });
 
-  // v4: cabinetOut overlap — wizard ceremony starts during last 200ms of cabinetOut
-  it('elapsed=16000 => phase=cabinetOut, phaseElapsed>=200, wizardMode=ceremony', () => {
+  // v4: cabinetOut overlap — PM ceremony starts during last 200ms of cabinetOut
+  it('elapsed=16000 => phase=cabinetOut, phaseElapsed>=200, pmMode=ceremony', () => {
     const ctx = buildContext();
     const state = computePhaseState(16000, mockCeremony, ctx);
     expect(state.phase).toBe('cabinetOut');
-    expect(state.wizardMode).toBe('ceremony');
+    expect(state.pmMode).toBe('ceremony');
   });
 
   it('elapsed=16300 => phase=crownDelivery, cabinetTransform=gone', () => {
@@ -288,7 +289,7 @@ describe('computePhaseState — standard ceremony phase progression', () => {
     const state = computePhaseState(16300, mockCeremony, ctx);
     expect(state.phase).toBe('crownDelivery');
     expect(state.cabinetTransform).toBe('gone');
-    expect(state.wizardMode).toBe('ceremony');
+    expect(state.pmMode).toBe('ceremony');
     expect(state.dimLevel).toBe(0.35);
   });
 
@@ -409,27 +410,27 @@ describe('computePhaseState — compressed ceremony', () => {
 // ---------------------------------------------------------------------------
 
 describe('computePhaseState — crown removal (Act 1)', () => {
-  it('wizardMode=ceremony during crownRemoval', () => {
+  it('pmMode=ceremony during crownRemoval', () => {
     const ctx = buildContext();
     const state = computePhaseState(500, mockCeremony, ctx);
-    expect(state.wizardMode).toBe('ceremony');
-    expect(state.wizardCeremonyBubble).not.toBeNull();
-    expect(state.wizardCeremonyPosition).not.toBeNull();
+    expect(state.pmMode).toBe('ceremony');
+    expect(state.pmCeremonyBubble).not.toBeNull();
+    expect(state.pmCeremonyPosition).not.toBeNull();
   });
 
-  it('wizardMode is ceremony during spinning (PM visible during cabinet)', () => {
+  it('pmMode is ceremony during spinning (PM visible during cabinet)', () => {
     const ctx = buildContext();
     const state = computePhaseState(5500, mockCeremony, ctx);
     expect(state.phase).toBe('spinning');
-    expect(state.wizardMode).toBe('ceremony');
+    expect(state.pmMode).toBe('ceremony');
   });
 
-  it('wizard position moves during crown removal', () => {
+  it('PM position moves during crown removal', () => {
     const ctx = buildContext();
     const state0 = computePhaseState(0, mockCeremony, ctx);
     const state500 = computePhaseState(500, mockCeremony, ctx);
     // Position should have moved (y coordinate changes during vertical walk)
-    expect(state500.wizardCeremonyPosition.y).not.toBe(state0.wizardCeremonyPosition.y);
+    expect(state500.pmCeremonyPosition.y).not.toBe(state0.pmCeremonyPosition.y);
   });
 
   it('leaderWalkOffTriggered is true at t=3000ms', () => {
@@ -833,10 +834,10 @@ describe('computePlayerGridPosition', () => {
 
 describe('computePhaseState — walk speed (Fix #5 regression)', () => {
   // CEREMONY_WALK_FRAME_MS is not exported, but we can verify its value
-  // indirectly by checking wizardCeremonyPose alternation timing.
+  // indirectly by checking pmCeremonyPose alternation timing.
   // At 400ms intervals the pose toggles between 'walk1' and 'walk2'.
 
-  it('wizardCeremonyPose alternates at 400ms intervals during crownRemoval walk', () => {
+  it('pmCeremonyPose alternates at 400ms intervals during crownRemoval walk', () => {
     const ctx = buildContext();
     // During crownRemoval walk (0-2000ms), pose = floor(elapsed / 400) % 2
     // At elapsed=0:   floor(0/400)=0, 0%2=0 => walk1
@@ -850,11 +851,11 @@ describe('computePhaseState — walk speed (Fix #5 regression)', () => {
     const state799 = computePhaseState(799, mockCeremony, ctx);
     const state800 = computePhaseState(800, mockCeremony, ctx);
 
-    expect(state0.wizardCeremonyPose).toBe('walk1');
-    expect(state399.wizardCeremonyPose).toBe('walk1');
-    expect(state400.wizardCeremonyPose).toBe('walk2');
-    expect(state799.wizardCeremonyPose).toBe('walk2');
-    expect(state800.wizardCeremonyPose).toBe('walk1');
+    expect(state0.pmCeremonyPose).toBe('walk1');
+    expect(state399.pmCeremonyPose).toBe('walk1');
+    expect(state400.pmCeremonyPose).toBe('walk2');
+    expect(state799.pmCeremonyPose).toBe('walk2');
+    expect(state800.pmCeremonyPose).toBe('walk1');
   });
 
   it('walk frame period is NOT 280ms (pre-fix value would give different toggle points)', () => {
@@ -862,10 +863,10 @@ describe('computePhaseState — walk speed (Fix #5 regression)', () => {
     // If CEREMONY_WALK_FRAME_MS were 280 (the old value), elapsed=280 would toggle.
     // With 400ms, elapsed=280 is still in the first frame (walk1).
     const state280 = computePhaseState(280, mockCeremony, ctx);
-    expect(state280.wizardCeremonyPose).toBe('walk1');
+    expect(state280.pmCeremonyPose).toBe('walk1');
     // And at 400 it toggles (which it would NOT at exactly 400 if frame was 280)
     const state400 = computePhaseState(400, mockCeremony, ctx);
-    expect(state400.wizardCeremonyPose).toBe('walk2');
+    expect(state400.pmCeremonyPose).toBe('walk2');
   });
 });
 
@@ -874,26 +875,23 @@ describe('computePhaseState — walk speed (Fix #5 regression)', () => {
 // ---------------------------------------------------------------------------
 
 describe('computePhaseState — transition crown (Fix #3 regression)', () => {
-  it('crownDelivery at phaseElapsed=3000 (settled): parent=new-leader-head, progress>=1', () => {
-    // hadCrown=true ceremony for crown transfer
+  it('crownDelivery at phaseElapsed=3000 (settled): location=player-head, progress=1', () => {
     const ceremony = { ...mockCeremony, outgoingLeaderHadCrown: true };
     const ctx = buildContext(ceremony);
-    // crownDelivery starts at 16300, so absolute elapsed = 16300 + 3000 = 19300
     const state = computePhaseState(19300, ceremony, ctx);
     expect(state.phase).toBe('crownDelivery');
     expect(state.crownCeremonyState).not.toBeNull();
-    expect(state.crownCeremonyState.parent).toBe('new-leader-head');
-    expect(state.crownCeremonyState.progress).toBeGreaterThanOrEqual(1);
+    expect(state.crownCeremonyState.location).toBe('player-head');
+    expect(state.crownCeremonyState.progress).toBe(1);
   });
 
-  it('crownDelivery at phaseElapsed=4000 (walk-back): crown settled on new leader head', () => {
+  it('crownDelivery at phaseElapsed=4000 (walk-back): crown settled on new leader', () => {
     const ceremony = { ...mockCeremony, outgoingLeaderHadCrown: true };
     const ctx = buildContext(ceremony);
-    // 16300 + 4000 = 20300
     const state = computePhaseState(20300, ceremony, ctx);
     expect(state.phase).toBe('crownDelivery');
     expect(state.crownCeremonyState).not.toBeNull();
-    expect(state.crownCeremonyState.parent).toBe('new-leader-head');
+    expect(state.crownCeremonyState.location).toBe('player-head');
     expect(state.crownCeremonyState.progress).toBe(1);
   });
 });
@@ -906,58 +904,46 @@ describe('computePhaseState — crown arc transitions (Fix #4 regression)', () =
   // These tests verify the crown ceremony state transitions through the
   // correct parent values, ensuring the arc animation works properly.
 
-  it('crownRemoval mid-lift (phaseElapsed=2600): parent=leader-head, progress between 0 and 1', () => {
+  it('crownRemoval mid-lift (phaseElapsed=2600): location=lifting, progress between 0 and 1', () => {
     const ceremony = { ...mockCeremony, outgoingLeaderHadCrown: true };
     const ctx = buildContext(ceremony);
-    // crownRemoval starts at 0, so absolute elapsed = 2600
-    // Crown lift runs from 2500 to 3000 (500ms window)
-    // At 2600: liftProgress = (2600 - 2500) / 500 = 0.2
     const state = computePhaseState(2600, ceremony, ctx);
     expect(state.phase).toBe('crownRemoval');
     expect(state.crownCeremonyState).not.toBeNull();
-    expect(state.crownCeremonyState.parent).toBe('leader-head');
+    expect(state.crownCeremonyState.location).toBe('lifting');
     expect(state.crownCeremonyState.progress).toBeGreaterThan(0);
     expect(state.crownCeremonyState.progress).toBeLessThan(1);
   });
 
-  it('crownDelivery mid-place (phaseElapsed=2600): parent=new-leader-head, progress between 0 and 1', () => {
+  it('crownDelivery mid-place (phaseElapsed=2600): location=arcing-to-player, progress between 0 and 1', () => {
     const ceremony = { ...mockCeremony, outgoingLeaderHadCrown: true };
     const ctx = buildContext(ceremony);
-    // crownDelivery starts at 16300, so absolute elapsed = 16300 + 2600 = 18900
-    // Crown place runs from 2500 to 3000 (500ms window within crownDelivery)
-    // At phaseElapsed=2600: placeProgress = (2600 - 2500) / 500 = 0.2
     const state = computePhaseState(18900, ceremony, ctx);
     expect(state.phase).toBe('crownDelivery');
     expect(state.crownCeremonyState).not.toBeNull();
-    // Fix #4: parent is 'new-leader-head' (not 'wizard-hand') so the mode
-    // mapper in SlotMachineStage produces 'arcing' mode when progress < 1
-    expect(state.crownCeremonyState.parent).toBe('new-leader-head');
+    expect(state.crownCeremonyState.location).toBe('arcing-to-player');
     expect(state.crownCeremonyState.progress).toBeGreaterThan(0);
     expect(state.crownCeremonyState.progress).toBeLessThan(1);
   });
 
-  it('crownRemoval after lift complete (phaseElapsed=3000): parent=wizard-hand', () => {
+  it('crownRemoval after lift complete (phaseElapsed=3000): location=pm-hand', () => {
     const ceremony = { ...mockCeremony, outgoingLeaderHadCrown: true };
     const ctx = buildContext(ceremony);
-    // liftProgress at phaseElapsed=3000: (3000-2500)/500 = 1.0 => clamped to 1
     const state = computePhaseState(3000, ceremony, ctx);
     expect(state.phase).toBe('crownRemoval');
     expect(state.crownCeremonyState).not.toBeNull();
-    // Once lift is complete (progress >= 1), parent switches to 'wizard-hand'
-    expect(state.crownCeremonyState.parent).toBe('wizard-hand');
-    expect(state.crownCeremonyState.progress).toBeGreaterThanOrEqual(1);
+    expect(state.crownCeremonyState.location).toBe('pm-hand');
+    expect(state.crownCeremonyState.progress).toBe(1);
   });
 
-  it('crownDelivery after place complete (phaseElapsed=3000): parent=new-leader-head, progress=1', () => {
+  it('crownDelivery after place complete (phaseElapsed=3000): location=player-head, progress=1', () => {
     const ceremony = { ...mockCeremony, outgoingLeaderHadCrown: true };
     const ctx = buildContext(ceremony);
-    // crownDelivery starts at 16300, phaseElapsed=3000 => absolute 19300
-    // placeProgress = (3000-2500)/500 = 1.0
     const state = computePhaseState(19300, ceremony, ctx);
     expect(state.phase).toBe('crownDelivery');
     expect(state.crownCeremonyState).not.toBeNull();
-    expect(state.crownCeremonyState.parent).toBe('new-leader-head');
-    expect(state.crownCeremonyState.progress).toBeGreaterThanOrEqual(1);
+    expect(state.crownCeremonyState.location).toBe('player-head');
+    expect(state.crownCeremonyState.progress).toBe(1);
   });
 });
 
@@ -973,127 +959,122 @@ describe('computePhaseState — outgoingLeaderHadCrown: true (full crown path)',
 
   // --- Crown Removal (Act 1) ---
 
-  it('crownRemoval start: crown on leader-head, progress=0', () => {
+  it('crownRemoval start: crown on player-head (not yet lifted)', () => {
     const ctx = buildContext(crownedCeremony);
     const state = computePhaseState(0, crownedCeremony, ctx);
     expect(state.phase).toBe('crownRemoval');
     expect(state.crownCeremonyState).not.toBeNull();
-    expect(state.crownCeremonyState.parent).toBe('leader-head');
-    expect(state.crownCeremonyState.progress).toBe(0);
+    expect(state.crownCeremonyState.location).toBe('player-head');
+    expect(state.crownCeremonyState.progress).toBe(1);
   });
 
-  it('crownRemoval during walk (phaseElapsed=500): crown still on leader-head', () => {
+  it('crownRemoval during walk (phaseElapsed=500): crown still on player-head', () => {
     const ctx = buildContext(crownedCeremony);
     const state = computePhaseState(500, crownedCeremony, ctx);
     expect(state.phase).toBe('crownRemoval');
-    expect(state.crownCeremonyState.parent).toBe('leader-head');
-    expect(state.crownCeremonyState.progress).toBe(0);
+    expect(state.crownCeremonyState.location).toBe('player-head');
+    expect(state.crownCeremonyState.progress).toBe(1);
   });
 
-  it('crownRemoval gravity pause (phaseElapsed=2100): crown still on leader-head', () => {
+  it('crownRemoval gravity pause (phaseElapsed=2100): crown still on player-head', () => {
     const ctx = buildContext(crownedCeremony);
     const state = computePhaseState(2100, crownedCeremony, ctx);
     expect(state.phase).toBe('crownRemoval');
-    expect(state.crownCeremonyState.parent).toBe('leader-head');
-    expect(state.crownCeremonyState.progress).toBe(0);
+    expect(state.crownCeremonyState.location).toBe('player-head');
+    expect(state.crownCeremonyState.progress).toBe(1);
   });
 
-  it('crownRemoval lift midway (phaseElapsed=2750): transitioning off leader-head', () => {
+  it('crownRemoval lift midway (phaseElapsed=2750): lifting from player-head', () => {
     const ctx = buildContext(crownedCeremony);
-    // liftProgress = (2750-2500)/500 = 0.5
     const state = computePhaseState(2750, crownedCeremony, ctx);
     expect(state.phase).toBe('crownRemoval');
-    expect(state.crownCeremonyState.parent).toBe('leader-head');
+    expect(state.crownCeremonyState.location).toBe('lifting');
     expect(state.crownCeremonyState.progress).toBeCloseTo(0.5, 1);
   });
 
-  it('crownRemoval lift complete (phaseElapsed=3000): crown in wizard-hand', () => {
+  it('crownRemoval lift complete (phaseElapsed=3000): crown in pm-hand', () => {
     const ctx = buildContext(crownedCeremony);
     const state = computePhaseState(3000, crownedCeremony, ctx);
-    expect(state.crownCeremonyState.parent).toBe('wizard-hand');
-    expect(state.crownCeremonyState.progress).toBeGreaterThanOrEqual(1);
+    expect(state.crownCeremonyState.location).toBe('pm-hand');
+    expect(state.crownCeremonyState.progress).toBe(1);
   });
 
-  it('crownRemoval walk-back (phaseElapsed=3600): crown in wizard-hand', () => {
+  it('crownRemoval walk-back (phaseElapsed=3600): crown in pm-hand', () => {
     const ctx = buildContext(crownedCeremony);
     const state = computePhaseState(3600, crownedCeremony, ctx);
     expect(state.phase).toBe('crownRemoval');
-    expect(state.crownCeremonyState.parent).toBe('wizard-hand');
+    expect(state.crownCeremonyState.location).toBe('pm-hand');
     expect(state.crownCeremonyState.progress).toBe(1);
   });
 
-  it('crownRemoval silence gap (phaseElapsed=4800): crown in wizard-hand', () => {
+  it('crownRemoval silence gap (phaseElapsed=4800): crown in pm-hand', () => {
     const ctx = buildContext(crownedCeremony);
     const state = computePhaseState(4800, crownedCeremony, ctx);
     expect(state.phase).toBe('crownRemoval');
-    expect(state.crownCeremonyState.parent).toBe('wizard-hand');
+    expect(state.crownCeremonyState.location).toBe('pm-hand');
     expect(state.crownCeremonyState.progress).toBe(1);
   });
 
-  // --- Cabinet phases (Act 2) — PM visible holding crown during slot machine ---
+  // --- Cabinet phases (Act 2) -- PM visible holding crown during slot machine ---
 
-  it('during spinning: crownCeremonyState is wizard-hand (hadCrown=true, PM visible)', () => {
+  it('during spinning: crownCeremonyState is pm-hand (hadCrown=true, PM visible)', () => {
     const ctx = buildContext(crownedCeremony);
-    // spinning starts at 5400
     const state = computePhaseState(5500, crownedCeremony, ctx);
     expect(state.phase).toBe('spinning');
-    // PM visible during cabinet with crown in hand
-    expect(state.wizardMode).toBe('ceremony');
+    expect(state.pmMode).toBe('ceremony');
     expect(state.crownCeremonyState).not.toBeNull();
-    expect(state.crownCeremonyState.parent).toBe('wizard-hand');
+    expect(state.crownCeremonyState.location).toBe('pm-hand');
     expect(state.crownCeremonyState.progress).toBe(1);
   });
 
   // --- Crown Delivery (Act 3) ---
 
-  it('crownDelivery start (phaseElapsed=0): crown in wizard-hand', () => {
+  it('crownDelivery start (phaseElapsed=0): crown in pm-hand', () => {
     const ctx = buildContext(crownedCeremony);
-    // crownDelivery starts at 16300
     const state = computePhaseState(16300, crownedCeremony, ctx);
     expect(state.phase).toBe('crownDelivery');
     expect(state.crownCeremonyState).not.toBeNull();
-    expect(state.crownCeremonyState.parent).toBe('wizard-hand');
+    expect(state.crownCeremonyState.location).toBe('pm-hand');
     expect(state.crownCeremonyState.progress).toBe(1);
   });
 
-  it('crownDelivery walk (phaseElapsed=1000): crown still in wizard-hand', () => {
+  it('crownDelivery walk (phaseElapsed=1000): crown still in pm-hand', () => {
     const ctx = buildContext(crownedCeremony);
     const state = computePhaseState(17300, crownedCeremony, ctx);
     expect(state.phase).toBe('crownDelivery');
-    expect(state.crownCeremonyState.parent).toBe('wizard-hand');
+    expect(state.crownCeremonyState.location).toBe('pm-hand');
     expect(state.crownCeremonyState.progress).toBe(1);
   });
 
-  it('crownDelivery gravity pause (phaseElapsed=2100): crown in wizard-hand', () => {
+  it('crownDelivery gravity pause (phaseElapsed=2100): crown in pm-hand', () => {
     const ctx = buildContext(crownedCeremony);
     const state = computePhaseState(18400, crownedCeremony, ctx);
     expect(state.phase).toBe('crownDelivery');
-    expect(state.crownCeremonyState.parent).toBe('wizard-hand');
+    expect(state.crownCeremonyState.location).toBe('pm-hand');
     expect(state.crownCeremonyState.progress).toBe(1);
   });
 
-  it('crownDelivery place midway (phaseElapsed=2750): arcing to new-leader-head', () => {
+  it('crownDelivery place midway (phaseElapsed=2750): arcing to player', () => {
     const ctx = buildContext(crownedCeremony);
-    // placeProgress = (2750-2500)/500 = 0.5
     const state = computePhaseState(19050, crownedCeremony, ctx);
     expect(state.phase).toBe('crownDelivery');
-    expect(state.crownCeremonyState.parent).toBe('new-leader-head');
+    expect(state.crownCeremonyState.location).toBe('arcing-to-player');
     expect(state.crownCeremonyState.progress).toBeCloseTo(0.5, 1);
   });
 
-  it('crownDelivery place complete (phaseElapsed=3000): crown settled on new-leader-head', () => {
+  it('crownDelivery place complete (phaseElapsed=3000): crown settled on player-head', () => {
     const ctx = buildContext(crownedCeremony);
     const state = computePhaseState(19300, crownedCeremony, ctx);
     expect(state.phase).toBe('crownDelivery');
-    expect(state.crownCeremonyState.parent).toBe('new-leader-head');
-    expect(state.crownCeremonyState.progress).toBeGreaterThanOrEqual(1);
+    expect(state.crownCeremonyState.location).toBe('player-head');
+    expect(state.crownCeremonyState.progress).toBe(1);
   });
 
-  it('crownDelivery walk-back (phaseElapsed=4000): crown on new-leader-head', () => {
+  it('crownDelivery walk-back (phaseElapsed=4000): crown on player-head', () => {
     const ctx = buildContext(crownedCeremony);
     const state = computePhaseState(20300, crownedCeremony, ctx);
     expect(state.phase).toBe('crownDelivery');
-    expect(state.crownCeremonyState.parent).toBe('new-leader-head');
+    expect(state.crownCeremonyState.location).toBe('player-head');
     expect(state.crownCeremonyState.progress).toBe(1);
   });
 
@@ -1141,7 +1122,7 @@ describe('computePhaseState — disconnected outgoing leader (v7 injection)', ()
     const ctx = buildContext(disconnectedCeremony, {
       players: playersWithoutOldLeader,
     });
-    // At phaseElapsed=1000 (mid-walk to leader), wizard should be interpolating
+    // At phaseElapsed=1000 (mid-walk to leader), PM should be interpolating
     // toward the outgoing leader's grid position, not the center fallback.
     const state = computePhaseState(1000, disconnectedCeremony, ctx);
     expect(state.phase).toBe('crownRemoval');
@@ -1151,10 +1132,10 @@ describe('computePhaseState — disconnected outgoing leader (v7 injection)', ()
     const expectedPos = computePlayerGridPosition(0, 3, 1440);
     const centerFallback = { x: 1440 * 0.5, y: 900 * 0.4 };
 
-    // The wizard position should NOT be the center fallback.
+    // The PM position should NOT be the center fallback.
     // At progress=0.5 (1000/2000), it should be halfway between start and target.
     // Just verify it's not heading toward the center fallback.
-    const wizPos = state.wizardCeremonyPosition;
+    const wizPos = state.pmCeremonyPosition;
 
     // If the bug were present, the target would be centerFallback (720, 360).
     // With the fix, target is expectedPos (a grid position, y ~ 244).
@@ -1169,17 +1150,17 @@ describe('computePhaseState — disconnected outgoing leader (v7 injection)', ()
     expect(wizPos.y).toBeGreaterThan(expectedPos.y - 50); // approaching target
   });
 
-  it('crownRemoval at gravity pause: wizard at outgoing leader grid position', () => {
+  it('crownRemoval at gravity pause: PM at outgoing leader grid position', () => {
     const ctx = buildContext(disconnectedCeremony, {
       players: playersWithoutOldLeader,
     });
-    // At phaseElapsed=2100 (gravity pause), wizard should be AT target position.
+    // At phaseElapsed=2100 (gravity pause), PM should be AT target position.
     const state = computePhaseState(2100, disconnectedCeremony, ctx);
     expect(state.phase).toBe('crownRemoval');
 
     const expectedPos = computePlayerGridPosition(0, 3, 1440);
-    expect(state.wizardCeremonyPosition.x).toBeCloseTo(expectedPos.x, 0);
-    expect(state.wizardCeremonyPosition.y).toBeCloseTo(expectedPos.y, 0);
+    expect(state.pmCeremonyPosition.x).toBeCloseTo(expectedPos.x, 0);
+    expect(state.pmCeremonyPosition.y).toBeCloseTo(expectedPos.y, 0);
   });
 
   it('crownDelivery: PM walks to winner grid position when outgoing leader disconnected', () => {
@@ -1190,7 +1171,7 @@ describe('computePhaseState — disconnected outgoing leader (v7 injection)', ()
         b: { name: 'Bob-Winner', role: 'player', joinedAt: 250 },
       },
     });
-    // crownDelivery starts at 16300, at phaseElapsed=2100 (gravity pause) wizard
+    // crownDelivery starts at 16300, at phaseElapsed=2100 (gravity pause) PM
     // should be at the winner's grid position.
     const state = computePhaseState(16300 + 2100, disconnectedCeremony, ctx);
     expect(state.phase).toBe('crownDelivery');
@@ -1198,8 +1179,8 @@ describe('computePhaseState — disconnected outgoing leader (v7 injection)', ()
     // Players sorted by joinedAt: old-leader@100, p1@200, b@250, p2@300 => 4 players
     // Winner 'b' is at index 2.
     const expectedWinnerPos = computePlayerGridPosition(2, 4, 1440);
-    expect(state.wizardCeremonyPosition.x).toBeCloseTo(expectedWinnerPos.x, 0);
-    expect(state.wizardCeremonyPosition.y).toBeCloseTo(expectedWinnerPos.y, 0);
+    expect(state.pmCeremonyPosition.x).toBeCloseTo(expectedWinnerPos.x, 0);
+    expect(state.pmCeremonyPosition.y).toBeCloseTo(expectedWinnerPos.y, 0);
   });
 
   it('crownDelivery compressed: start position uses outgoing leader grid slot (not center)', () => {
@@ -1226,15 +1207,15 @@ describe('computePhaseState — disconnected outgoing leader (v7 injection)', ()
       },
     });
     // crownDelivery in compressed starts at 5000.
-    // At phaseElapsed=0, wizard should be at old-leader's grid position (start).
+    // At phaseElapsed=0, PM should be at old-leader's grid position (start).
     const state = computePhaseState(5000, compressedCeremony, ctx);
     expect(state.phase).toBe('crownDelivery');
 
     // Outgoing leader sorted index 0 in 4 players
     const outgoingGridPos = computePlayerGridPosition(0, 4, 1440);
-    // At phaseElapsed=0 (start of walk), wizard should be at start position
-    expect(state.wizardCeremonyPosition.x).toBeCloseTo(outgoingGridPos.x, 0);
-    expect(state.wizardCeremonyPosition.y).toBeCloseTo(outgoingGridPos.y, 0);
+    // At phaseElapsed=0 (start of walk), PM should be at start position
+    expect(state.pmCeremonyPosition.x).toBeCloseTo(outgoingGridPos.x, 0);
+    expect(state.pmCeremonyPosition.y).toBeCloseTo(outgoingGridPos.y, 0);
   });
 
   it('injection does NOT duplicate when outgoing leader is still connected', () => {
@@ -1252,7 +1233,7 @@ describe('computePhaseState — disconnected outgoing leader (v7 injection)', ()
 
     // Same result as if they were injected — position should be identical
     const expectedPos = computePlayerGridPosition(0, 3, 1440);
-    expect(state.wizardCeremonyPosition.x).toBeCloseTo(expectedPos.x, 0);
-    expect(state.wizardCeremonyPosition.y).toBeCloseTo(expectedPos.y, 0);
+    expect(state.pmCeremonyPosition.x).toBeCloseTo(expectedPos.x, 0);
+    expect(state.pmCeremonyPosition.y).toBeCloseTo(expectedPos.y, 0);
   });
 });

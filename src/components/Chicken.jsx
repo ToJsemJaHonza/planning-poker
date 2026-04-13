@@ -1,14 +1,13 @@
 import { useMemo } from 'react';
+import { spriteToBoxShadow } from '../engine/sprite';
 
 const _ = null;
 const W = '#fff';
 const Y = '#f5c542';
 const R = '#e03030';
-const O = '#e67e22';
 const B = '#222';
-const T = '#ffeedd';
 
-// 8×7 pixel art chicken
+// 8x7 pixel art chicken
 const CHICKEN = [
   [_,_,_,R,R,_,_,_],
   [_,_,W,W,W,W,_,_],
@@ -20,17 +19,6 @@ const CHICKEN = [
 ];
 
 const PX = 4;
-
-function spriteToBoxShadow(grid, px) {
-  const shadows = [];
-  for (let y = 0; y < grid.length; y++) {
-    for (let x = 0; x < grid[y].length; x++) {
-      const c = grid[y][x];
-      if (c) shadows.push(`${x * px}px ${y * px}px 0 ${Math.ceil(px / 2)}px ${c}`);
-    }
-  }
-  return shadows.join(',');
-}
 
 export default function Chicken() {
   const shadow = useMemo(() => spriteToBoxShadow(CHICKEN, PX), []);

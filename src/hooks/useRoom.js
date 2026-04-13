@@ -5,7 +5,6 @@ import {
   isValidCeremonyPayload,
   isStalePayload,
   nonPmCandidatesSorted,
-  CEREMONY_TTL_MS,
   SCHEMA_VERSION,
 } from '../events/slotMachine';
 
@@ -27,7 +26,7 @@ const isSafeRoomCode = (code) =>
   typeof code === 'string' && code.length > 0 && !ROOM_CODE_INVALID_RE.test(code);
 
 // Fire-and-forget write helper: log errors to the console so a dropped
-// network write doesn't vanish silently (P9).
+// network write doesn't vanish silently.
 const safeWrite = (promise) => {
   Promise.resolve(promise).catch((err) => console.error('[useRoom] write failed', err));
   return promise;
@@ -59,16 +58,13 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
   const [isLeader, setIsLeader] = useState(false);
   const [connected, setConnected] = useState(false);
   const [leaderChangedAt, setLeaderChangedAt] = useState(0);
-  // iter 2: room-start crown delivery mini-ceremony payload
   const [roomStartCrowning, setRoomStartCrowning] = useState(null);
-  // iter 4: room deleted state (when all players leave and room is cleaned up)
   const [roomDeleted, setRoomDeleted] = useState(false);
   const roomLoadedRef = useRef(false);
   const unsubscribesRef = useRef([]);
   // One-shot guard so two near-simultaneous re-renders of the promotion effect
   // don't both try to fire a ceremony transaction.
   const firingRef = useRef(false);
-  // iter 2: track the most-recent leader for ghost-rendering on disconnect.
   // Captures the leader's data before their Firebase node disappears so the
   // ceremony payload can include outgoingLeaderLastData.
   const lastKnownLeaderRef = useRef(null);
@@ -150,7 +146,6 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
       if (data[playerId]) {
         setIsLeader(data[playerId].isLeader === true);
       }
-      // iter 2: track the current leader for ghost-rendering on disconnect
       const leaderEntry = Object.entries(data).find(([, p]) => p && p.isLeader);
       if (leaderEntry) {
         lastKnownLeaderRef.current = { id: leaderEntry[0], data: leaderEntry[1] };
@@ -178,14 +173,12 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
         } else {
           setPmRoulette(null);
         }
-        // iter 2: room-start crown delivery mini-ceremony
         setRoomStartCrowning(data.roomStartCrowning || null);
         roomLoadedRef.current = true;
       } else {
         setPmRoulette(null);
         setRoomStartCrowning(null);
-        // iter 4: detect room deletion. If we previously had data and now
-        // it's null, the room was deleted (all players left).
+        // Room was populated but is now empty -- all players left.
         if (roomLoadedRef.current) {
           setRoomDeleted(true);
         }
@@ -208,11 +201,10 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
   // performs the leader-flag flip atomically via a multi-path update at the
   // start of the `cabinetOut` phase.
   //
-  // Critical correctness note (§5.5 of the tech design): NO code path here
-  // writes `isLeader = true` directly. The only remaining sources of
-  // `isLeader = true` in the codebase are:
+  // No code path here writes `isLeader = true` directly. The only sources
+  // of `isLeader = true` are:
   //   (a) `setupPlayer` above for first-joiner into a fresh room, and
-  //   (b) `resolvePmRoulettePromotion` below, fired at phase `cabinetOut`.
+  //   (b) `resolvePmRoulettePromotion` below, fired during crownDelivery.
   useEffect(() => {
     if (!roomCode || !playerId || Object.keys(players).length === 0) return;
 
@@ -257,7 +249,6 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
         }
 
         // Build the payload locally (Math.random) and try to land it.
-        // iter 2: pass outgoing leader snapshot for ghost rendering
         const payload = buildCeremonyPayload({
           players,
           now: nowLocal,
@@ -288,15 +279,33 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
           firingRef.current = false;
           return;
         }
-        // Transaction landed — reset the guard after the ceremony TTL so
-        // subsequent ceremonies can fire in this room.
-        setTimeout(() => { firingRef.current = false; }, CEREMONY_TTL_MS);
+        // Transaction landed — reset the guard after a short cooldown so
+        // subsequent ceremonies can fire in this room. 5s is long enough
+        // to cover the Firebase round-trip for clearPmRoulette + leader
+        // promotion, but short enough to not block legitimate consecutive
+        // ceremonies (the previous 30s TTL was excessive).
+        setTimeout(() => { firingRef.current = false; }, 5000);
       } catch (err) {
         console.error('[useRoom] firePmRoulette failed', err);
         firingRef.current = false;
       }
     })();
   }, [players, roomCode, playerId, pmRoulette]);
+
+  // Reset the firing guard when a ceremony clears AND the leader has been
+  // promoted. Without the hasLeader check, the guard resets too early:
+  // clearPmRoulette (which nulls pmRoulette) can arrive before
+  // resolvePmRoulettePromotion (which sets isLeader=true) propagates back
+  // through Firebase, causing the trigger effect to see no leader + guard
+  // false and fire a duplicate ceremony.
+  useEffect(() => {
+    if (!pmRoulette) {
+      const hasLeader = Object.values(players).some(p => p.isLeader);
+      if (hasLeader) {
+        firingRef.current = false;
+      }
+    }
+  }, [pmRoulette, players]);
 
   // === Room cleanup: delete from Firebase when all players leave ===========
   //
@@ -435,12 +444,9 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
   // === PM Crowning Machine helpers =======================================
 
   // Multi-path atomic promotion: clears every player's `isLeader` flag and
-  // sets the winner's in ONE update(). Stamps leaderChangedAt, and clears
+  // sets the winner's in ONE update(). Stamps leaderChangedAt and clears
   // any stuck PM quote. This is the ONLY code path outside the first-joiner
-  // case that writes `isLeader = true`. Called by the phase machine at the
-  // start of the `cabinetOut` phase (tech design v2 §1.7).
-  //
-  // iter 2: crownCount increment removed (gamification dropped).
+  // case that writes `isLeader = true`.
   const resolvePmRoulettePromotion = useCallback(async (ceremony) => {
     if (!roomCode || !ceremony || !ceremony.winnerId) return { status: 'bad-args' };
     try {
@@ -458,7 +464,6 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
       for (const id of Object.keys(livePlayers)) {
         updates[`rooms/${roomCode}/players/${id}/isLeader`] = (id === ceremony.winnerId);
       }
-      // iter 2: crownCount increment removed — gamification dropped
       updates[`rooms/${roomCode}/meta/leaderChangedAt`] = Date.now();
       updates[`rooms/${roomCode}/meta/pmQuote`] = '';
       await update(ref(db), updates);
@@ -469,8 +474,8 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
     }
   }, [roomCode]);
 
-  // Clearer A from the tech design §1.5 — null the payload if the
-  // ceremonyId still matches. Never stomps a newer ceremony.
+  // Null the ceremony payload if the ceremonyId still matches.
+  // Never stomps a newer ceremony.
   const clearPmRoulette = useCallback(async (ceremony) => {
     if (!roomCode) return;
     try {

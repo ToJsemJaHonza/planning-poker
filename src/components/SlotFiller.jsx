@@ -1,20 +1,9 @@
 import { useMemo } from 'react';
-
-/**
- * SlotFiller — one of 9 pixel-art filler sprites for the slot machine
- * reels. Pure function of `typeKey`: no state, no effects. Each filler is
- * a box-shadow sprite at the same 5 px-per-pixel scale as `PlayerFigure`,
- * so a reel slot reads as "lineup of players + fillers" without scale
- * mismatches.
- *
- * See `.claude/pipeline-design-doc.md` §3 "Filler slot pool" — the 9
- * variants and their pixel treatments are spec'd there. This file is one
- * big lookup table plus the box-shadow renderer.
- */
+import { spriteToBoxShadow, PX, SPRITE_PIXEL_STYLE } from '../engine/sprite';
 
 const _ = null;
 
-// Palette — reuses existing tokens from `index.css` + design doc §1.
+// Palette -- matches the cabinet color scheme.
 const OUT = '#0a0b11';       // cabinet outline
 const GOLD_B = '#f5c542';     // gold bright
 const GOLD_P = '#d4a853';     // gold primary
@@ -32,26 +21,9 @@ const GREEN = '#16a34a';      // git green
 const CHEESE = '#f5c542';     // pizza cheese
 const TOMATO = '#c0392b';     // pizza sauce
 const CRUST = '#d4850a';      // pizza crust
-const STAR = '#fff3';         // star hint
 
-const PX = 5;
-
-// Helper to render a 12 × 14 grid of pixel units (matches PlayerFigure).
-// All fillers use the same grid dimensions so flexbox centering inside a
-// reel slot produces identical pixel alignment.
 const COLS = 12;
 const ROWS = 14;
-
-function spriteToBoxShadow(grid, px = PX) {
-  const shadows = [];
-  for (let y = 0; y < grid.length; y++) {
-    for (let x = 0; x < grid[y].length; x++) {
-      const c = grid[y][x];
-      if (c) shadows.push(`${x * px}px ${y * px}px 0 ${Math.ceil(px / 2)}px ${c}`);
-    }
-  }
-  return shadows.join(',');
-}
 
 // ---------------------------------------------------------------------------
 // Sprite grids — one per filler variant
@@ -223,10 +195,6 @@ const GRID_BY_KEY = {
   notFound: NOT_FOUND_GRID,
 };
 
-// Silence unused-var warnings (STAR is decorative — kept in case we add
-// more starfield elements to the wizard hat later).
-void STAR;
-
 const SPRITE_W = COLS * PX;
 const SPRITE_H = ROWS * PX;
 
@@ -236,16 +204,7 @@ export default function SlotFiller({ typeKey }) {
   if (!grid) return null;
   return (
     <div style={{ width: SPRITE_W, height: SPRITE_H, position: 'relative' }} data-cm-filler={typeKey}>
-      <div
-        style={{
-          width: 1,
-          height: 1,
-          boxShadow: shadow,
-          position: 'absolute',
-          top: 0,
-          left: 0,
-        }}
-      />
+      <div style={{ ...SPRITE_PIXEL_STYLE, boxShadow: shadow }} />
     </div>
   );
 }

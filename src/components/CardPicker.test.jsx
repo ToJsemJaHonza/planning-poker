@@ -3,10 +3,10 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CardPicker, { SplitCardPicker } from './CardPicker';
 
-const VALUES = ['1', '2', '3', '5', '8', '13', '21', '?', '☕'];
+const VALUES = ['3', '5', '8', '13', '21', '?', '☕'];
 
 describe('CardPicker — normal mode', () => {
-  it('renders all nine Fibonacci values', () => {
+  it('renders all seven card values', () => {
     render(<CardPicker selectedVote={null} onVote={() => {}} disabled={false} />);
     VALUES.forEach((v) => {
       expect(screen.getByRole('button', { name: v })).toBeInTheDocument();

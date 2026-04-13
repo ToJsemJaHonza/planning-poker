@@ -10,7 +10,7 @@ This document captures **how the app actually works**, **what broke and why**, a
 |-------------------|---------------------------------------------------------|
 | UI framework      | React 19 (functional components only)                   |
 | Build/dev server  | Vite 8 + @vitejs/plugin-react (Fast Refresh HMR)        |
-| Styling           | Inline style objects + a single `src/index.css` for keyframes |
+| Styling           | Inline style objects + `src/index.css` for keyframes + `src/styles/*.css` |
 | State (real-time) | Firebase Realtime Database (free tier, no Auth)         |
 | Graphics          | Pure CSS `box-shadow` pixel sprites, 5 px per "pixel"   |
 | Tests             | Vitest + jsdom + @testing-library/react                 |
@@ -63,7 +63,66 @@ src/events/
 
 ### Events that are NOT in the registry (yet)
 
-- PM wizard quotes, dev quotes, fuk-eyes, chicken, OKTA sheep, special round, Richard hunger — these are still ad-hoc in `PlayerList.jsx`/`Room.jsx`. Porting them is future work but straightforward: they'd become ambient/overlay events in a parallel registry.
+- PM wizard quotes, dev quotes, fuk-eyes, chicken, OKTA sheep, special round, Richard hunger -- these are still ad-hoc. Dev quotes, fuk eyes, Alan coffee, and Richard hunger are managed by `useAmbientEvents` (leader-only periodic event producers). Porting them to a parallel registry is future work.
+
+## 2.5 File structure
+
+```
+src/
+  engine/                   Pure utilities (zero React imports)
+    sprite.js               Box-shadow sprite rendering (shared by all components)
+    animation.js            Easing curves, timing constants, lerp helpers
+    gridPosition.js         Math-based grid position (no DOM queries)
+    shallowEqual.js         60fps-optimized equality check for phase state
+    useAnimationLoop.js     Shared rAF loop hook
+  events/                   Entrance event system
+    entranceEvents.js       Registry of cinematic entrances (Train, DBB)
+    useEntranceEvents.js    Engine: trigger detection, mutex, state derivation
+    EntranceStage.jsx       Renderer: mounts whatever event is active
+    slotMachine.js          Crowning Machine pure helpers (payload, phase tables, RNG)
+    ceremonyPhases.js       Phase state computation (crown removal, delivery, reels)
+    useCinematicHandoff.js  Walk-from-cinematic-to-grid-slot transition
+  hooks/
+    useRoom.js              THE Firebase interface (only module that talks to RTDB)
+    useSlotMachine.js       Phase machine for the PM Crowning Machine ceremony
+    useCrownOwnership.js    Single source of truth for crown location
+    useRoomStartCrowning.js Mini-ceremony for first player's crown delivery
+    useWizardPosition.js    JS-driven wizard walk (replaces CSS keyframes)
+    useAmbientEvents.js     Leader-only periodic events (dev quotes, fuk eyes, etc.)
+  components/
+    Room.jsx                Main orchestrator (header, task, players, picker, modals)
+    PlayerList.jsx           Player grid with join/leave animations
+    PlayerFigure.jsx        Deterministic pixel-art figure from name hash
+    Wizard.jsx              PM sprite (idle walk + ceremony pose)
+    Crown.jsx               Crown sprite with anchor modes
+    SlotMachineStage.jsx    Ceremony overlay (3-act: crown removal, cabinet, delivery)
+    SlotMachine.jsx         Slot cabinet visual
+    SlotReel.jsx            Single reel with ribbon scroll
+    SlotFiller.jsx          Filler sprites (crown, trophy, coffee, etc.)
+    Train.jsx               Richard's Shinkansen entrance
+    DbbPipeline.jsx         Tomas's DBB pipe entrance
+    CardPicker.jsx          Voting card picker (normal + split FE/BE)
+    ResultModal.jsx         Vote results with histogram
+    RevealBackground.jsx    Floating numbers on reveal
+    Chicken.jsx / Sheep.jsx Easter egg animations
+    Landing.jsx             Room creation / join screen
+    NamePrompt.jsx          Player name entry
+    ErrorBoundary.jsx       Crash recovery UI
+    room/                   Room sub-components (header, task bar, phase bar, etc.)
+    player/                 Player sub-components (card, walking figure, voting cards)
+  styles/                   CSS files for keyframe animations
+    base.css                Core keyframes (walk-in, walk-out, reveal, float)
+    walk.css                Walking animation classes
+    events.css              Entrance event animations (train, DBB, chicken, sheep)
+    ceremony.css            Crowning Machine animations (cabinet, crown, spotlight)
+    wizard.css              Wizard positioning
+    responsive.css          Mobile breakpoints
+```
+
+Shared constants:
+- `src/components/room/styles.js` exports `pixel` (the Press Start 2P font family)
+- `src/engine/sprite.js` exports `PX`, `spriteToBoxShadow`, `SPRITE_PIXEL_STYLE`
+- `src/engine/animation.js` exports timing constants and easing utilities
 
 ## 3. Data flow
 
@@ -97,14 +156,15 @@ src/events/
        └─────────────────────────────┘
 ```
 
-### 2.1 Leader election
+### 3.1 Leader election
 
 - The first client to call `setupPlayer()` writes the room and marks itself `isLeader: true`.
 - Subsequent joiners write themselves with `isLeader: !hasLeader && role === 'pm'`.
-- If at any point `players` has no leader, a promotion `useEffect` elects the earliest-joined remaining player and:
-  - Sets their `isLeader` to `true` in Firebase
-  - Clears stuck `meta` flags (`specialRound`, `oktaEvent`, `syncedEvent`, `pmQuote`)
-  - Stamps `meta/leaderChangedAt` so other clients can show a "new leader" banner
+- When no leader exists, the earliest-joined candidate fires a PM Crowning Machine ceremony (slot-machine animation) instead of bare-setting `isLeader`.
+- The ceremony payload is written atomically to `meta/pmRoulette` via a Firebase transaction.
+- The only code paths that write `isLeader = true` are:
+  (a) `setupPlayer` for the first joiner into a fresh room
+  (b) `resolvePmRoulettePromotion` during the crownDelivery phase of the ceremony
 
 **Known limit:** if two clients call `setupPlayer()` on the *same* fresh room in the same event-loop tick, both see `exists=false` and both write the room. The last `set()` wins. In practice this is extremely rare (requires creation collision on a random 6-char code) but it's not defended against. A transaction or a CAS-style check on creation would fix it properly.
 

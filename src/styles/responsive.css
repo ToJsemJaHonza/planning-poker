@@ -1,0 +1,47 @@
+/* === Mobile PM position ===
+ * The PM's bottom position is now handled by usePmPosition.js which
+ * checks window.innerWidth at runtime. The old mobile override
+ * has been removed.
+ */
+
+/* === Mobile header === */
+@media (max-width: 560px) {
+  [data-room-header] { padding: 0.5rem 0.6rem !important; }
+  [data-room-header] [data-header-left] {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 0.2rem !important;
+  }
+  [data-room-header] [data-room-title] { font-size: 0.7rem !important; }
+  [data-room-header] [data-player-count] { font-size: 0.5rem !important; }
+  [data-room-header] [data-copy-btn] { padding: 0.35rem 0.5rem !important; font-size: 0.5rem !important; }
+}
+@media (max-width: 380px) {
+  [data-room-header] [data-player-count] { display: none !important; }
+}
+
+/* === Split modal responsive === */
+@media (max-width: 520px) {
+  [data-split-modal-body] { flex-direction: column !important; gap: 0.8rem !important; }
+  [data-split-modal] { padding: 1rem !important; max-height: 90vh; overflow-y: auto; }
+}
+
+/* === Player name tag mobile === */
+@media (max-width: 560px) {
+  [data-player-tag] { max-width: 120px !important; font-size: 0.45rem !important; }
+}
+
+/* === Reduced motion === */
+@media (prefers-reduced-motion: reduce) {
+  [class*="float"], [class*="bob"], [class*="idle"],
+  [class*="bubble-float"], [class*="sparkle"] { animation: none !important; }
+  [class*="walk-in"], [class*="walk-out"] { animation: rm-fade-in 0.2s ease-out !important; }
+  @keyframes rm-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+  .cm-cabinet-drop, .cm-cabinet-bounce, .cm-cabinet-exit, .cm-cabinet-rumble,
+  .cm-reel-flare, .cm-streak, .cm-crown-bounce, .cm-procession-text,
+  .cm-crown-settle, .cm-crown-materialize {
+    animation: none !important;
+    transition: none !important;
+  }
+}

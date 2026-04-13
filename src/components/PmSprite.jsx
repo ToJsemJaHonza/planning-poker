@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Crown from './Crown';
+import { spriteToBoxShadow, PX, SPRITE_PIXEL_STYLE } from '../engine/sprite';
+import { WALK_FRAME_MS } from '../engine/animation';
 
 const _ = null;
 const O = '#222';     // outline
@@ -77,22 +79,10 @@ const THINK = [
   [_,_,K,K,_,_,K,K,_,_],
 ];
 
-const PX = 5;
 const COLS = 10;
 const ROWS = 14;
 const SPRITE_W = COLS * PX;
 const SPRITE_H = ROWS * PX;
-
-function spriteToBoxShadow(grid, px) {
-  const shadows = [];
-  for (let y = 0; y < grid.length; y++) {
-    for (let x = 0; x < grid[y].length; x++) {
-      const c = grid[y][x];
-      if (c) shadows.push(`${x * px}px ${y * px}px 0 ${Math.ceil(px / 2)}px ${c}`);
-    }
-  }
-  return shadows.join(',');
-}
 
 const SPARKLE_DIRS = [
   { dx: -18, dy: -25 }, { dx: 8, dy: -30 }, { dx: 25, dy: -15 },
@@ -143,21 +133,22 @@ const QUOTES = [
   "Let's parking lot that",
 ];
 
-export default function Wizard({
+export default function PmSprite({
   isCasting,
   onCastComplete,
   onQuote,
   externalQuote,
-  // Two modes: 'idle' (CSS-animated walk) and 'ceremony' (parent-driven position).
+  // Two modes: 'idle' (JS-driven walk) and 'ceremony' (parent-driven position).
   mode = 'idle',
-  crowningPose = null,
-  crowningBubble = '',
+  pmPose = null,
+  pmBubble = '',
   crownState = null,
   crownGlowing = false,
   ceremonyFacing = null,
-  // Ref callback so Room.jsx can read the idle walk element's position
-  // via getBoundingClientRect() at ceremony start.
-  idleWalkRef,
+  // JS-driven position from usePmPosition hook (idle mode).
+  // When mode='idle', parent passes { x, y, facingLeft }.
+  position = null,
+  facingLeft = false,
 }) {
   const [walkFrame, setWalkFrame] = useState(0);
   const [showSparkles, setShowSparkles] = useState(false);
@@ -184,7 +175,7 @@ export default function Wizard({
       setIsThinking(false);
       return;
     }
-    walkRef.current = setInterval(() => setWalkFrame(f => f ^ 1), 500);
+    walkRef.current = setInterval(() => setWalkFrame(f => f ^ 1), WALK_FRAME_MS);
 
     // Only leader runs the thinking/quote loop
     if (!onQuote) return () => clearInterval(walkRef.current);
@@ -229,17 +220,17 @@ export default function Wizard({
   const effectiveThinking = onQuote ? isThinking : showExtQuote;
   const effectiveQuote = onQuote ? quote : (externalQuote || '');
 
-  // Select sprite shadow. Ceremony mode drives pose via `crowningPose`;
+  // Select sprite shadow. Ceremony mode drives pose via `pmPose`;
   // idle mode uses the existing logic unchanged.
   let shadow;
   if (mode === 'ceremony') {
-    if (crowningPose === 'cast') shadow = sc;
+    if (pmPose === 'cast') shadow = sc;
     else shadow = walkFrame ? sw2 : sw1;
   } else {
     shadow = isCasting ? sc : effectiveThinking ? st : walkFrame ? sw2 : sw1;
   }
 
-  // --- CEREMONY MODE (iter 4): position driven by parent, vertical movement ---
+  // --- CEREMONY MODE: position driven by parent ---
   if (mode === 'ceremony') {
     const facingLeft = ceremonyFacing === 'left';
     const crownPinned = crownState?.mode === 'settled';
@@ -253,17 +244,17 @@ export default function Wizard({
           imageRendering: 'pixelated',
           transform: facingLeft ? 'scaleX(-1)' : 'scaleX(1)',
         }}
-        data-cm-wizard-ceremony
+        data-cm-pm-ceremony
       >
         <div style={{ position: 'absolute', inset: 0 }}>
-          <div style={{ width: 1, height: 1, boxShadow: shadow, position: 'absolute', top: 0, left: 0 }} />
+          <div style={{ ...SPRITE_PIXEL_STYLE, boxShadow: shadow }} />
         </div>
-        {crowningBubble && (
+        {pmBubble && (
           <div style={{
             ...styles.crowningBubble,
             // Counteract parent scaleX flip so text reads normally
             transform: `translateX(-50%) ${facingLeft ? 'scaleX(-1)' : 'scaleX(1)'}`,
-          }}>{crowningBubble}</div>
+          }}>{pmBubble}</div>
         )}
         {crownState && !crownPinned && (
           <Crown
@@ -277,7 +268,7 @@ export default function Wizard({
                   ? `translate(0px, ${crownState.progress * -50}px)`
                   : 'none',
               transition: (crownState.mode === 'arcing' || crownState.mode === 'lifting')
-                ? 'transform 250ms steps(5, end)' : 'none',
+                ? 'transform 300ms steps(12, end)' : 'none',
             }}
           />
         )}
@@ -285,14 +276,31 @@ export default function Wizard({
     );
   }
 
-  // --- IDLE MODE (default): CSS-animated walk via .wizard-walk class -------
-  // The .wizard-walk class handles positioning (position: fixed, bottom, left
-  // via @keyframes wizard-path). The bubble is a child of the walk container
-  // so it moves with the CSS animation automatically.
+  // --- IDLE MODE (default): JS-driven walk via usePmPosition ----------
+  // Position is controlled by the parent via the `position` and `facingLeft`
+  // props from the usePmPosition hook. No CSS keyframes involved.
+  // The PM sprite is positioned with `position: fixed` and `transform: translate`
+  // for GPU-composited movement.
+  const idleFacingLeft = facingLeft;
   return (
-    <div className="wizard-walk" ref={idleWalkRef}>
-      <div style={styles.idleInner}>
-        <div style={{ width: 1, height: 1, boxShadow: shadow, position: 'absolute', top: 0, left: 0 }} />
+    <div
+      style={{
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        transform: `translate(${position?.x ?? 10}px, ${position?.y ?? 0}px)`,
+        zIndex: 50,
+        pointerEvents: 'none',
+        imageRendering: 'pixelated',
+        willChange: 'transform',
+      }}
+      data-pm-idle
+    >
+      <div style={{
+        ...styles.idleInner,
+        transform: idleFacingLeft ? 'scaleX(-1)' : 'scaleX(1)',
+      }}>
+        <div style={{ ...SPRITE_PIXEL_STYLE, boxShadow: shadow }} />
         {showSparkles && SPARKLE_DIRS.map((d, i) => (
           <span key={i} style={{
             ...styles.sparkle,
@@ -310,7 +318,7 @@ export default function Wizard({
 }
 
 const styles = {
-  // Idle mode: the sprite lives inside .wizard-walk (CSS-animated container).
+  // Idle mode: the sprite lives inside a JS-positioned fixed container.
   // Position is relative within that container.
   idleInner: { position: 'relative', width: SPRITE_W, height: SPRITE_H, imageRendering: 'pixelated' },
   sparkle: {
@@ -318,13 +326,14 @@ const styles = {
     animation: 'sparkle-burst 1.2s ease-out forwards',
     textShadow: '0 0 8px #f5c542, 0 0 16px #d4a853',
   },
-  // Idle bubble: child of .wizard-walk so it moves with the CSS animation.
-  // Positioned above the sprite via absolute bottom.
+  // Idle bubble: positioned above the sprite. The parent container uses
+  // JS-driven positioning (not CSS keyframes), so the bubble flipping is
+  // handled inline via the `facingLeft` prop instead of the old
+  // pm-bubble-unflip CSS animation.
   idleBubble: {
     position: 'absolute',
     bottom: SPRITE_H + 10,
     left: '50%',
-    transform: 'translateX(-50%)',
     zIndex: 51,
     background: '#fff',
     border: '2px solid #d4a853',
@@ -333,8 +342,6 @@ const styles = {
     fontSize: '0.65rem',
     fontFamily: "'Press Start 2P', monospace",
     color: '#2a2a3a',
-    // nowrap prevents vertical text: the bubble is inside .wizard-walk
-    // which is only 50px wide, so break-word wraps after every character.
     whiteSpace: 'nowrap',
     lineHeight: '1.6',
     animation: 'float 1.5s ease-in-out infinite',
@@ -354,7 +361,7 @@ const styles = {
     color: '#2a2a3a',
     boxShadow: '2px 2px 0 #b8922e',
     // nowrap prevents the vertical-text bug: the bubble is positioned inside
-    // a 50px-wide wizard sprite container, and break-word + normal white-space
+    // a 50px-wide PM sprite container, and break-word + normal white-space
     // caused the browser to wrap after every character. Ceremony phrases are
     // short (<30 chars) and never need wrapping.
     whiteSpace: 'nowrap',

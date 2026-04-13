@@ -3,23 +3,19 @@ import PlayerFigure from './PlayerFigure';
 import SlotFiller from './SlotFiller';
 import Crown from './Crown';
 import { isFillerKey } from '../events/slotMachine';
+import { pixel } from './room/styles';
 
 /**
- * SlotReel — one of three vertical reels inside the slot-machine cabinet.
+ * SlotReel -- one of three vertical reels inside the slot-machine cabinet.
  *
- * --- ITERATION 2 ---
- * CRITICAL FIX: ribbon scroll bug. The ribbon is now a full-length vertical
- * column containing ALL pool entries. The ribbon's `transform: translateY()`
- * is the animated property — it changes when `currentIndex` changes.
- * CSS `transition` on the ribbon animates the actual transform change.
+ * The ribbon is a full-length vertical column containing ALL pool entries.
+ * The ribbon's `transform: translateY()` is the animated property -- it
+ * changes when `currentIndex` changes. CSS `transition` drives the animation.
  *
- * Two transition modes:
- *   - 'click': `transition: transform 60ms steps(2, end)` — hard snap
- *   - 'nudge': `transition: transform 440ms cubic-bezier(0.4, 0.0, 0.2, 1)` — smooth heavy ease
- *   - 'none': no transition (during full-speed spin)
- *
- * Slots inside are stacked vertically at `top: idx * SLOT_H` (absolute,
- * no transform). The ribbon's transform scrolls them.
+ * Three transition modes:
+ *   - 'click': 60ms stepped snap (reel clicking through entries)
+ *   - 'nudge': 440ms smooth ease (near-miss -> winner nudge)
+ *   - 'none': no transition (full-speed spin)
  */
 
 const SLOT_W = 140;
@@ -83,20 +79,12 @@ export default function SlotReel({
   const rawIndex = reelState?.currentIndex ?? 0;
   const clampedIndex = len === 0 ? 0 : ((rawIndex % len) + len) % len;
 
-  // iter 2: transition mode from phase state
   const transitionMode = reelState?.transitionMode || 'none';
   const nudgeProgress = reelState?.nudgeProgress;
   const isNudging = transitionMode === 'nudge' || (typeof nudgeProgress === 'number' && nudgeProgress < 1);
 
-  // iter 2: pulse halo for matched-hold phase
   const pulseActive = reelState?.pulseActive || false;
-
-  // v3: non-match reel dims to 65% opacity after match confirmation
   const dimmed = reelState?.dimmed || false;
-
-  // iter 2: full-length ribbon. All entries stacked vertically.
-  // The ribbon's translateY scrolls to center the current entry.
-  // centerOffset positions the selected slot centered in the SLOT_H window.
   const ribbonY = -(clampedIndex * SLOT_H);
 
   // Select CSS transition based on mode
@@ -124,7 +112,6 @@ export default function SlotReel({
       ? '#f5c542'
       : '#d4a853';
 
-  // iter 2: matched-hold pulse outer halo
   const reelFrameBorderColor = '#d4a853';
   const pulseHaloShadow = pulseActive ? '0 0 0 2px #f5c542' : 'none';
 
@@ -150,9 +137,7 @@ export default function SlotReel({
         }}
       />
 
-      {/* iter 2: Full-length ribbon. translateY scrolls to center currentIndex.
-          The ribbon contains ALL entries stacked vertically at absolute positions.
-          CSS transition animates the ribbon's transform when currentIndex changes. */}
+      {/* Full-length ribbon. translateY scrolls to center currentIndex. */}
       <div
         data-cm-ribbon
         style={{
@@ -207,8 +192,6 @@ export default function SlotReel({
     </div>
   );
 }
-
-const pixel = "'Press Start 2P', monospace";
 
 const styles = {
   reel: {

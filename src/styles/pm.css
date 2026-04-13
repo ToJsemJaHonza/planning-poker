@@ -1,0 +1,34 @@
+/* === PM sprite idle walk ===
+ * The PM's idle walk is now driven by JS (usePmPosition hook) instead
+ * of CSS keyframes. The old @keyframes were removed.
+ *
+ * Position: { x, y, facingLeft } computed in usePmPosition.js
+ * Sprite flip: inline scaleX(-1) on the sprite inner container
+ * Bubble flip: inline scaleX(-1) counteracting the sprite flip
+ */
+
+/* Sparkle burst from wand */
+@keyframes sparkle-burst {
+  0% { opacity: 1; transform: translate(0, 0) scale(0.3); }
+  50% { opacity: 1; transform: translate(calc(var(--dx) * 0.7), calc(var(--dy) * 0.7)) scale(1.3); }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(0); }
+}
+
+/* SPECIAL ROUND animations */
+@keyframes specialFade {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  75% { opacity: 1; }
+  100% { opacity: 0; pointer-events: none; }
+}
+
+@keyframes specialZoom {
+  0% { transform: scale(0.3) rotate(-5deg); opacity: 0; }
+  50% { transform: scale(1.1) rotate(2deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes specialPulse {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.2); opacity: 1; }
+}

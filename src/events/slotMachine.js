@@ -1,30 +1,22 @@
 /**
- * The Crowning Machine — pure helpers for the PM slot-machine ceremony.
+ * The Crowning Machine -- pure helpers for the PM slot-machine ceremony.
  *
  * Zero React imports. Nothing here touches the DOM, Firebase, or timers.
  * Everything is a pure function the leader runs at payload-write time OR
- * a pure function the phase machine consumes at tick time. See
- * `.claude/pipeline-tech-design.md` §1, §4 and §6 for context.
+ * a pure function the phase machine consumes at tick time.
  *
  * Firebase payload shape lives at `rooms/{code}/meta/pmRoulette` and is
- * written atomically in ONE set() — never field-by-field. The clients read
+ * written atomically in ONE set() -- never field-by-field. The clients read
  * it once, freeze candidates, and drive the phase machine from it.
  *
- * --- ITERATION 2 ---
- * Schema bumped to 2. Fields added: reel1LandingId, reel2LandingId,
- * outgoingLeaderId, outgoingLeaderLastData, outgoingLeaderHadCrown.
- * Fields removed: onARollMarqueeIndex (gamification dropped).
- * crownCount increment removed from promotion path.
- * ON_A_ROLL_PHRASES kept as dead code comment only.
- * Phase tables updated for matchedHold + postCabinet.
+ * Schema version 4. The ceremony has three acts:
+ *   Act 1: crownRemoval (PM walks to leader, lifts crown, walks back)
+ *   Act 2: slot-machine spin (cabinet drop, decel, matched-hold, winner reveal)
+ *   Act 3: crownDelivery (PM walks to winner, places crown, walks back)
  *
- * --- ITERATION 3 ---
- * Schema bumped to 3. Genuine matching logic: winner appears on 2+ reels.
- * Fields replaced: reel1LandingId/reel2LandingId -> winnerReelPair,
- *   nonMatchReelPlayerId, isTripleJackpot.
- * Bug fix: outgoingLeaderId now excluded from candidateIds before winner pick.
- * Phase tables shifted +400ms for farewell walk budget.
- * postCabinet trimmed to 2550ms; total ceremony 9.8s.
+ * Winner appears on 2 of 3 reels (winnerReelPair). The non-matching reel
+ * shows a different candidate (nonMatchReelPlayerId). Near-miss target
+ * appears on reel 2 one slot before the winner for dramatic tension.
  */
 
 // ---------------------------------------------------------------------------
@@ -53,7 +45,7 @@ export function isFillerKey(entry) {
   return typeof entry === 'string' && FILLER_TYPE_KEYS.includes(entry);
 }
 
-// Design doc §4 — 20 phrases the departing PM says as their farewell.
+// Farewell phrases the departing PM says during crown removal.
 export const FAREWELL_PHRASES = [
   "I'm taking PTO. Godspeed.",
   "Slack is down. I never existed.",
@@ -77,7 +69,7 @@ export const FAREWELL_PHRASES = [
   "Deprecated.",
 ];
 
-// Design doc §8 — 8 parting words for the crowning Wizard as he walks off.
+// Parting words the PM says as he walks off after crowning.
 export const CROWNING_BUBBLES = [
   "Carry on, young padawan.",
   "Inbox zero: achieved.",
@@ -89,13 +81,13 @@ export const CROWNING_BUBBLES = [
   "Keep the coffee hot.",
 ];
 
-// Design doc §10 — rare flourish variants. Ordered to match FLOURISH_WEIGHTS.
+// Rare flourish variants. Ordered to match FLOURISH_WEIGHTS.
 export const FLOURISH_VARIANTS = ['cat', 'royal', 'pigeon', 'crownBounce', 'glitch'];
 // Probabilities per variant. Sum = 0.05 (5% total flourish chance).
 export const FLOURISH_WEIGHTS = [0.01, 0.01, 0.005, 0.02, 0.005];
 
 // ---------------------------------------------------------------------------
-// Deterministic RNG — inlined mulberry32 per tech design §6.2
+// Deterministic RNG -- inlined mulberry32 (seeded PRNG)
 // ---------------------------------------------------------------------------
 
 /**
@@ -151,7 +143,7 @@ export function buildReelOrder(pool, seed) {
  * Move a specific entry to a specific index, shifting any existing entry at
  * that index back to wherever `entry` used to live. Pure — returns a new
  * array. Used to place the winner (and near-miss target) at known indices
- * in the rightmost reel without redoing the shuffle. Tech design §6.3.
+ * in the rightmost reel without redoing the shuffle.
  *
  * @param {string[]} arr
  * @param {string} entryId
@@ -174,7 +166,7 @@ export function placeEntryAt(arr, entryId, targetIndex) {
 // ---------------------------------------------------------------------------
 
 /**
- * Phase table v4 — tech design v4 §6.1. 3-act ceremony:
+ * Phase table -- 3-act ceremony:
  *   Act 1: crownRemoval (PM walks to leader, takes crown, walks back, leader exits)
  *   Act 2: cabinetDrop through cabinetOut (slot machine)
  *   Act 3: crownDelivery (PM walks to winner, places crown, walks back)
@@ -201,15 +193,14 @@ export const PHASE_TABLE_STANDARD = [
   { phase: 'done',           startAt: 21300, duration:    0 },
 ];
 
-// Compressed table — single candidate, no reel spin. Direct crown transfer.
-// v4: crownRemoval -> crownDelivery (no cabinet phases).
+// Compressed table -- single candidate, no reel spin. Direct crown transfer.
 export const PHASE_TABLE_COMPRESSED = [
   { phase: 'crownRemoval',    startAt:     0, duration: 5000 },
   { phase: 'crownDelivery',   startAt:  5000, duration: 5000 },
   { phase: 'done',            startAt: 10000, duration:    0 },
 ];
 
-// Reduced-motion table — v4: all walks replaced by instant position swaps.
+// Reduced-motion table -- all walks replaced by instant position swaps.
 export const PHASE_TABLE_REDUCED = [
   { phase: 'crownRemoval',    startAt:    0, duration:  400 },
   { phase: 'cabinetDrop',     startAt:  400, duration:  200 },
@@ -249,7 +240,7 @@ export function currentPhaseRow(table, elapsed) {
 }
 
 // ---------------------------------------------------------------------------
-// Reel decel curve — design doc v2 §3
+// Reel deceleration curve
 // ---------------------------------------------------------------------------
 
 /**
@@ -310,12 +301,6 @@ export function nonPmCandidatesSorted(players) {
  * call. Returns `null` when there's nothing to crown (zero candidates). The
  * leader runs this once per disconnect.
  *
- * iter 3 changes:
- *   - BUG FIX: outgoingLeaderId excluded from candidateIds BEFORE winner pick
- *   - Genuine matching logic: winner appears on 2 of 3 reels (winnerReelPair)
- *   - New fields: winnerReelPair, nonMatchReelPlayerId, isTripleJackpot
- *   - Removed fields: reel1LandingId, reel2LandingId
- *
  * @param {object} opts
  * @param {Record<string, any>} opts.players        live player map from Firebase
  * @param {number} [opts.now]                       Date.now() override for tests
@@ -345,9 +330,8 @@ export function buildCeremonyPayload({
   // The outgoing leader may still be in `players` when this runs because
   // Firebase onDisconnect removal is not instantaneous.
 
-  // v5: Track outgoing leader's index in the sorted list BEFORE filtering.
-  // This lets clients compute the leader's grid position with pure math
-  // (no DOM query).
+  // Track outgoing leader's index in the sorted list BEFORE filtering.
+  // This lets clients compute the leader's grid position with pure math.
   const allSortedIds = sorted.map(([id]) => id);
   const outgoingLeaderIndex = outgoingLeaderId != null
     ? allSortedIds.indexOf(outgoingLeaderId)
@@ -396,21 +380,20 @@ export function buildCeremonyPayload({
   // Standard case: pick winner uniformly at random from candidates.
   const winnerIdx = Math.floor(rand() * candidateIds.length);
   const winnerId = candidateIds[winnerIdx];
-  // v5: winner's index in the post-filter candidate list (for grid math).
   const winnerIndex = winnerIdx;
 
-  // v3: winner reel pair — which 2 of 3 reels show the winner.
+  // Winner reel pair -- which 2 of 3 reels show the winner.
   const VALID_PAIRS = [[0, 1], [0, 2], [1, 2]];
   const winnerReelPair = VALID_PAIRS[Math.floor(rand() * 3)];
   const isTripleJackpot = winnerReelPair[0] === 0 && winnerReelPair[1] === 1;
 
-  // v3: non-match reel player — random non-winner candidate for the 3rd reel.
+  // Non-match reel player -- random non-winner candidate for the 3rd reel.
   const nonMatchPool = candidateIds.filter(id => id !== winnerId);
   const nonMatchReelPlayerId = nonMatchPool.length > 0
     ? nonMatchPool[Math.floor(rand() * nonMatchPool.length)]
     : null;
 
-  // v3: near-miss target — appears on reel 2 before nudge to winner.
+  // Near-miss target -- appears on reel 2 before nudge to winner.
   // Prefer someone who is neither the winner nor the nonMatch player (variety).
   const nearMissPool = candidateIds.filter(
     id => id !== winnerId && id !== nonMatchReelPlayerId
@@ -469,11 +452,8 @@ function randomUint32FromRand(rand) {
 
 /**
  * Guard for payload validation — reject anything missing the essentials or
- * wrong schema version. Used by clients on read. Tech design v3 §1.4.
- *
- * iter 4: accepts schemaVersion 4 only. Old v1/v2/v3 payloads are treated as
- * absent per the backwards-compat rule (clients seeing wrong version treat
- * the payload as absent).
+ * wrong schema version. Used by clients on read. Old payloads with
+ * mismatched schema versions are treated as absent.
  */
 export function isValidCeremonyPayload(payload) {
   if (!payload || typeof payload !== 'object') return false;
@@ -518,15 +498,115 @@ export function isValidCeremonyPayload(payload) {
   if (!!payload.outgoingLeaderId !== !!payload.outgoingLeaderLastData) return false;
   if (typeof payload.outgoingLeaderHadCrown !== 'boolean') return false;
 
-  // v5: index fields for math-based grid position (replaces DOM query)
+  // Index fields for math-based grid position
   if (typeof payload.outgoingLeaderIndex !== 'number') return false;
   if (typeof payload.winnerIndex !== 'number') return false;
 
   return true;
 }
 
-/** True when the payload's TTL + grace has passed. Tech design §1.5. */
+/** True when the payload's TTL + grace has passed. */
 export function isStalePayload(payload, now = Date.now()) {
   if (!payload || typeof payload.expiresAt !== 'number') return true;
   return now > payload.expiresAt + CEREMONY_STALE_GRACE_MS;
+}
+
+// ---------------------------------------------------------------------------
+// Pre-computed reel orders — shared between useSlotMachine and SlotMachine
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the three reel orders for a ceremony, placing the winner and
+ * near-miss at their expected landing positions. Pure function — same
+ * ceremony always produces the same result.
+ *
+ * @param {object} ceremony  frozen Firebase payload
+ * @returns {{ reelOrders: string[][], winnerIndexInReel2: number, nearMissIndexInReel2: number|null, reel0LandingIdx: number, reel1LandingIdx: number, nonMatchReelIndex: number|null }}
+ */
+export function precomputeReelOrders(ceremony) {
+  if (!ceremony) {
+    return {
+      reelOrders: [[], [], []],
+      winnerIndexInReel2: 0,
+      nearMissIndexInReel2: null,
+      reel0LandingIdx: 0,
+      reel1LandingIdx: 0,
+      nonMatchReelIndex: null,
+    };
+  }
+
+  const pool = ceremony.wasCompressed
+    ? [ceremony.winnerId]
+    : [...ceremony.candidateIds, ...(ceremony.reelFillerIds || [])];
+  const raw = (ceremony.reelSeeds || [0, 0, 0]).map((seed) => buildReelOrder(pool, seed));
+
+  if (ceremony.wasCompressed) {
+    return {
+      reelOrders: raw,
+      winnerIndexInReel2: 0,
+      nearMissIndexInReel2: null,
+      reel0LandingIdx: 0,
+      reel1LandingIdx: 0,
+      nonMatchReelIndex: null,
+    };
+  }
+
+  let reel0 = raw[0];
+  let reel1 = raw[1];
+  let reel2 = raw[2];
+
+  const nonMatchReelIndex = ceremony.winnerReelPair
+    ? [0, 1, 2].find(i => !ceremony.winnerReelPair.includes(i))
+    : null;
+
+  if (ceremony.winnerReelPair) {
+    const midIdx0 = Math.max(1, Math.min(reel0.length - 1, 4));
+    const midIdx1 = Math.max(1, Math.min(reel1.length - 1, 4));
+
+    if (ceremony.winnerReelPair.includes(0)) {
+      reel0 = placeEntryAt(reel0, ceremony.winnerId, midIdx0);
+    } else if (ceremony.nonMatchReelPlayerId) {
+      reel0 = placeEntryAt(reel0, ceremony.nonMatchReelPlayerId, midIdx0);
+    }
+
+    if (ceremony.winnerReelPair.includes(1)) {
+      reel1 = placeEntryAt(reel1, ceremony.winnerId, midIdx1);
+    } else if (ceremony.nonMatchReelPlayerId) {
+      reel1 = placeEntryAt(reel1, ceremony.nonMatchReelPlayerId, midIdx1);
+    }
+  }
+
+  const finalStopIndex = Math.max(1, Math.min(reel2.length - 1, 6));
+  if (ceremony.winnerId) {
+    reel2 = placeEntryAt(reel2, ceremony.winnerId, finalStopIndex);
+  }
+  if (ceremony.nearMissTargetId) {
+    reel2 = placeEntryAt(reel2, ceremony.nearMissTargetId, Math.max(0, finalStopIndex - 1));
+  }
+
+  const reelOrders = [reel0, reel1, reel2];
+
+  let reel0LandingIdx = 0;
+  let reel1LandingIdx = 0;
+  if (ceremony.winnerReelPair) {
+    if (ceremony.winnerReelPair.includes(0)) {
+      reel0LandingIdx = reel0.indexOf(ceremony.winnerId);
+    } else if (ceremony.nonMatchReelPlayerId) {
+      reel0LandingIdx = reel0.indexOf(ceremony.nonMatchReelPlayerId);
+    }
+    if (ceremony.winnerReelPair.includes(1)) {
+      reel1LandingIdx = reel1.indexOf(ceremony.winnerId);
+    } else if (ceremony.nonMatchReelPlayerId) {
+      reel1LandingIdx = reel1.indexOf(ceremony.nonMatchReelPlayerId);
+    }
+  }
+
+  return {
+    reelOrders,
+    winnerIndexInReel2: reel2.indexOf(ceremony.winnerId),
+    nearMissIndexInReel2: ceremony.nearMissTargetId ? reel2.indexOf(ceremony.nearMissTargetId) : null,
+    reel0LandingIdx,
+    reel1LandingIdx,
+    nonMatchReelIndex,
+  };
 }

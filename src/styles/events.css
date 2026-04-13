@@ -1,0 +1,124 @@
+/* === DBB Pipeline (Tomáš entrance) === */
+.dbb-tomas-emerge-right,
+.dbb-tomas-emerge-left,
+.dbb-tomas-emerge-up,
+.dbb-tomas-emerge-down {
+  animation-duration: 600ms;
+  animation-timing-function: steps(8, end);
+  animation-fill-mode: forwards;
+}
+
+.dbb-tomas-emerge-right { transform-origin: left center;   animation-name: dbbTomasEmergeRight; }
+.dbb-tomas-emerge-left  { transform-origin: right center;  animation-name: dbbTomasEmergeLeft;  }
+.dbb-tomas-emerge-down  { transform-origin: center top;    animation-name: dbbTomasEmergeDown;  }
+.dbb-tomas-emerge-up    { transform-origin: center bottom; animation-name: dbbTomasEmergeUp;    }
+
+@keyframes dbbTomasEmergeRight {
+  0%   { opacity: 0; transform: scaleX(0.15) scaleY(0.85); }
+  30%  { opacity: 1; transform: scaleX(0.6)  scaleY(1.05); }
+  60%  { opacity: 1; transform: scaleX(1.1)  scaleY(0.95); }
+  100% { opacity: 1; transform: scaleX(1)    scaleY(1);    }
+}
+@keyframes dbbTomasEmergeLeft {
+  0%   { opacity: 0; transform: scaleX(0.15) scaleY(0.85); }
+  30%  { opacity: 1; transform: scaleX(0.6)  scaleY(1.05); }
+  60%  { opacity: 1; transform: scaleX(1.1)  scaleY(0.95); }
+  100% { opacity: 1; transform: scaleX(1)    scaleY(1);    }
+}
+@keyframes dbbTomasEmergeDown {
+  0%   { opacity: 0; transform: scaleY(0.15) scaleX(0.85); }
+  30%  { opacity: 1; transform: scaleY(0.6)  scaleX(1.05); }
+  60%  { opacity: 1; transform: scaleY(1.1)  scaleX(0.95); }
+  100% { opacity: 1; transform: scaleY(1)    scaleX(1);    }
+}
+@keyframes dbbTomasEmergeUp {
+  0%   { opacity: 0; transform: scaleY(0.15) scaleX(0.85); }
+  30%  { opacity: 1; transform: scaleY(0.6)  scaleX(1.05); }
+  60%  { opacity: 1; transform: scaleY(1.1)  scaleX(0.95); }
+  100% { opacity: 1; transform: scaleY(1)    scaleX(1);    }
+}
+
+@keyframes dbb-steam-puff {
+  0%   { opacity: 0; transform: translate(-50%, 0)    scale(0.5); }
+  25%  { opacity: 1; transform: translate(-50%, -4px) scale(1);   }
+  70%  { opacity: 0.7; transform: translate(-50%, -8px) scale(1.4); }
+  100% { opacity: 0; transform: translate(-50%, -14px) scale(1.8); }
+}
+.dbb-steam-puff {
+  position: absolute;
+  width: 20px; height: 6px;
+  background: #c0c4ca;
+  box-shadow: -10px 0 0 0 #c0c4ca, 10px 0 0 0 #c0c4ca, -16px 0 0 0 rgba(192,196,202,0.55), 16px 0 0 0 rgba(192,196,202,0.55), 0 -6px 0 0 rgba(192,196,202,0.7);
+  pointer-events: none;
+  animation: dbb-steam-puff 450ms steps(4, end) forwards;
+}
+
+@keyframes dbb-mouth-flash {
+  0% { opacity: 0; } 10% { opacity: 1; } 40% { opacity: 0.6; } 100% { opacity: 0; }
+}
+.dbb-mouth-flash {
+  position: absolute; inset: 5px;
+  background: #d8dbe0;
+  animation: dbb-mouth-flash 450ms steps(4, end) forwards;
+  pointer-events: none; mix-blend-mode: screen;
+}
+
+.dbb-label-on-pipe { image-rendering: pixelated; }
+
+/* === Chicken easter egg === */
+@keyframes chickenRun {
+  0% { left: -50px; top: 60%; transform: scaleX(1); }
+  10% { top: 55%; } 20% { top: 65%; } 30% { top: 50%; } 40% { top: 60%; }
+  50% { top: 55%; } 60% { top: 65%; } 70% { top: 50%; } 80% { top: 60%; } 90% { top: 55%; }
+  100% { left: calc(100vw + 50px); top: 60%; transform: scaleX(1); }
+}
+
+/* === Richard's Shinkansen train === */
+@keyframes trainArriveLeft  { 0% { left: -500px; }              100% { left: calc(50% - 208px); } }
+@keyframes trainDepartLeft  { 0% { left: calc(50% - 208px); }   100% { left: calc(100vw + 500px); } }
+@keyframes trainArriveRight { 0% { left: calc(100vw + 500px); } 100% { left: calc(50% - 208px); } }
+@keyframes trainDepartRight { 0% { left: calc(50% - 208px); }   100% { left: -500px; } }
+
+.richard-exit-train { will-change: transform; }
+
+/* === Dust puff === */
+@keyframes dust-puff {
+  0%   { opacity: 0; transform: translateX(-50%) scaleX(0.6); }
+  15%  { opacity: 1; }
+  60%  { opacity: 0.85; transform: translateX(-50%) scaleX(1.1); }
+  100% { opacity: 0;    transform: translateX(-50%) scaleX(1.6); }
+}
+.dust-puff {
+  position: absolute; left: 50%; bottom: -2px;
+  width: 18px; height: 6px;
+  background: #c9bfa8;
+  box-shadow: -9px 0 0 0 #c9bfa8, 9px 0 0 0 #c9bfa8, -14px 0 0 0 rgba(201,191,168,0.6), 14px 0 0 0 rgba(201,191,168,0.6);
+  pointer-events: none;
+  animation: dust-puff 360ms steps(3, end) forwards;
+}
+
+/* === Name tag pulse === */
+@keyframes name-tag-pulse {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 0 rgba(255,215,106,0); }
+  50%  { transform: scale(1.22); box-shadow: 0 0 0 2px #ffd76a; }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(255,215,106,0); }
+}
+.name-tag-arrived { animation: name-tag-pulse 360ms ease-out 1; }
+
+/* === OKTA sheep === */
+@keyframes sheepRun {
+  0% { left: -60px; top: 45%; } 20% { top: 40%; } 40% { top: 50%; }
+  60% { top: 42%; } 80% { top: 48%; } 100% { left: calc(100vw + 60px); top: 45%; }
+}
+@keyframes sheepTextRun {
+  0% { left: -100%; top: 35%; } 100% { left: 120%; top: 35%; }
+}
+
+/* === Reveal background numbers === */
+@keyframes revealBgFade {
+  0% { opacity: 0; } 8% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; }
+}
+@keyframes revealNumberPop {
+  0% { opacity: 0; transform: scale(0.5); } 10% { opacity: 0.5; transform: scale(1.15); }
+  20% { opacity: 0.35; transform: scale(1); } 75% { opacity: 0.25; } 100% { opacity: 0; }
+}
