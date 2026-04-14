@@ -91,4 +91,33 @@ describe('StressMeter', () => {
     // The component never disappeared (returned null)
     expect(container.innerHTML).not.toBe('');
   });
+
+  it('survives transitioning from stage 0 (null render) to stage 2+ without a hooks-order crash', () => {
+    // Regression: the early-return guard used to live BEFORE the hook
+    // declarations. Mounting at stage 0 skipped the hooks entirely; bumping
+    // to stage 2 then tried to register them for the first time, which in
+    // React 19 logs an internal "Expected static flag was missing" error
+    // (and in strict mode throws "Rendered more hooks than during the
+    // previous render"). Hooks now run unconditionally, so no such
+    // diagnostic should appear.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { container, rerender } = render(<StressMeter stage={0} startedAt={0} />);
+      expect(container.innerHTML).toBe('');
+
+      expect(() => {
+        rerender(<StressMeter stage={2} startedAt={Date.now() - 45000} />);
+      }).not.toThrow();
+      expect(container.textContent).toContain('STRESS');
+
+      const hookOrderComplaints = errorSpy.mock.calls.filter(args =>
+        args.some(a => typeof a === 'string'
+          && (a.includes('Rendered more hooks')
+            || a.includes('Expected static flag was missing'))),
+      );
+      expect(hookOrderComplaints).toEqual([]);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });
