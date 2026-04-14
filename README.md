@@ -173,13 +173,14 @@ Tests run in jsdom with an [in-memory Firebase mock](src/test/firebase-mock.js) 
 
 ## Deployment
 
-Pushes to `master` trigger a three-stage CI/CD pipeline (`.github/workflows/ci.yml`):
+`.github/workflows/ci.yml` runs four jobs that gate every change:
 
-1. **Test** — runs on every push and PR
-2. **Build** — injects Firebase config from GitHub Secrets, produces the static bundle
-3. **Deploy** — publishes to GitHub Pages
+1. **test** — Vitest suite on every push and PR
+2. **lint** — ESLint, parallel to `test`
+3. **build** — Vite production bundle; runs on both PRs (as a build-succeeds gate) and master pushes (produces the Pages artifact)
+4. **deploy** — *master only.* Publishes the Pages artifact to GitHub Pages.
 
-> **Self-hosting:** The Vite config sets `base: '/planning-poker/'`. If you deploy to a different path, update the `base` value in `vite.config.js`.
+> **Self-hosting:** The Vite config sets `base: '/planning-poker/'`. If you deploy to a different path, update it in `vite.config.js`.
 
 ---
 
