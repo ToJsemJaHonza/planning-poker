@@ -3,7 +3,7 @@ import { pixel } from './room/styles';
 
 export default function NamePrompt({ onSubmit }) {
   const [name, setName] = useState('');
-  const sanitized = name.trim().replace(/[.$#\[\]/]/g, '');
+  const sanitized = name.trim().replace(/[.$#[\]/]/g, '');
   const showInvalidHint = name.trim().length > 0 && sanitized.length === 0;
 
   const handleSubmit = (e) => {

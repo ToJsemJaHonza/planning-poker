@@ -64,10 +64,10 @@ describe('SingleCard — flip animation', () => {
   });
 
   it('stagger delay offsets per playerIndex', () => {
-    const { container: c0 } = render(
+    render(
       <SingleCard data={{ vote: '3' }} phase="voting" playerIndex={0} />
     );
-    const { container: c1 } = render(
+    render(
       <SingleCard data={{ vote: '5' }} phase="voting" playerIndex={1} />
     );
 

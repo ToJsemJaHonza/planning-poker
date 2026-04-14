@@ -319,7 +319,7 @@ describe('Richard hunger (GH issue #1)', () => {
 
 describe('name sanitization (NamePrompt rules)', () => {
   // NamePrompt strips . $ # [ ] / — we test the regex directly
-  const sanitize = (name) => String(name).trim().replace(/[.$#\[\]/]/g, '');
+  const sanitize = (name) => String(name).trim().replace(/[.$#[\]/]/g, '');
 
   it('strips Firebase-unsafe characters', () => {
     expect(sanitize('R.I.C.H.A.R.D')).toBe('RICHARD');

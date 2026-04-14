@@ -31,6 +31,116 @@
   [data-player-tag] { max-width: 120px !important; font-size: 0.45rem !important; }
 }
 
+/* === Card picker responsive ===
+ * Default cards are 48×64 + 6px gap. On a 320px viewport that overflows
+ * (7 cards × 48 + 6 × 6 = 372), so we shrink before flex-wrap kicks in
+ * and breaks the row into two awkward halves.
+ */
+@media (max-width: 560px) {
+  [data-card-picker] { padding: 0.4rem 0.6rem !important; }
+  [data-card-picker] [data-card-row] { gap: 4px !important; }
+  [data-card-picker] [data-card] {
+    width: 40px !important;
+    height: 54px !important;
+    font-size: 0.75rem !important;
+  }
+}
+@media (max-width: 380px) {
+  [data-card-picker] { padding: 0.3rem 0.4rem !important; }
+  [data-card-picker] [data-card-row] { gap: 3px !important; }
+  [data-card-picker] [data-card] {
+    width: 34px !important;
+    height: 46px !important;
+    font-size: 0.65rem !important;
+  }
+}
+
+/* === Split picker responsive ===
+ * Below 380px, stack the FE/BE label above its row instead of beside it
+ * — the side-by-side label eats too much horizontal room for 7 cards to
+ * fit even at the smallest size.
+ */
+@media (max-width: 560px) {
+  [data-split-picker] { padding: 0.3rem 0.4rem !important; }
+  [data-split-picker] [data-split-cards] { gap: 3px !important; }
+  [data-split-picker] [data-split-card] {
+    width: 30px !important;
+    height: 42px !important;
+    font-size: 0.6rem !important;
+  }
+  [data-split-picker] [data-split-label] { width: 22px !important; font-size: 0.5rem !important; }
+}
+@media (max-width: 380px) {
+  [data-split-picker] [data-split-row] {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 2px !important;
+  }
+  [data-split-picker] [data-split-label] {
+    width: auto !important;
+    text-align: center !important;
+  }
+}
+
+/* === Result modal histogram responsive ===
+ * 7 bars at 24px each + 6px gaps barely fits the modal at desktop; on
+ * mobile we shrink bar width and gap so the chart never overflows the
+ * 90vw modal width.
+ */
+@media (max-width: 560px) {
+  [data-result-modal] { padding: 1rem !important; }
+  [data-result-section] [data-result-chart] {
+    gap: 3px !important;
+    min-height: 60px !important;
+  }
+  [data-result-bar] > div:nth-child(2) {
+    width: 16px !important;
+  }
+}
+
+/* === Landing role buttons stack ===
+ * Two side-by-side role buttons overflow at <420px (each ~150px wide
+ * plus 1rem gap). Stack them so each gets full width.
+ */
+@media (max-width: 420px) {
+  [data-landing] [data-role-row] {
+    flex-direction: column !important;
+    width: 100%;
+    padding: 0 1.5rem;
+  }
+  [data-landing] [data-role-row] button { width: 100%; }
+}
+
+/* === Phase bar responsive === */
+@media (max-width: 560px) {
+  [data-phase-bar] { gap: 0.4rem !important; padding: 0.5rem !important; }
+  [data-phase-bar] [data-phase-label] { font-size: 0.55rem !important; }
+  [data-phase-bar] button {
+    padding: 0.35rem 0.55rem !important;
+    font-size: 0.5rem !important;
+  }
+}
+
+/* === Task bar responsive === */
+@media (max-width: 560px) {
+  [data-task-bar] { padding: 0.4rem 0.6rem !important; }
+  [data-task-display] { font-size: 0.55rem !important; }
+  [data-task-input] { font-size: 0.55rem !important; padding: 0.3rem 0.5rem !important; }
+}
+
+/* === Player grid responsive ===
+ * Tighten gaps so more figures fit per row on phones. The figure
+ * dimensions themselves are pixel-art (5px per pixel × 12 wide = 60px)
+ * and intentionally NOT responsive — shrinking pixel art looks bad.
+ */
+@media (max-width: 560px) {
+  [data-player-list] { padding: 0.8rem 0.4rem !important; }
+  [data-player-grid] { gap: 12px 16px !important; }
+}
+@media (max-width: 380px) {
+  [data-player-grid] { gap: 10px 12px !important; }
+}
+
 /* === Reduced motion === */
 @media (prefers-reduced-motion: reduce) {
   [class*="float"], [class*="bob"], [class*="idle"],
@@ -59,4 +169,33 @@
   .shame-tremble-1, .shame-tremble-2, .shame-tremble-3,
   .shame-tremble-4, .shame-tremble-5 { animation: none !important; }
   .screen-shake { animation: none !important; }
+
+  /* === Entrance event cinematics ===
+   * Chicken / sheep / train / reveal-bg set their `animation` inline, so a
+   * class-level `animation: none` override doesn't reach them. Instead we
+   * redefine the keyframes inside the reduced-motion block to a single
+   * frame — the final off-screen position for cross-screen events, or a
+   * fully-transparent state for the reveal background. The animation still
+   * runs but produces no visible motion. */
+  @keyframes chickenRun       { from, to { left: calc(100vw + 50px);  top: 60%; transform: scaleX(1); } }
+  @keyframes sheepRun         { from, to { left: calc(100vw + 60px);  top: 45%; } }
+  @keyframes sheepTextRun     { from, to { left: 120%;                top: 35%; } }
+  @keyframes trainArriveLeft  { from, to { left: -500px; } }
+  @keyframes trainArriveRight { from, to { left: calc(100vw + 500px); } }
+  @keyframes trainDepartLeft  { from, to { left: -500px; } }
+  @keyframes trainDepartRight { from, to { left: calc(100vw + 500px); } }
+  @keyframes revealBgFade     { from, to { opacity: 0; } }
+  @keyframes revealNumberPop  { from, to { opacity: 0; } }
+
+  /* DBB Tomáš pipeline — these are class-driven, so direct disable works. */
+  .dbb-tomas-emerge-right, .dbb-tomas-emerge-left,
+  .dbb-tomas-emerge-up,    .dbb-tomas-emerge-down,
+  .dbb-steam-puff, .dbb-mouth-flash { animation: none !important; }
+
+  /* Richard's walk from train door to his slot uses inline transform +
+   * transition (not a CSS animation), so killing the transition snaps him
+   * directly to his resting position. Dust puff is purely decorative. */
+  .richard-exit-train { transition: none !important; }
+  .dust-puff          { animation: none !important; opacity: 0 !important; }
+  .name-tag-arrived   { animation: none !important; }
 }

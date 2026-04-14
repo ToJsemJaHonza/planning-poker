@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ENTRANCE_EVENTS,
   ENTRANCE_CHANCE,
+  CINEMATIC_CATEGORY,
   findEntranceByType,
   findEntranceForName,
 } from './entranceEvents';
@@ -68,8 +69,12 @@ export function useEntranceEvents({
   }, [syncedEvent]);
 
   // Which registry entry (if any) matches the currently-active Firebase event?
+  // We only consider name-cinematics here — overlay-category cinematics
+  // (chicken, okta, specialRound) are mounted by the OverlayStage and
+  // must not feed back into the slot-claiming / mutex logic that lives
+  // in this hook.
   const activeEvent = syncedEvent ? findEntranceByType(syncedEvent.type) : null;
-  const activeEntrance = activeEvent
+  const activeEntrance = activeEvent && activeEvent.category === CINEMATIC_CATEGORY.NAME
     ? { event: activeEvent, payload: syncedEvent }
     : null;
 

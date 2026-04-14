@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { pixel } from '../room/styles';
+import { useFrameTicker } from '../../engine/useFrameTicker';
 
 const SHAME_TEXTS = {
   1: ['👀', 'hmm...', 'tick tock', '...', '💭'],
@@ -24,59 +25,52 @@ let textIdCounter = 0;
 
 export default function ShameText({ stage, holdoutName, isHoldout }) {
   const [texts, setTexts] = useState([]);
-  const intervalRef = useRef(null);
+  const active = stage >= 1 && isHoldout;
+  const config = active ? SHAME_TEXT_CONFIG[stage] : null;
 
+  // Reset text pool when stage drops or holdout changes.
   useEffect(() => {
-    if (stage < 1 || !isHoldout) {
-      setTexts([]);
-      return;
-    }
+    if (!active) setTexts([]);
+  }, [active, stage, holdoutName]);
 
-    const config = SHAME_TEXT_CONFIG[stage];
+  const spawnRef = useRef(null);
+  const spawn = useCallback(() => {
+    if (!active) return;
+    const cfg = SHAME_TEXT_CONFIG[stage];
     const pool = SHAME_TEXTS[stage];
+    const raw = pool[Math.floor(Math.random() * pool.length)];
+    const text = raw.replace('{name}', holdoutName || '???');
+    const rot = (Math.random() - 0.5) * (stage >= 5 ? 60 : stage >= 3 ? 30 : 10);
+    const id = textIdCounter++;
 
-    const spawn = () => {
-      const raw = pool[Math.floor(Math.random() * pool.length)];
-      const text = raw.replace('{name}', holdoutName || '???');
-      const rot = (Math.random() - 0.5) * (stage >= 5 ? 60 : stage >= 3 ? 30 : 10);
-      const id = textIdCounter++;
+    setTexts(prev => {
+      const max = stage >= 4 ? 15 : 8;
+      const base = prev.length >= max ? prev.slice(1) : prev;
+      return [...base, {
+        id, text, rot,
+        left: 10 + Math.random() * 80,
+        top: 5 + Math.random() * 60,
+        size: cfg.size,
+        opacity: Math.min(cfg.opacity, 0.35),
+        color: stage >= 5 && Math.random() > 0.5 ? '#fff' : cfg.color,
+        duration: cfg.duration,
+      }];
+    });
 
-      setTexts(prev => {
-        // Cap active texts to prevent DOM overload
-        const max = stage >= 4 ? 15 : 8;
-        const base = prev.length >= max ? prev.slice(1) : prev;
-        return [...base, {
-          id, text, rot,
-          left: 10 + Math.random() * 80,
-          // Confine to upper 70% of viewport to keep card picker clear
-          top: 5 + Math.random() * 60,
-          size: config.size,
-          opacity: Math.min(config.opacity, 0.35),
-          color: stage >= 5 && Math.random() > 0.5 ? '#fff' : config.color,
-          duration: config.duration,
-        }];
-      });
+    setTimeout(() => {
+      setTexts(prev => prev.filter(t => t.id !== id));
+    }, cfg.duration + 100);
+  }, [active, stage, holdoutName]);
 
-      // Clean up after animation
-      setTimeout(() => {
-        setTexts(prev => prev.filter(t => t.id !== id));
-      }, config.duration + 100);
-    };
+  spawnRef.current = spawn;
 
-    spawn(); // Immediate first text
-    intervalRef.current = setInterval(spawn, config.interval);
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [stage, isHoldout, holdoutName]);
-
-  // Cleanup on unmount
+  // Fire one spawn synchronously on activation so a text appears before
+  // the first MotionRuntime tick (some test/headless paths never flush rAF).
   useEffect(() => {
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, []);
+    if (active) spawnRef.current?.();
+  }, [active, stage, holdoutName]);
+
+  useFrameTicker(config?.interval ?? 0, spawn, active);
 
   if (texts.length === 0) return null;
 

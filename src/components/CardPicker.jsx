@@ -4,16 +4,17 @@ const CARD_VALUES = ['3', '5', '8', '13', '21', '?', '☕'];
 
 export default function CardPicker({ selectedVote, onVote, disabled, label, accentColor, bottomOffset = 0 }) {
   return (
-    <div style={{ ...styles.container, bottom: bottomOffset }}>
+    <div data-card-picker style={{ ...styles.container, bottom: bottomOffset }}>
       {label && (
         <div style={{ ...styles.label, color: accentColor || '#d4a853' }}>
           {label}
         </div>
       )}
-      <div style={styles.cards}>
+      <div data-card-row style={styles.cards}>
         {CARD_VALUES.map((value) => (
           <button
             key={value}
+            data-card
             className={`poker-card${selectedVote === value ? ' poker-card--selected' : ''}`}
             onClick={() => onVote(value)}
             disabled={disabled}
@@ -33,13 +34,14 @@ export default function CardPicker({ selectedVote, onVote, disabled, label, acce
 // Wrapper for split mode — two pickers stacked
 export function SplitCardPicker({ voteFe, voteBe, onVoteFe, onVoteBe, disabled, bottomOffset = 0 }) {
   return (
-    <div style={{ ...styles.splitContainer, bottom: bottomOffset }}>
-      <div style={styles.splitRow}>
-        <div style={{ ...styles.splitLabel, color: '#3498db' }}>FE</div>
-        <div style={styles.splitCards}>
+    <div data-split-picker style={{ ...styles.splitContainer, bottom: bottomOffset }}>
+      <div data-split-row style={styles.splitRow}>
+        <div data-split-label style={{ ...styles.splitLabel, color: '#3498db' }}>FE</div>
+        <div data-split-cards style={styles.splitCards}>
           {CARD_VALUES.map((value) => (
             <button
               key={value}
+              data-split-card
               className={`poker-card poker-card--split${voteFe === value ? ' poker-card--selected' : ''}`}
               onClick={() => onVoteFe(value)}
               disabled={disabled}
@@ -53,12 +55,13 @@ export function SplitCardPicker({ voteFe, voteBe, onVoteFe, onVoteBe, disabled, 
           ))}
         </div>
       </div>
-      <div style={styles.splitRow}>
-        <div style={{ ...styles.splitLabel, color: '#27ae60' }}>BE</div>
-        <div style={styles.splitCards}>
+      <div data-split-row style={styles.splitRow}>
+        <div data-split-label style={{ ...styles.splitLabel, color: '#27ae60' }}>BE</div>
+        <div data-split-cards style={styles.splitCards}>
           {CARD_VALUES.map((value) => (
             <button
               key={value}
+              data-split-card
               className={`poker-card poker-card--split${voteBe === value ? ' poker-card--selected' : ''}`}
               onClick={() => onVoteBe(value)}
               disabled={disabled}

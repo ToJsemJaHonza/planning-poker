@@ -1,44 +1,39 @@
 import { useEffect, useRef } from 'react';
+import { subscribe } from './MotionRuntime';
 
 /**
- * Shared animation loop driven by requestAnimationFrame.
+ * Wall-clock-elapsed animation loop. Backwards-compatible API for the
+ * ceremony hooks (`useSlotMachine`, `useRoomStartCrowning`).
  *
- * Replaces the `setInterval(tick, 16)` pattern used in ceremony hooks.
- * rAF naturally syncs with the browser's paint cycle (60fps or 120fps),
- * avoids double-paints, and correctly pauses when the tab is backgrounded.
+ * Internally this delegates to `MotionRuntime` so all subsystems share one
+ * `requestAnimationFrame` and the same visibility-pause behaviour.
  *
  * @param {((elapsed: number) => void) | null} callback
- *   Called every frame with the elapsed ms since the loop started.
- *   Pass null to pause/stop the loop.
+ *   Called every frame with the elapsed ms since the loop's logical start.
+ *   Pass null to suspend the loop.
  * @param {number} [startedAt] - absolute timestamp (Date.now()) of the
  *   animation's logical start. If provided, elapsed = Date.now() - startedAt.
- *   Otherwise elapsed counts from when the loop mounted.
+ *   Otherwise elapsed counts from when the loop subscribed.
  */
 export function useAnimationLoop(callback, startedAt) {
-  const rafRef = useRef(null);
   const callbackRef = useRef(callback);
   callbackRef.current = callback;
 
-  useEffect(() => {
-    if (!callbackRef.current) return;
+  // Effect re-runs only when the loop activates/suspends or its origin shifts.
+  const enabled = callback !== null && callback !== undefined;
 
+  useEffect(() => {
+    if (!enabled) return undefined;
     const origin = startedAt ?? Date.now();
 
-    const tick = () => {
-      if (!callbackRef.current) return;
-      const elapsed = Date.now() - origin;
-      callbackRef.current(elapsed);
-      rafRef.current = requestAnimationFrame(tick);
-    };
+    // Fire one synchronous tick so the first paint already reflects t=0.
+    // Matches the legacy behaviour of the old standalone rAF loop.
+    callbackRef.current?.(Math.max(0, Date.now() - origin));
 
-    // Fire immediately, then schedule next frame
-    tick();
-
-    return () => {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-    };
-  }, [callback === null, startedAt]); // restart when callback toggles on/off or startedAt changes
+    return subscribe(() => {
+      const cb = callbackRef.current;
+      if (!cb) return;
+      cb(Math.max(0, Date.now() - origin));
+    });
+  }, [enabled, startedAt]);
 }

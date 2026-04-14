@@ -10,11 +10,9 @@ export default function PhaseBar({
   onReveal,
   onNewRound,
 }) {
-  const allVoted = phase === 'voting' && votedCount === playerCount && playerCount > 0;
-
   return (
-    <div style={styles.phaseBar}>
-      <span style={styles.phaseLabel}>
+    <div data-phase-bar style={styles.phaseBar}>
+      <span data-phase-label style={styles.phaseLabel}>
         {phase === 'voting'
           ? `Voting (${votedCount}/${playerCount})${splitMode ? ' FE/BE' : ''}`
           : 'Results'}

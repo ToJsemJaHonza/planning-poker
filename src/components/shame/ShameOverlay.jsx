@@ -4,7 +4,7 @@ import ShameText from './ShameText';
  * Orchestrates all shame overlay effects: vignette, floating text, screen shake.
  * Rendered in Room.jsx above the player list.
  */
-export default function ShameOverlay({ stage, holdoutName, isHoldout, elapsed }) {
+export default function ShameOverlay({ stage, holdoutName, isHoldout }) {
   if (stage < 1) return null;
 
   // Vignette: stage 3+ for holdout only

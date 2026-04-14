@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -29,10 +29,8 @@ function baseReturn() {
     phase: roomState.phase ?? 'voting',
     task: roomState.task ?? '',
     splitMode: roomState.splitMode ?? false,
-    specialRound: false,
     pmQuote: '',
     setPmQuote: vi.fn(),
-    oktaEvent: false,
     triggerOkta: triggerOktaMock,
     syncedEvent: null,
     fireSyncedEvent: vi.fn(),
@@ -42,7 +40,7 @@ function baseReturn() {
     roomStartCrowning: roomState.roomStartCrowning ?? null,
     roomDeleted: roomState.roomDeleted ?? false,
     isLeader: roomState.isLeader ?? false,
-    connected: true,
+    connected: roomState.connected ?? true,
     leaderChangedAt: 0,
     createdAt: 0,
     castVote: vi.fn(),
@@ -198,7 +196,7 @@ describe('Room — rendering & controls', () => {
     expect(await screen.findByRole('button', { name: /Copied/i })).toBeInTheDocument();
   });
 
-  it('Y6: clipboard rejection flips the button to "✗ Copy failed"', async () => {
+  it('Y6: clipboard rejection opens the fallback modal with the URL', async () => {
     const user = userEvent.setup();
     Object.defineProperty(navigator, 'clipboard', {
       value: { writeText: vi.fn().mockRejectedValue(new Error('nope')) },
@@ -212,10 +210,14 @@ describe('Room — rendering & controls', () => {
       isLeader: true,
     });
 
-    render(<Room roomCode="TESTRM" playerName="Alice" role="player" />);
+    const { container } = render(<Room roomCode="TESTRM" playerName="Alice" role="player" />);
 
     await user.click(screen.getByRole('button', { name: /invite/i }));
-    expect(await screen.findByRole('button', { name: /Copy failed/i })).toBeInTheDocument();
+    // Fallback modal mounts with the URL pre-filled so users can copy manually.
+    const fallback = await screen.findByText(/Copy this link/i);
+    expect(fallback).toBeInTheDocument();
+    const input = container.querySelector('[data-clipboard-fallback-input]');
+    expect(input.value).toContain('?room=TESTRM');
   });
 
   // === P6 — OKTA modifier guard ==========================================
@@ -276,5 +278,59 @@ describe('Room — rendering & controls', () => {
 
     expect(screen.queryByPlaceholderText(/task name/i)).not.toBeInTheDocument();
     expect(screen.getByText('Existing task')).toBeInTheDocument();
+  });
+
+  // === RC1 — reconnect banner =========================================
+  // Before this fix, `!connected` short-circuited to the "Connecting…"
+  // screen and visually wiped the room any time the WebSocket dropped.
+  // After: the room keeps rendering and a fixed banner overlays it.
+  describe('reconnect banner (mid-session disconnect)', () => {
+    it('renders the "Connecting…" screen while connected has never been true', () => {
+      setState({
+        players: { Alice: makePlayer('Alice', { joinedAt: 1, isLeader: true }) },
+        connected: false,
+      });
+
+      render(<Room roomCode="TESTRM" playerName="Alice" role="player" />);
+
+      expect(screen.getByText(/Connecting to room TESTRM/i)).toBeInTheDocument();
+      expect(document.querySelector('[data-reconnect-banner]')).not.toBeInTheDocument();
+    });
+
+    it('keeps the room rendered AND shows the banner when connected drops mid-session', () => {
+      setState({
+        players: { Alice: makePlayer('Alice', { joinedAt: 1, isLeader: true }) },
+        phase: 'voting',
+        isLeader: true,
+        task: 'Sticky task',
+        connected: true,
+      });
+
+      const { rerender } = render(
+        <Room roomCode="TESTRM" playerName="Alice" role="player" />
+      );
+
+      // Sanity: room rendered, no banner yet, no Connecting screen.
+      expect(screen.getByText('Sticky task')).toBeInTheDocument();
+      expect(document.querySelector('[data-reconnect-banner]')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Connecting to room TESTRM/i)).not.toBeInTheDocument();
+
+      // Simulate a mid-session disconnect.
+      act(() => { setState({ connected: false }); });
+      rerender(<Room roomCode="TESTRM" playerName="Alice" role="player" />);
+
+      // Banner now visible…
+      expect(document.querySelector('[data-reconnect-banner]')).toBeInTheDocument();
+      // …but the room content is still rendered (NOT replaced with the
+      // "Connecting…" screen — that's the regression we're guarding).
+      expect(screen.getByText('Sticky task')).toBeInTheDocument();
+      expect(screen.queryByText(/Connecting to room TESTRM/i)).not.toBeInTheDocument();
+
+      // Reconnect → banner disappears, room content remains.
+      act(() => { setState({ connected: true }); });
+      rerender(<Room roomCode="TESTRM" playerName="Alice" role="player" />);
+      expect(document.querySelector('[data-reconnect-banner]')).not.toBeInTheDocument();
+      expect(screen.getByText('Sticky task')).toBeInTheDocument();
+    });
   });
 });

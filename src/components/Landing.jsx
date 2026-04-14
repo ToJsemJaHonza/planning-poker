@@ -29,11 +29,11 @@ export default function Landing({ playerName, onJoinRoom }) {
   // Role selection after clicking "Vytvořit místnost"
   if (showRolePick) {
     return (
-      <div style={styles.container}>
+      <div data-landing style={styles.container}>
         <h1 style={styles.title}>Planning Poker</h1>
         <p style={styles.subtitle}>What's your role?</p>
 
-        <div style={styles.roleRow}>
+        <div data-role-row style={styles.roleRow}>
           <button onClick={() => handlePickRole('player')} style={styles.roleBtn}>
             <div style={styles.roleEmoji}>🎮</div>
             <div style={styles.roleLabel}>Player</div>
@@ -54,7 +54,7 @@ export default function Landing({ playerName, onJoinRoom }) {
   }
 
   return (
-    <div style={styles.container}>
+    <div data-landing style={styles.container}>
       <h1 style={styles.title}>Planning Poker</h1>
       <p style={styles.greeting}>Hi, {playerName}!</p>
 
@@ -104,7 +104,7 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: '100vh',
+    minHeight: '100dvh',
     background: '#e8dcc8',
     fontFamily: pixel,
   },

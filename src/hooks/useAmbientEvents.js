@@ -1,63 +1,41 @@
 /**
  * useAmbientEvents — leader-only periodic event producers.
  *
- * Extracted from PlayerList so the grid component stays a pure renderer.
- * The leader client rolls for fuk eyes, dev quotes, Alan coffee, and
- * Richard hunger quotes; all results are synced to Firebase and consumed
- * by every client via the returned derived state.
+ * Thin driver over the `AMBIENT_PRODUCERS` registry in
+ * `events/ambientEvents.js`. The registry owns *which* ambient events
+ * exist and *when* they fire; this hook only handles the React plumbing:
+ *   - Phase-trigger producers run inside a useEffect keyed on phase.
+ *   - Interval-trigger producers all share a single 1s MotionRuntime tick.
+ *     Each producer carries its own `intervalMs`; the dispatcher tracks
+ *     each producer's last-fired timestamp and invokes it when due.
+ *
+ * One shared ticker means we replace four scattered setIntervals with a
+ * single rAF-driven 1Hz heartbeat that the rest of the engine already pays
+ * for. The hook returns `{ fukEyesSet, activeQuote }` unchanged.
  */
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useRef } from 'react';
+import { useFrameTicker } from '../engine/useFrameTicker';
 import {
-  isRichardName,
-  FUKNAMES,
-  RICHARD_HUNGER_QUOTES,
-  shouldRichardSpeakHunger,
-} from '../components/playerList.utils';
+  AMBIENT_PRODUCERS,
+  AMBIENT_TRIGGER,
+  deriveActiveQuote,
+  deriveFukEyesSet,
+} from '../events/ambientEvents';
 
-const DEV_QUOTES = [
-  "It works on my machine",
-  "It's not a bug, it's a feature",
-  "Have you tried turning it off and on?",
-  "// TODO: fix this later",
-  "99 bugs in the code... fix one... 127 bugs in the code",
-  "There's no place like 127.0.0.1",
-  "I don't always test my code, but when I do, I do it in production",
-  "git commit -m 'fixed stuff'",
-  "Stackoverflow said so",
-  "Works on my machine ¯\\_(ツ)_/¯",
-  "sudo make me a sandwich",
-  "!false — it's funny because it's true",
-  "There are 10 types of people...",
-  "It compiled! Ship it!",
-  "My code doesn't have bugs, it has features",
-  "Sleep is for the weak. We have coffee",
-  "Real programmers count from 0",
-  "The code is self-documenting",
-  "I'll refactor this later...",
-  "Who needs tests anyway?",
-  "Tabs > Spaces. Fight me",
-  "In my defense, it passed CI",
-  "Can't reproduce. Closing ticket",
-  "That's a layer 8 problem",
-  "rm -rf node_modules && npm i",
-  "Hello world!",
-  "null pointer? I barely know her!",
-  "Merge conflict. Again.",
-  "LGTM 👍",
-  "This should be a 2-pointer, right?",
-];
+const INTERVAL_PRODUCERS = AMBIENT_PRODUCERS.filter(
+  (p) => p.trigger.kind === AMBIENT_TRIGGER.INTERVAL,
+);
+const PHASE_PRODUCERS = AMBIENT_PRODUCERS.filter(
+  (p) => p.trigger.kind === AMBIENT_TRIGGER.PHASE,
+);
 
-/**
- * @param {object} opts
- * @param {[string, object][]} opts.playerEntries - sorted player entries
- * @param {string} opts.phase - 'voting' | 'revealed'
- * @param {boolean} opts.isLeader
- * @param {object|null} opts.syncedEvent - current synced event from Firebase
- * @param {function} opts.fireSyncedEvent
- * @param {number} opts.createdAt - room creation timestamp
- * @returns {{ fukEyesSet: Set<string>, activeQuote: object|null }}
- */
+// Coarsest tick we need to honour any interval producer (1s here).
+// All producers happen to be multiples of 1000ms; if a sub-second producer
+// is ever added, drop this constant — the dispatcher already handles
+// arbitrary intervalMs values via per-producer "last fired" timestamps.
+const DISPATCH_TICK_MS = 1000;
+
 export function useAmbientEvents({
   playerEntries,
   phase,
@@ -66,78 +44,70 @@ export function useAmbientEvents({
   fireSyncedEvent,
   createdAt,
 }) {
-  // Fuk eyes — leader decides on phase change
+  // Stash the latest ctx so the shared ticker callback always sees fresh
+  // state without re-subscribing to the runtime on every render.
+  const ctxRef = useRef(null);
+  ctxRef.current = {
+    playerEntries,
+    phase,
+    isLeader,
+    syncedEvent,
+    fireSyncedEvent,
+    createdAt,
+  };
+
+  // Per-producer "last fired" timestamps (Map<name, ms>). Mounted once.
+  const lastFiredRef = useRef(new Map());
+
+  // Phase-trigger producers fire whenever phase or leadership flips.
   useEffect(() => {
     if (!isLeader) return;
-    const fuk = [];
-    playerEntries.forEach(([, data]) => {
-      const displayName = data.name || '';
-      if (FUKNAMES.has(displayName.toLowerCase()) && Math.random() < 0.1) {
-        fuk.push(displayName);
-      }
-    });
-    if (fuk.length > 0) {
-      fireSyncedEvent?.({ type: 'fukEyes', names: fuk }, 60000);
+    const ctx = ctxRef.current;
+    for (const p of PHASE_PRODUCERS) {
+      if (p.requires && !p.requires(ctx)) continue;
+      if (p.trigger.when && !p.trigger.when(ctx)) continue;
+      p.run(ctx);
     }
+    // Producers read the rest of ctx via ctxRef; phase + isLeader are the
+    // only edges we want to fire on.
   }, [phase, isLeader]);
 
-  // Alan coffee — leader fires on reveal
+  // Reset per-producer timestamps to "now" whenever leadership changes so
+  // a freshly-promoted leader doesn't accidentally fire every producer on
+  // its first dispatch tick (preserves the old setInterval semantics: wait
+  // intervalMs before the first fire).
   useEffect(() => {
-    if (!isLeader || phase !== 'revealed') return;
-    playerEntries.forEach(([, data]) => {
-      const displayName = data.name || '';
-      if (displayName.toLowerCase() === 'alan' && data.vote === '☕' && Math.random() < 0.1) {
-        setTimeout(() => {
-          fireSyncedEvent?.({ type: 'devQuote', name: displayName, text: 'Fullstack FE developer' }, 4000);
-        }, 1500);
-      }
-    });
-  }, [phase, isLeader]);
+    if (!isLeader) {
+      lastFiredRef.current.clear();
+      return;
+    }
+    const now = Date.now();
+    for (const p of INTERVAL_PRODUCERS) {
+      lastFiredRef.current.set(p.name, now);
+    }
+  }, [isLeader]);
 
-  // Dev quotes — leader triggers, 2% chance every 3s
-  useEffect(() => {
-    if (!isLeader) return;
-    const names = playerEntries.map(([, data]) => data.name).filter(Boolean);
-    if (names.length === 0) return;
-    const interval = setInterval(() => {
-      if (syncedEvent) return;
-      if (Math.random() < 0.02) {
-        const name = names[Math.floor(Math.random() * names.length)];
-        const text = DEV_QUOTES[Math.floor(Math.random() * DEV_QUOTES.length)];
-        fireSyncedEvent?.({ type: 'devQuote', name, text }, 3000);
-      }
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [playerEntries.length, isLeader, syncedEvent]);
-
-  // Richard hunger quotes — after 1 hour
-  useEffect(() => {
-    if (!isLeader || typeof createdAt !== 'number' || !createdAt) return;
-    const richardEntry = playerEntries.find(([, data]) => isRichardName(data.name));
-    if (!richardEntry) return;
-    const interval = setInterval(() => {
-      if (syncedEvent) return;
+  // Single shared ticker for every interval producer. Disabled entirely
+  // when we're not the leader so non-leader clients pay nothing.
+  useFrameTicker(
+    DISPATCH_TICK_MS,
+    () => {
+      const ctx = ctxRef.current;
+      if (!ctx.isLeader) return;
       const now = Date.now();
-      if (!shouldRichardSpeakHunger({
-        hasRichard: true,
-        roomAgeMs: now - createdAt,
-        now,
-        syncedEvent,
-      })) return;
-      if (Math.random() >= 0.4) return;
-      const text = RICHARD_HUNGER_QUOTES[Math.floor(Math.random() * RICHARD_HUNGER_QUOTES.length)];
-      fireSyncedEvent?.({ type: 'devQuote', name: richardEntry[1].name, text }, 4000);
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [isLeader, createdAt, playerEntries.length, syncedEvent]);
-
-  // Derived state for rendering
-  const fukEyesSet = useMemo(
-    () => new Set(syncedEvent?.type === 'fukEyes' ? syncedEvent.names : []),
-    [syncedEvent]
+      for (const p of INTERVAL_PRODUCERS) {
+        if (p.requires && !p.requires(ctx)) continue;
+        const last = lastFiredRef.current.get(p.name) ?? now;
+        if (now - last < p.trigger.intervalMs) continue;
+        lastFiredRef.current.set(p.name, now);
+        p.run(ctx);
+      }
+    },
+    isLeader,
   );
 
-  const activeQuote = syncedEvent?.type === 'devQuote' ? syncedEvent : null;
-
-  return { fukEyesSet, activeQuote };
+  return {
+    fukEyesSet: deriveFukEyesSet(syncedEvent),
+    activeQuote: deriveActiveQuote(syncedEvent),
+  };
 }

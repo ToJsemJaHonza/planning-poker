@@ -19,6 +19,8 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
+import { subscribe as subscribeMotion } from '../engine/MotionRuntime';
+import { useMotionMode } from '../engine/useMotionMode';
 
 // Desktop bottom: 105px from bottom, Mobile: 165px from bottom.
 // These match the old CSS values from pm.css and responsive.css.
@@ -89,6 +91,7 @@ function computeIdlePosition(cycleTime, vw) {
  *   - startPos: snapshot of position when ceremony started (for ceremony use)
  */
 export function usePmPosition({ ceremonyActive }) {
+  const motionMode = useMotionMode();
   // Cycle origin: the absolute time corresponding to cycleTime=0.
   // Persists across idle/ceremony transitions.
   const cycleOriginRef = useRef(Date.now());
@@ -142,20 +145,28 @@ export function usePmPosition({ ceremonyActive }) {
     wasActiveRef.current = ceremonyActive;
   }, [ceremonyActive]);
 
-  // rAF loop for idle walk
-  const rafRef = useRef(null);
-
+  // Idle walk loop — driven by the shared MotionRuntime so we don't spawn
+  // a per-hook rAF clock. Skipped entirely during ceremonies (PM is owned
+  // by the ceremony state machine) and when the user prefers reduced
+  // motion (we snap to the resting position once and stop ticking).
   useEffect(() => {
-    if (ceremonyActive) {
-      // Don't run the idle walk during ceremonies
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-      return;
+    if (ceremonyActive) return undefined;
+
+    if (motionMode === 'reduced') {
+      // Snap to a calm resting position at the left edge facing right.
+      const vw = getViewportWidth();
+      const vh = typeof window !== 'undefined' ? window.innerHeight : 900;
+      const bottomPx = getBottomPx();
+      const restPos = computeIdlePosition(0, vw);
+      setPosition({
+        x: Math.round(restPos.x),
+        y: vh - bottomPx,
+        facingLeft: restPos.facingLeft,
+      });
+      return undefined;
     }
 
-    const tick = () => {
+    return subscribeMotion(() => {
       const now = Date.now();
       const cycleTime = now - cycleOriginRef.current;
       const vw = getViewportWidth();
@@ -171,19 +182,8 @@ export function usePmPosition({ ceremonyActive }) {
         }
         return { x: nextX, y: nextY, facingLeft: pos.facingLeft };
       });
-
-      rafRef.current = requestAnimationFrame(tick);
-    };
-
-    rafRef.current = requestAnimationFrame(tick);
-
-    return () => {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-    };
-  }, [ceremonyActive]);
+    });
+  }, [ceremonyActive, motionMode]);
 
   // Handle window resize: update bottom position
   useEffect(() => {

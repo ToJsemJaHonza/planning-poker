@@ -73,7 +73,6 @@ export default function SlotReel({
   winnerIndex,
   winnerEmphasis,
   showStreak,
-  matchedHoldActive,
 }) {
   const len = entries.length;
   const rawIndex = reelState?.currentIndex ?? 0;
