@@ -21,7 +21,7 @@ const IMPORTANT_EVENTS = ['train', 'chicken', 'dbbPipeline'];
 // A–Z/2–9 strings, so this check is a no-op for the legitimate flow.
 // Callers (App.getRoomFromURL, Landing.handleJoin) additionally enforce
 // the full 6-char shape before getting here.
-const ROOM_CODE_INVALID_RE = /[./#$\[\]]/;
+const ROOM_CODE_INVALID_RE = /[./#$[\]]/;
 const isSafeRoomCode = (code) =>
   typeof code === 'string' && code.length > 0 && !ROOM_CODE_INVALID_RE.test(code);
 
@@ -46,9 +46,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
   const [phase, setPhase] = useState('voting');
   const [task, setTask] = useState('');
   const [splitMode, setSplitMode] = useState(false);
-  const [specialRound, setSpecialRound] = useState(false);
   const [pmQuote, setPmQuote] = useState('');
-  const [oktaEvent, setOktaEvent] = useState(false);
   const [createdAt, setCreatedAt] = useState(0);
   // Unified synced events: { type, data } or null
   const [syncedEvent, setSyncedEvent] = useState(null);
@@ -80,7 +78,6 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
       return;
     }
 
-    const roomRef = ref(db, `rooms/${roomCode}`);
     // Players are keyed by a per-tab session ID (not the display name) so
     // two browsers showing the same name coexist as two separate entries
     // and their votes / disconnects never clobber each other.
@@ -136,10 +133,22 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
       }
 
       onDisconnect(playerRef).remove();
-      setConnected(true);
+      // Connectivity is now driven by the `.info/connected` subscription
+      // below, not by a one-shot setConnected(true) at bootstrap. That way
+      // a mid-session WebSocket drop actually flips connected back to false
+      // and the UI can render a reconnect banner instead of stale state.
     };
 
     setupPlayer();
+
+    // Firebase exposes `.info/connected` as a system path that mirrors the
+    // realtime client's WebSocket state. Subscribing here means every
+    // disconnect/reconnect during the session is reflected in `connected`,
+    // not just the initial bootstrap.
+    const connectedRef = ref(db, '.info/connected');
+    const unsubConnected = onValue(connectedRef, (snap) => {
+      setConnected(!!snap.val());
+    });
 
     const unsubPlayers = onValue(playersRef, (snap) => {
       const data = snap.val() || {};
@@ -159,9 +168,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
         setPhase(data.phase || 'voting');
         setTask(data.task || '');
         setSplitMode(data.splitMode || false);
-        setSpecialRound(data.specialRound || false);
         setPmQuote(data.pmQuote || '');
-        setOktaEvent(data.oktaEvent || false);
         setSyncedEvent(data.syncedEvent || null);
         setLeaderChangedAt(data.leaderChangedAt || 0);
         setCreatedAt(typeof data.createdAt === 'number' ? data.createdAt : Date.now());
@@ -187,7 +194,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
       }
     });
 
-    unsubscribesRef.current = [unsubPlayers, unsubMeta];
+    unsubscribesRef.current = [unsubPlayers, unsubMeta, unsubConnected];
 
     return () => {
       unsubscribesRef.current.forEach(unsub => unsub());
@@ -342,19 +349,6 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
     if (!roomCode || !playerId || phase !== 'voting') return;
     safeWrite(set(ref(db, `rooms/${roomCode}/players/${playerId}/voteBe`), value));
   }, [roomCode, playerId, phase]);
-
-  const toggleSplit = useCallback(() => {
-    if (!roomCode || !isLeader) return;
-    const newSplit = !splitMode;
-    safeWrite(set(ref(db, `rooms/${roomCode}/meta/splitMode`), newSplit));
-    if (newSplit) {
-      // Trigger special round animation for everyone
-      safeWrite(set(ref(db, `rooms/${roomCode}/meta/specialRound`), true));
-      setTimeout(() => {
-        safeWrite(set(ref(db, `rooms/${roomCode}/meta/specialRound`), false));
-      }, 2500);
-    }
-  }, [roomCode, isLeader, splitMode]);
 
   const revealCards = useCallback(async () => {
     if (!roomCode || !isLeader) return;
@@ -532,21 +526,32 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
     safeWrite(set(ref(db, `rooms/${roomCode}/meta/shameTimer`), value));
   }, [roomCode]);
 
+  // OKTA easter egg now flows through the unified syncedEvent channel —
+  // OverlayStage picks it up via the entranceEvents registry. Returns the
+  // promise so tests can await the dispatch.
   const triggerOkta = useCallback(() => {
-    if (!roomCode) return;
-    safeWrite(set(ref(db, `rooms/${roomCode}/meta/oktaEvent`), true));
-    setTimeout(() => safeWrite(set(ref(db, `rooms/${roomCode}/meta/oktaEvent`), false)), 4500);
-  }, [roomCode]);
+    if (!roomCode) return Promise.resolve(false);
+    return fireSyncedEvent({ type: 'okta' }, 4500);
+  }, [roomCode, fireSyncedEvent]);
+
+  // Toggle the FE/BE split. When turning ON we also fire the
+  // SPECIAL ROUND splash via syncedEvent so every client sees it.
+  const toggleSplit = useCallback(() => {
+    if (!roomCode || !isLeader) return;
+    const newSplit = !splitMode;
+    safeWrite(set(ref(db, `rooms/${roomCode}/meta/splitMode`), newSplit));
+    if (newSplit) {
+      fireSyncedEvent({ type: 'specialRound' }, 2500);
+    }
+  }, [roomCode, isLeader, splitMode, fireSyncedEvent]);
 
   return {
     players,
     phase,
     task,
     splitMode,
-    specialRound,
     pmQuote,
     setPmQuote: setPmQuoteFirebase,
-    oktaEvent,
     triggerOkta,
     syncedEvent,
     fireSyncedEvent,

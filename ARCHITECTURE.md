@@ -225,11 +225,11 @@ The walking bob uses `.walk-bob-{frame}` where `frame` comes from React state. A
 2. **`vi.mock` path resolution.** Tests mock `src/firebase.js` via a Vitest setup file alias; see `src/test/setup.js` and `src/test/firebase-mock.js`. If you add a new module that imports Firebase, make sure tests don't accidentally hit the real thing.
 3. **Race on room creation.** See 2.1. Not defended against yet.
 4. **Background tab throttling.** `setInterval` in a background tab is heavily throttled. Walking animations that continue in background tabs may look janky. We don't currently pause them.
-5. **No reconnect UI.** `useRoom` tracks a `connected` boolean from initial setup, but it never flips back to `false` if Firebase drops. Adding reconnection awareness via Firebase's `.info/connected` reference is future work.
+5. ~~**No reconnect UI.** `useRoom` tracks a `connected` boolean from initial setup, but it never flips back to `false` if Firebase drops. Adding reconnection awareness via Firebase's `.info/connected` reference is future work.~~ **Resolved.** `useRoom` now subscribes to `.info/connected` so `connected` tracks the live socket. `Room.jsx` keeps the room rendered after a mid-session drop and overlays a "Reconnecting…" banner (sticky `wasEverConnectedRef`).
 6. **Inline styles everywhere.** This is a deliberate choice for this app size, but if the repo grows, extracting a shared style object or moving to CSS modules is the natural next step.
 7. **Fast Refresh demands single-component exports.** `PlayerList.jsx`, `ResultModal.jsx` etc. export *only* their default component. Pure helper functions live in `<name>.utils.js` siblings. This keeps HMR surgical — editing `PlayerList.jsx` won't trigger a full-page reload.
 8. **No auth.** `players/{name}` is keyed by the typed name. Two people typing the same name fight over the same node. The name sanitizer in `NamePrompt.jsx` is strictly for Firebase key-safety (strips `.`, `$`, `#`, `[`, `]`, `/`), not for identity.
-9. **CSS animations throttle under `prefers-reduced-motion`**. We don't currently respect this media query. A11y improvement opportunity.
+9. ~~**CSS animations throttle under `prefers-reduced-motion`**. We don't currently respect this media query. A11y improvement opportunity.~~ **Resolved.** `src/styles/responsive.css` carries an extensive `@media (prefers-reduced-motion: reduce)` block that disables idle/walk/celebrate/shame animations, and additionally collapses entrance-event keyframes (chicken, sheep, train) and class-based DBB pipeline animations to no-op final frames. Guarded by `src/styles/reducedMotion.test.js`.
 
 ---
 

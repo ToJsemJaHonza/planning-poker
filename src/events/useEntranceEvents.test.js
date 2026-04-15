@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor, act } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 
 import { useEntranceEvents } from './useEntranceEvents';
-import { ENTRANCE_EVENTS, findEntranceByType, findEntranceForName } from './entranceEvents';
+import {
+  ENTRANCE_EVENTS,
+  CINEMATIC_CATEGORY,
+  CINEMATIC_SOURCE,
+  findEntranceByType,
+  findEntranceForName,
+} from './entranceEvents';
 
 // The engine is Firebase-agnostic — we pass in a stub fireSyncedEvent and
 // mutate syncedEvent via re-renders. No firebase-mock needed here.
@@ -38,13 +44,21 @@ describe('Entrance event registry', () => {
   });
 
   it('each registry entry exposes the required shape', () => {
+    const validCategories = new Set(Object.values(CINEMATIC_CATEGORY));
+    const validSources = new Set(Object.values(CINEMATIC_SOURCE));
     for (const e of ENTRANCE_EVENTS) {
       expect(typeof e.type).toBe('string');
-      expect(typeof e.match).toBe('function');
-      expect(typeof e.buildPayload).toBe('function');
+      expect(validCategories.has(e.category)).toBe(true);
       expect(typeof e.duration).toBe('number');
       expect(typeof e.Component).toBe('function'); // React component
-      expect(typeof e.getHiddenPlayer).toBe('function');
+      if (e.category === CINEMATIC_CATEGORY.NAME) {
+        expect(typeof e.match).toBe('function');
+        expect(typeof e.buildPayload).toBe('function');
+        expect(typeof e.getHiddenPlayer).toBe('function');
+      } else {
+        // Overlay entries are triggered from a named source on Room state.
+        expect(validSources.has(e.source)).toBe(true);
+      }
     }
   });
 });

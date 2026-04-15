@@ -5,6 +5,7 @@ import { useRoomStartCrowning } from '../hooks/useRoomStartCrowning';
 import { useSlotMachine } from '../hooks/useSlotMachine';
 import { useCrownOwnership } from '../hooks/useCrownOwnership';
 import { usePmPosition } from '../hooks/usePmPosition';
+import { useOktaKeys } from '../hooks/useOktaKeys';
 import {
   isValidCeremonyPayload,
   isStalePayload,
@@ -14,8 +15,6 @@ import PlayerList from './PlayerList';
 import ResultModal from './ResultModal';
 import PmSprite from './PmSprite';
 import RevealBackground from './RevealBackground';
-import Chicken from './Chicken';
-import Sheep from './Sheep';
 import ShameOverlay from './shame/ShameOverlay';
 import SlotMachineStage from './SlotMachineStage';
 import RoomHeader from './room/RoomHeader';
@@ -23,14 +22,14 @@ import TaskBar from './room/TaskBar';
 import PhaseBar from './room/PhaseBar';
 import StatusBar from './room/StatusBar';
 import LeaderBanner from './room/LeaderBanner';
-import SpecialRoundOverlay from './room/SpecialRoundOverlay';
-import { pixel } from './room/styles';
+import OverlayStage from '../events/OverlayStage';
+import { pixel, computeRoomPaddingBottom } from './room/styles';
 
 export default function Room({ roomCode, playerId, playerName, role = 'player' }) {
   const {
-    players, phase, task, splitMode, specialRound,
+    players, phase, task, splitMode,
     pmQuote, setPmQuote,
-    oktaEvent, triggerOkta,
+    triggerOkta,
     syncedEvent, fireSyncedEvent,
     pmRoulette, resolvePmRoulettePromotion, clearPmRoulette,
     roomStartCrowning, shameTimer, setShameTimer, roomDeleted,
@@ -181,36 +180,20 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
     newRound();
   };
 
-  // --- OKTA easter egg ---
+  // OKTA easter egg — extracted to its own hook so Room.jsx stays
+  // focused on layout. The hook itself bails out unless playerName
+  // matches "honza" (case-insensitive).
+  useOktaKeys({ playerName, onTrigger: triggerOkta });
+
+  // Sticky bit: once we've ever been connected, a `connected=false` means
+  // we LOST the socket mid-session — the room state we already have is
+  // valid and should keep rendering with a banner over it. Without this,
+  // a transient drop would dump the user back to the "Connecting…" screen
+  // and visually wipe the room.
+  const wasEverConnectedRef = useRef(false);
   useEffect(() => {
-    if (playerName.toLowerCase() !== 'honza') return;
-    const pressed = new Set();
-    let clearTimer = null;
-    const scheduleClear = () => {
-      if (clearTimer) clearTimeout(clearTimer);
-      clearTimer = setTimeout(() => pressed.clear(), 2000);
-    };
-    const check = () => {
-      if (pressed.has('o') && pressed.has('k') && pressed.has('t') && pressed.has('a')) {
-        triggerOkta();
-        pressed.clear();
-      }
-    };
-    const down = (e) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
-      pressed.add(e.key.toLowerCase());
-      check();
-      scheduleClear();
-    };
-    const up = (e) => { pressed.delete(e.key.toLowerCase()); };
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-    return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
-      if (clearTimer) clearTimeout(clearTimer);
-    };
-  }, [playerName, triggerOkta]);
+    if (connected) wasEverConnectedRef.current = true;
+  }, [connected]);
 
   // --- Terminal states ---
   if (roomDeleted) {
@@ -230,7 +213,10 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
     );
   }
 
-  if (!connected) {
+  // Initial connect: nothing to render yet. After we've been connected at
+  // least once we fall through and render the room — the banner below
+  // covers the disconnected case.
+  if (!connected && !wasEverConnectedRef.current) {
     return (
       <div style={styles.loading}>
         <p>Connecting to room {roomCode}...</p>
@@ -240,13 +226,16 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
 
   // --- Padding for entrance events ---
   const hasEntrance = syncedEvent && (syncedEvent.type === 'train' || syncedEvent.type === 'dbbPipeline');
-  const paddingBottom = hasEntrance ? '380px'
-    : isPM ? '80px'
-    : canControl ? (splitMode ? '280px' : '240px')
-    : (splitMode ? '220px' : '190px');
+  const paddingBottom = computeRoomPaddingBottom({ hasEntrance, isPM, canControl, splitMode });
 
   return (
     <div style={{ ...styles.container, paddingBottom, transition: 'padding-bottom 0.3s ease' }}>
+      {!connected && (
+        <div role="status" style={styles.reconnectBanner} data-reconnect-banner>
+          Reconnecting to Firebase…
+        </div>
+      )}
+
       {/* Idle PM sprite — hidden during ceremonies. Position driven by
           usePmPosition hook (JS-driven, no CSS keyframes). */}
       {!ceremonyActive && (
@@ -306,11 +295,11 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
 
       <LeaderBanner leaderChangedAt={leaderChangedAt} isLeader={isLeader} currentLeaderName={currentLeaderName} />
 
-      {specialRound && <SpecialRoundOverlay />}
-
-      {/* Easter eggs */}
-      {syncedEvent?.type === 'chicken' && <Chicken />}
-      {oktaEvent && <Sheep />}
+      {/* All free-floating overlay cinematics (chicken, OKTA sheep,
+          SPECIAL ROUND splash) live in one declarative registry —
+          OverlayStage iterates it and mounts whichever signals are
+          currently active. Adding a new overlay never touches Room. */}
+      <OverlayStage syncedEvent={syncedEvent} />
 
       {phase === 'revealed' && <RevealBackground players={players} splitMode={splitMode} />}
 
@@ -354,8 +343,8 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
 
 const styles = {
   container: {
-    minHeight: '100vh',
-    maxHeight: '100vh',
+    minHeight: '100dvh',
+    maxHeight: '100dvh',
     overflow: 'hidden',
     background: '#e8dcc8',
     fontFamily: pixel,
@@ -365,7 +354,7 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: '100vh',
+    minHeight: '100dvh',
     background: '#e8dcc8',
     fontFamily: pixel,
     color: '#888',
@@ -380,5 +369,19 @@ const styles = {
     cursor: 'pointer',
     fontSize: '0.6rem',
     fontFamily: pixel,
+  },
+  reconnectBanner: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    padding: '0.4rem 0.8rem',
+    background: '#5a1f1f',
+    color: '#ffd76a',
+    fontFamily: pixel,
+    fontSize: '0.55rem',
+    textAlign: 'center',
+    borderBottom: '2px solid #2a0e0e',
   },
 };

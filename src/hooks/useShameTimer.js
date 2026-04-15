@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { useFrameTicker } from '../engine/useFrameTicker';
 
 const SHAME_STAGES = [
   { minSeconds: 0,   name: 'none' },
@@ -29,29 +30,21 @@ function computeStage(elapsedMs) {
  */
 export function useShameTimer(shameTimer, playerId) {
   const [elapsed, setElapsed] = useState(0);
-  const intervalRef = useRef(null);
+  const startedAt = shameTimer?.startedAt ?? null;
 
   useEffect(() => {
-    if (!shameTimer || !shameTimer.startedAt) {
+    if (!startedAt) {
       setElapsed(0);
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      return;
+    } else {
+      setElapsed(Date.now() - startedAt);
     }
+  }, [startedAt, shameTimer?.holdoutId]);
 
-    const tick = () => setElapsed(Date.now() - shameTimer.startedAt);
-    tick();
-    intervalRef.current = setInterval(tick, 1000);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, [shameTimer?.startedAt, shameTimer?.holdoutId]);
+  useFrameTicker(
+    1000,
+    () => { if (startedAt) setElapsed(Date.now() - startedAt); },
+    !!startedAt,
+  );
 
   if (!shameTimer) {
     return { stage: 0, elapsed: 0, holdoutName: null, isHoldout: false };

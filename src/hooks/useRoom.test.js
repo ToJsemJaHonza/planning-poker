@@ -409,4 +409,22 @@ describe('useRoom', () => {
       });
     });
   });
+
+  // The hook used to set `connected = true` once during bootstrap and never
+  // touch it again. A mid-session WebSocket drop would silently keep
+  // `connected` true and the UI would keep rendering stale data forever.
+  // The fix subscribes to Firebase's `.info/connected` system path so the
+  // value tracks the live socket state — both directions.
+  describe('Firebase connectivity tracking', () => {
+    it('flips connected to false when .info/connected drops, and back to true on reconnect', async () => {
+      const { result } = renderHook(() => useRoom('CONNRM', 'honza-id', 'Honza', 'pm'));
+      await waitFor(() => expect(result.current.connected).toBe(true));
+
+      act(() => { __mock.setConnectedState(false); });
+      await waitFor(() => expect(result.current.connected).toBe(false));
+
+      act(() => { __mock.setConnectedState(true); });
+      await waitFor(() => expect(result.current.connected).toBe(true));
+    });
+  });
 });

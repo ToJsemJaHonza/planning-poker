@@ -269,15 +269,11 @@ describe('buildCeremonyPayload — standard (4+ candidates)', () => {
 
   it('isTripleJackpot is true when winnerReelPair is [0,1]', () => {
     // Use a rand that forces pair selection to index 0 => [0,1]
-    let callCount = 0;
-    const controlledRand = () => {
-      callCount++;
-      // The 2nd rand call picks the winner reel pair (Math.floor(rand() * 3))
-      // We need it to be 0 to pick [0,1].
-      // Call 1: winner index (return 0)
-      // Call 2: winner reel pair (return 0 => index 0 => [0,1])
-      return 0.01;
-    };
+    // The 2nd rand call picks the winner reel pair (Math.floor(rand() * 3))
+    // We need it to be 0 to pick [0,1].
+    // Call 1: winner index (return 0)
+    // Call 2: winner reel pair (return 0 => index 0 => [0,1])
+    const controlledRand = () => 0.01;
     const payload = buildCeremonyPayload({ players, now: 1000, rand: controlledRand });
     if (payload.winnerReelPair[0] === 0 && payload.winnerReelPair[1] === 1) {
       expect(payload.isTripleJackpot).toBe(true);

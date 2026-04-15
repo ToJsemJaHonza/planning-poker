@@ -1,5 +1,6 @@
 // @refresh reset
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useFrameTicker } from '../engine/useFrameTicker';
 
 /**
  * Shared handoff mechanism for cinematic entrances (Richard's train,
@@ -33,19 +34,20 @@ export function useCinematicHandoff(playerName, figureRef, onArrive) {
   const [stepCount, setStepCount] = useState(10);
   const [walkFrame, setWalkFrame] = useState(0);
   const [walking, setWalking] = useState(false);
-  const frameIntervalRef = useRef(null);
+  const [frameMs, setFrameMs] = useState(120);
 
   // Keep the arrive callback in a ref so finishHandoff doesn't change
   // identity every time the parent re-renders.
   const onArriveRef = useRef(onArrive);
   useEffect(() => { onArriveRef.current = onArrive; }, [onArrive]);
 
-  const clearFrameInterval = useCallback(() => {
-    if (frameIntervalRef.current) {
-      clearInterval(frameIntervalRef.current);
-      frameIntervalRef.current = null;
-    }
-  }, []);
+  // Leg-swap rides MotionRuntime — same shared rAF as every other figure,
+  // so the cinematic walker stays synchronised with grid walkers.
+  useFrameTicker(
+    frameMs,
+    () => setWalkFrame((f) => f ^ 1),
+    walking,
+  );
 
   const startHandoff = useCallback(() => {
     // Wait one frame so the figure is actually in the DOM with its final
@@ -60,6 +62,7 @@ export function useCinematicHandoff(playerName, figureRef, onArrive) {
         setWalking(true);
         setDuration(2500);
         setStepCount(10);
+        setFrameMs(125);
         setTransform('translate(0px, -200px)');
         return;
       }
@@ -72,33 +75,23 @@ export function useCinematicHandoff(playerName, figureRef, onArrive) {
       const dur = Math.max(1800, Math.min(3200, Math.round(d * 6)));
       // One foot plant per ~24 px, capped so short walks don't stutter
       const steps = Math.max(4, Math.min(16, Math.round(d / 24)));
-      const frameMs = Math.max(80, Math.round(dur / (steps * 2)));
+      const stride = Math.max(80, Math.round(dur / (steps * 2)));
 
       setWalking(true);
       setDuration(dur);
       setStepCount(steps);
+      setFrameMs(stride);
       setTransform(`translate(${dx}px, ${dy}px)`);
-
-      clearFrameInterval();
-      frameIntervalRef.current = setInterval(() => {
-        setWalkFrame((f) => f ^ 1);
-      }, frameMs);
     });
-  }, [playerName, figureRef, clearFrameInterval]);
+  }, [playerName, figureRef]);
 
   const finishHandoff = useCallback(() => {
-    clearFrameInterval();
     setWalking(false);
     onArriveRef.current?.();
     return new Promise((resolve) => {
       requestAnimationFrame(() => resolve());
     });
-  }, [clearFrameInterval]);
-
-  // Cleanup on unmount so a stray interval can't tick into an unmounted tree.
-  useEffect(() => {
-    return () => clearFrameInterval();
-  }, [clearFrameInterval]);
+  }, []);
 
   return {
     transform,

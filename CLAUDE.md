@@ -20,6 +20,43 @@ Before you consider a change "done":
 
 See `ARCHITECTURE.md` for the full write-up of data flow, known limits, and the rationale behind the current design. Read it before making significant changes.
 
+### Motion pipeline (animation refactor)
+
+Every animated subsystem rides one shared rAF loop and respects three motion
+modes (`full`, `reduced`, `none`). When you add or change motion, follow the
+existing pattern — never start a new `requestAnimationFrame` or `setInterval`
+loop in feature code:
+
+- **MotionRuntime** (`src/engine/MotionRuntime.js`) — the only rAF in the app.
+  All subsystems subscribe via `useFrameTicker` / `useAnimationFrame` /
+  `useAnimationLoop`. Tab-visibility aware; one catch-up tick on resume.
+- **motionProbe + useMotionMode** (`src/engine/motionProbe.js`,
+  `useMotionMode.js`) — runtime detection of `prefers-reduced-motion` AND of
+  the browser actually refusing CSS animations. Returns `'full' | 'reduced' |
+  'none'`.
+- **JS-authoritative walks** (`src/engine/walkAnimation.js` +
+  `usePlayerModels.js`) — when motion mode is `none`, walks are driven by
+  inline `transform` so figures still move when CSS animations are off; when
+  `reduced`, figures snap to their resting state.
+- **Single source of truth per entity** — `usePmModel` owns everything PM-
+  related; `usePlayerModels` owns everything per-player. Renderers
+  (`PmSprite`, `PlayerCard`, `PlayerList`) consume models, never branch on
+  state themselves.
+- **Cinematic registries** — name-triggered (`entranceEvents.js`) and ambient
+  (`ambientEvents.js`) cinematics are pure data tables. Adding a new full-
+  screen cinematic is one entry; the driver hooks (`useEntranceEvents`,
+  `useAmbientEvents`) pick it up automatically. Overlay cinematics mount via
+  `OverlayStage`, name cinematics via the entrance engine.
+
+When QAing motion changes, verify all three modes:
+1. **Default**: animations work as designed.
+2. **macOS → Reduce Motion (or `prefers-reduced-motion`)**: no animation, but
+   every figure ends up where it should — no missing players, no stuck PM.
+3. **CSS animations disabled** (DevTools → Rendering → "Emulate CSS media
+   feature" or a `* { animation: none !important }` user stylesheet): walks,
+   ceremonies, and the PM still happen via JS. Static screenshots between
+   frames should show genuine progress.
+
 ## IMPORTANT: Event Synchronization Rule
 
 **ALL visual events, animations, and easter eggs MUST be synchronized through Firebase.**

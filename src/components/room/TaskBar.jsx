@@ -22,10 +22,11 @@ export default function TaskBar({ task, canControl, phase, onSave }) {
   };
 
   return (
-    <div style={styles.taskBar}>
+    <div data-task-bar style={styles.taskBar}>
       {editing ? (
         <div style={styles.taskEdit}>
           <input
+            data-task-input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Task name..."
@@ -39,7 +40,7 @@ export default function TaskBar({ task, canControl, phase, onSave }) {
           <button onClick={handleSave} style={styles.taskSaveBtn}>✓</button>
         </div>
       ) : (
-        <div onClick={handleEdit} style={{
+        <div data-task-display onClick={handleEdit} style={{
           ...styles.taskDisplay,
           cursor: canControl ? 'pointer' : 'default',
         }}>

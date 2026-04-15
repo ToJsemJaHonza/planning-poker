@@ -6,6 +6,12 @@ let store = {};
 const listeners = new Map(); // normalized path → Set<callback>
 const disconnectQueue = new Map(); // normalized path → action
 
+// Seed the SDK's `.info/connected` system path. Real Firebase reports
+// `true` once the WebSocket is established; tests get that default for
+// free, and can flip it with `__mock.setConnectedState(false)` to
+// simulate a drop.
+const INFO_CONNECTED_DEFAULT = true;
+
 function _splitPath(path) {
   return String(path).split('/').filter(Boolean);
 }
@@ -183,12 +189,26 @@ export function serverTimestamp() {
   return Date.now();
 }
 
+// Seed `.info/connected` at module-load time too — tests that don't call
+// __mock.reset() (e.g. simple component tests via setStore) still get the
+// SDK-realistic default.
+_setAt('/.info/connected', INFO_CONNECTED_DEFAULT);
+
 // Test helpers
 export const __mock = {
   reset() {
     store = {};
     listeners.clear();
     disconnectQueue.clear();
+    // Mirror the SDK's `.info/connected` system path. The real client
+    // exposes this as `true` once the WebSocket is up; tests that don't
+    // care about connectivity still expect the room to render.
+    _setAt('/.info/connected', INFO_CONNECTED_DEFAULT);
+  },
+  // Flip the simulated `.info/connected` state. Use to exercise reconnect UX.
+  setConnectedState(value) {
+    _setAt('/.info/connected', !!value);
+    _notify('/.info/connected');
   },
   getStore: () => _deepClone(store),
   setStore(s) {

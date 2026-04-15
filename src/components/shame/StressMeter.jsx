@@ -17,16 +17,21 @@ const STAGE_THRESHOLDS = [0, 30, 45, 60, 80, 100];
  * freezes even if parent re-renders are delayed.
  */
 export default function StressMeter({ stage, startedAt }) {
-  if (stage < 2 || !startedAt) return null;
-
-  const [elapsed, setElapsed] = useState(() => Date.now() - startedAt);
+  // Hooks must run unconditionally on every render (rules-of-hooks), so the
+  // early-return guard lives AFTER the hook declarations. The effect short-
+  // circuits when `startedAt` is falsy so we don't spin up an interval for
+  // a hidden meter.
+  const [elapsed, setElapsed] = useState(() => (startedAt ? Date.now() - startedAt : 0));
 
   useEffect(() => {
+    if (!startedAt) return undefined;
     const tick = () => setElapsed(Date.now() - startedAt);
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [startedAt]);
+
+  if (stage < 2 || !startedAt) return null;
 
   const config = STRESS_METER_CONFIG[stage] || STRESS_METER_CONFIG[2];
 

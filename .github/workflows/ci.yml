@@ -1,21 +1,21 @@
 # Planning Poker — CI/CD Pipeline
 #
 # Flow:
-#   - PR or push to any branch  → `test` job runs (gate).
-#   - Push to master            → `test` → `build` → `deploy` (GitHub Pages).
+#   - PR opened/updated         → test + lint + build (gate before merge)
+#   - Push to master            → test + lint + build + GitHub Pages deploy
 #
-# The `test` job name is stable ("test") so it can be used as a required
-# status check in GitHub branch protection rules.
+# Triggers are scoped so a same-repo PR runs once (pull_request only); only
+# master pushes also fire a push run. The `test` and `lint` job names are
+# stable so they can be required status checks in branch protection.
 
 name: CI / CD
 
 on:
   push:
-    branches: ['**']
+    branches: [master]
   pull_request:
-    branches: ['**']
 
-# Only one deploy to Pages at a time; in-progress deploys are cancelled.
+# Pages deploy is serialised per ref.
 concurrency:
   group: pages-${{ github.ref }}
   cancel-in-progress: true
@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # 1. TEST — runs on every push & PR. Required gate before build/deploy.
+  # 1. TEST — runs on every PR & master push. Required gate.
   # ---------------------------------------------------------------------------
   test:
     name: test
@@ -48,8 +48,6 @@ jobs:
       - name: Run tests
         run: npm test -- --reporter=default --reporter=junit --outputFile=test-results.junit.xml
 
-      # On failure (or always, so users can inspect green runs too), upload
-      # the junit report as an artifact for post-mortem.
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
@@ -61,13 +59,34 @@ jobs:
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
-  # 2. BUILD — only after tests pass. Produces the Pages artifact.
-  #    Only runs on pushes to master (not PRs, not feature branches).
+  # 2. LINT — parallel to test. Cheap gate against ESLint regressions.
+  # ---------------------------------------------------------------------------
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+  # ---------------------------------------------------------------------------
+  # 3. BUILD — runs on PRs and master pushes. Produces the Pages artifact
+  #    on master; PR builds verify the build succeeds without deploying.
   # ---------------------------------------------------------------------------
   build:
     name: build
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [test, lint]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -93,20 +112,22 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
 
+      # Master only — Pages deploy consumes this.
       - uses: actions/configure-pages@v6
+        if: github.event_name == 'push'
 
       - uses: actions/upload-pages-artifact@v5.0.0
+        if: github.event_name == 'push'
         with:
           path: dist
 
   # ---------------------------------------------------------------------------
-  # 3. DEPLOY — publishes the Pages artifact produced by `build`.
-  #    Depends on BOTH test and build. Fails closed: if either fails,
-  #    deploy never runs.
+  # 4. DEPLOY — master-only GH Pages publish. Fails closed: any upstream
+  #    failure (test, lint, build) skips deploy entirely.
   # ---------------------------------------------------------------------------
   deploy:
     name: deploy
-    needs: [test, build]
+    needs: [test, lint, build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 10

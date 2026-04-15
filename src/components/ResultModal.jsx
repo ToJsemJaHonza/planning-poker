@@ -9,7 +9,7 @@ function ResultSection({ title, titleColor, stats }) {
   const denom = Math.max(totalVotes, 1);
 
   return (
-    <div style={styles.section}>
+    <div data-result-section style={styles.section}>
       {title && <div style={{ ...styles.sectionTitle, color: titleColor }}>{title}</div>}
       <div style={{ fontSize: '1.8rem' }}>{emoji}</div>
       <div style={{ ...styles.verdict, color }}>{verdict}</div>
@@ -20,7 +20,7 @@ function ResultSection({ title, titleColor, stats }) {
         </div>
       )}
 
-      <div style={styles.chart}>
+      <div data-result-chart style={styles.chart}>
         {Object.entries(distribution)
           .sort((a, b) => {
             const na = Number(a[0]), nb = Number(b[0]);
@@ -30,7 +30,7 @@ function ResultSection({ title, titleColor, stats }) {
             return 0;
           })
           .map(([value, count]) => (
-            <div key={value} style={styles.barCol}>
+            <div key={value} data-result-bar style={styles.barCol}>
               <div style={styles.barCount}>{count}</div>
               <div style={{
                 ...styles.bar,
@@ -101,7 +101,7 @@ export default function ResultModal({ players, splitMode, onNewRound }) {
 
   return (
     <div style={styles.overlay}>
-      <div style={styles.modal}>
+      <div data-result-modal style={styles.modal}>
         <ResultSection stats={stats} />
         <button onClick={onNewRound} style={styles.button}>
           New Round
