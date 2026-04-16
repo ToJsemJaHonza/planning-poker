@@ -1,6 +1,7 @@
 import EntranceStage from '../events/EntranceStage';
 import PlayerCard from './player/PlayerCard';
 import { usePlayerModels } from '../hooks/usePlayerModels';
+import { useEntranceDirector } from '../events/useEntranceDirector';
 
 /**
  * Pure renderer for the player grid.
@@ -15,7 +16,7 @@ export default function PlayerList({
   syncedEvent, fireSyncedEvent, isLeader,
   createdAt = 0, pmRoulette = null, phaseState = null,
   crownOwnership = null, shameTimer = null, shameStage = 0,
-  allVoted = false,
+  allVoted = false, stage = null,
 }) {
   const {
     activePlayers,
@@ -23,17 +24,28 @@ export default function PlayerList({
     outgoingLeader,
     activeEntrance,
     handlePlayerExit,
+    markArrived,
   } = usePlayerModels({
     players, currentPlayer, phase, splitMode,
     syncedEvent, fireSyncedEvent, isLeader, createdAt,
     pmRoulette, phaseState, crownOwnership,
-    shameTimer, shameStage, allVoted,
+    shameTimer, shameStage, allVoted, stage,
   });
 
 
+  const entranceDirector = useEntranceDirector({
+    stage,
+    players,
+    markArrived,
+  });
+
   return (
     <div data-player-list style={styles.container}>
-      <EntranceStage activeEntrance={activeEntrance} onPlayerExit={handlePlayerExit} />
+      <EntranceStage
+        activeEntrance={activeEntrance}
+        onPlayerExit={handlePlayerExit}
+        entranceDirector={entranceDirector}
+      />
 
       <div data-player-grid style={styles.grid}>
         {outgoingLeader && (

@@ -176,6 +176,7 @@ export function onDisconnect(r) {
   return {
     remove: async () => { disconnectQueue.set(p, 'remove'); },
     set: async (v) => { disconnectQueue.set(p, { type: 'set', value: v }); },
+    update: async (v) => { disconnectQueue.set(p, { type: 'update', value: v }); },
     cancel: async () => { disconnectQueue.delete(p); },
   };
 }

@@ -54,7 +54,11 @@ export function computePlayerGridPosition(index, playerCount, viewportWidth) {
   const ITEM_WIDTH = 80;
   const COL_GAP = 28;
   const ROW_GAP = 16;
-  const ITEM_HEIGHT = 180;
+  // Total card height: voting-card (72) + gap (4) + figure spacer (120) +
+  // gap (4) + name tag (20) ≈ 220 px. Spacer grew to give the stage
+  // sprite vertical clearance from both the voting card above and the
+  // name tag below.
+  const ITEM_HEIGHT = 220;
   const GRID_TOP = 174;
   const CONTAINER_PAD_X = 16;
 
@@ -73,10 +77,13 @@ export function computePlayerGridPosition(index, playerCount, viewportWidth) {
   const rowLeft = (viewportWidth - rowWidth) / 2;
 
   const x = rowLeft + col * slotPitch + ITEM_WIDTH / 2;
-  // The PM should walk to the figure, not the item center.
-  // Figure is typically 84px from item top (after card slot) or 0px (no card).
-  // Use a compromise: aim at 70px from item top (works for both cases within ~15px).
-  const FIGURE_OFFSET_FROM_TOP = 70;
+  // Figure-center y — center of the invisible 120-px spacer inside the
+  // PlayerCard flex column:
+  //   voting-card (72) + gap (4) + spacer_half (60) = 136 px from card top.
+  // Sprite spans 136 ± 35 = 101–171. Name tag follows at offset 200 →
+  // 29 px clearance below, 29 px clearance above. Good visual breathing
+  // room either side.
+  const FIGURE_OFFSET_FROM_TOP = 136;
   const y = GRID_TOP + row * (ITEM_HEIGHT + ROW_GAP) + FIGURE_OFFSET_FROM_TOP;
 
   return { x, y };

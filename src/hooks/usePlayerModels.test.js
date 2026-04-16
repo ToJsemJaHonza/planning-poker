@@ -164,7 +164,11 @@ describe('usePlayerModels', () => {
     vi.useRealTimers();
   });
 
-  it('suppresses doNod for a player still in their walk-in animation', () => {
+  it('suppresses doNod on the synthetic outgoing-leader card', () => {
+    // Walk-in suppression used to live in the model when enteringPlayers
+    // was a piece of hook state; with motion now owned by the character
+    // stage, the only doNod suppression left is for the synthetic
+    // outgoing-leader entry, which must not nod during its walk-off.
     const players = makePlayers('Alice', 'Bob');
     const { result } = renderHook(() => usePlayerModels({
       players,
@@ -175,10 +179,14 @@ describe('usePlayerModels', () => {
       fireSyncedEvent: () => {},
       isLeader: true,
       allVoted: true,
+      pmRoulette: {
+        outgoingLeaderId: 'p99',
+        outgoingLeaderLastData: { name: 'Old Boss', role: 'player', isLeader: true },
+        startedAt: Date.now(),
+        ceremonyId: 'c1',
+      },
     }));
-    // Players just appeared — they should be walking in, not nodding.
-    for (const m of result.current.activePlayers) {
-      expect(m.doNod).toBe(false);
-    }
+    expect(result.current.outgoingLeader).not.toBeNull();
+    expect(result.current.outgoingLeader.doNod).toBe(false);
   });
 });

@@ -1,8 +1,7 @@
-import PlayerFigure from '../PlayerFigure';
-import WalkingFigure from './WalkingFigure';
 import { SingleCard, SplitCards } from './VotingCards';
 import StressMeter from '../shame/StressMeter';
 import { pixel } from '../room/styles';
+import { SPRITE_W, SPRITE_H } from '../../engine/characterLayout';
 
 /**
  * A single player entry in the grid — figure, card(s), name tag, speech
@@ -49,9 +48,25 @@ export default function PlayerCard(props) {
   const nameTagClass = justArrived ? 'name-tag-arrived' : '';
   const testId = testIdOverride ?? `player-${displayName}`;
 
-  const figureSlot = walking
-    ? <WalkingFigure name={displayName} fukEyes={fukEyes} showCrown={showCrown} />
-    : <PlayerFigure name={displayName} holdingCard={false} fukEyes={fukEyes} showCrown={showCrown} stressStage={stressStage} />;
+  // Figure rendering moved to the unified CharacterStage in Room.jsx —
+  // the grid card only reserves an invisible slot so card chrome
+  // (voting cards above, name tag below) keeps its flex layout. We
+  // reserve 100 px of height instead of just SPRITE_H (70 px) so the
+  // sprite has visual clearance from the voting card above and the
+  // name tag below; otherwise the sprite ends up tight against the
+  // name tag. The stage character's y is `computePlayerGridPosition`'s
+  // FIGURE_OFFSET_FROM_TOP, which matches this slot's center.
+  const figureSlot = (
+    <div
+      aria-hidden="true"
+      data-figure-placeholder={id}
+      style={{ width: SPRITE_W, height: 120 }}
+    />
+  );
+  // `walking`, `fukEyes`, `showCrown`, `stressStage` are now character
+  // properties — dereferenced here only to acknowledge the legacy prop
+  // surface; the character stage owns the actual rendering.
+  void walking; void fukEyes; void showCrown; void stressStage;
 
   const cardContent = (
     <div
@@ -164,6 +179,9 @@ const styles = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+    // Extra clearance from the stage-rendered figure above — without it
+    // the name sits right under the sprite's feet and looks cramped.
+    marginTop: '12px',
   },
   nameTagMe: {
     background: '#d4a853',

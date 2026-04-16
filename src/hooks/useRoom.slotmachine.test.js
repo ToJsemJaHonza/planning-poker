@@ -33,7 +33,9 @@ import { SCHEMA_VERSION, totalDurationFor, PHASE_TABLE_STANDARD } from '../event
  * wait for pmRoulette to appear, then promote winner and clear the payload.
  */
 async function simulateCeremonyCompletion(hook) {
-  await waitFor(() => expect(hook.result.current.pmRoulette).not.toBeNull(), { timeout: 3000 });
+  // 5 s grace window in the trigger effect + Firebase round-trip → bump
+  // the timeout well past that or the test races its own grace period.
+  await waitFor(() => expect(hook.result.current.pmRoulette).not.toBeNull(), { timeout: 8000 });
   const payload = hook.result.current.pmRoulette;
   await act(async () => {
     await hook.result.current.resolvePmRoulettePromotion(payload);
@@ -77,7 +79,7 @@ describe('useRoom — PM Crowning Machine integration', () => {
       // A ceremony should fire
       await waitFor(
         () => expect(alice.result.current.pmRoulette).not.toBeNull(),
-        { timeout: 3000 },
+        { timeout: 8000 }, // 5 s grace + margin
       );
 
       const payload = alice.result.current.pmRoulette;
@@ -104,7 +106,7 @@ describe('useRoom — PM Crowning Machine integration', () => {
       act(() => { __mock.removePlayer('SLOT2', 'pm-id'); });
       await waitFor(
         () => expect(alice.result.current.pmRoulette).not.toBeNull(),
-        { timeout: 3000 },
+        { timeout: 8000 }, // 5 s grace + margin
       );
 
       const payload = alice.result.current.pmRoulette;
@@ -149,7 +151,7 @@ describe('useRoom — PM Crowning Machine integration', () => {
 
       await waitFor(
         () => expect(alice.result.current.pmRoulette).not.toBeNull(),
-        { timeout: 3000 },
+        { timeout: 8000 }, // 5 s grace + margin
       );
 
       const payload = alice.result.current.pmRoulette;
@@ -299,7 +301,7 @@ describe('useRoom — PM Crowning Machine integration', () => {
       // First ceremony fires
       await waitFor(
         () => expect(alice.result.current.pmRoulette).not.toBeNull(),
-        { timeout: 3000 },
+        { timeout: 8000 }, // 5 s grace + margin
       );
 
       const firstPayload = alice.result.current.pmRoulette;

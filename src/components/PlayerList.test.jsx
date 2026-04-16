@@ -45,7 +45,7 @@ describe('PlayerList — walking in / out', () => {
     expect(getByTestId('player-Bob')).toBeInTheDocument();
   });
 
-  it('gives new players a walk-in animation class', () => {
+  it('renders a newly-joined player in the grid (motion driven by the character stage)', () => {
     const players = {
       Alice: makePlayer('Alice', { joinedAt: 1 }),
     };
@@ -80,10 +80,10 @@ describe('PlayerList — walking in / out', () => {
     );
 
     const bobEl = getByTestId('player-Bob');
-    expect(bobEl.className).toMatch(/player-walk-in-(left|right)/);
+    expect(bobEl).toBeInTheDocument();
   });
 
-  it('keeps a disconnected player in the DOM briefly with a walk-OUT class', () => {
+  it('removes a disconnected player card immediately (figure walk-off is on the character stage)', () => {
     const players = {
       Alice: makePlayer('Alice', { joinedAt: 1 }),
       Bob: makePlayer('Bob', { joinedAt: 2 }),
@@ -100,11 +100,8 @@ describe('PlayerList — walking in / out', () => {
         isLeader={false}
       />
     );
-
-    // Both present
     expect(getByTestId('player-Bob')).toBeInTheDocument();
 
-    // Bob disconnects
     rerender(
       <PlayerList
         players={{ Alice: players.Alice }}
@@ -116,14 +113,9 @@ describe('PlayerList — walking in / out', () => {
         isLeader={false}
       />
     );
-
-    // Bob should STILL be rendered, now with walk-out class
-    const bobEl = getByTestId('player-Bob');
-    expect(bobEl).toBeInTheDocument();
-    expect(bobEl.className).toMatch(/player-walk-out-(left|right)/);
-
-    // After walk-out duration passes, Bob is removed
-    act(() => { vi.advanceTimersByTime(5000); });
+    // The card tile is gone instantly — the unified character stage owns
+    // the walk-off motion now, so PlayerList has no reason to keep the
+    // voting cards + name tag hanging around after the player left.
     expect(queryByTestId('player-Bob')).toBeNull();
   });
 

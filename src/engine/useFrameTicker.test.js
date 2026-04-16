@@ -60,6 +60,35 @@ describe('useFrameTicker', () => {
     expect(cb).toHaveBeenCalledTimes(2);
   });
 
+  it('does NOT re-fire immediately when intervalMs changes mid-cycle (PM non-stop-talking regression)', () => {
+    // usePmModel swaps its thinkDuration between wait (5-13s) and think
+    // (2.5-4s) after each fire. The old useFrameTicker reset lastFireRef
+    // whenever intervalMs changed, which meant the very next rAF tick
+    // saw lastFireRef === 0 and fired again ~16ms later. That turned the
+    // PM's "rare quote" loop into a non-stop chatter at rAF speed.
+    const cb = vi.fn();
+    const { rerender } = renderHook(
+      ({ interval }) => useFrameTicker(interval, cb),
+      { initialProps: { interval: 100 } },
+    );
+    act(() => { setNow(1000); flushFrame(); });
+    expect(cb).toHaveBeenCalledTimes(1);
+
+    // Simulate a callback that, on fire, changed the interval (that's how
+    // usePmModel works — each phase picks a new duration).
+    rerender({ interval: 500 });
+
+    // Only 50ms later — the old bug would fire here because lastFireRef
+    // was just reset to 0. With the fix, the ticker keeps its last-fire
+    // timestamp and waits the full new interval from that point.
+    act(() => { setNow(1050); flushFrame(); });
+    expect(cb).toHaveBeenCalledTimes(1);
+
+    // 500ms after the first fire — NOW we fire.
+    act(() => { setNow(1500); flushFrame(); });
+    expect(cb).toHaveBeenCalledTimes(2);
+  });
+
   it('respects enabled=false and stops subscribing', () => {
     const cb = vi.fn();
     const { rerender } = renderHook(({ on }) => useFrameTicker(50, cb, on), {

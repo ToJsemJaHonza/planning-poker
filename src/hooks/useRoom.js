@@ -125,14 +125,24 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
           // existing leader (e.g. after the previous one disconnected).
           isLeader: Object.keys(existingPlayers).length === 0 || (!hasLeader && role === 'pm'),
           role: role,
+          disconnected: false,
         });
       } else {
-        // Same session re-joining their own slot (e.g. Strict Mode double-mount
-        // in dev). With the cleanup no longer scrubbing our node, there's
-        // nothing to restore — our player entry is still intact as-is.
+        // Reconnect after refresh / brief network flap. Our previous
+        // `onDisconnect` marked us `disconnected: true`; clear it so the
+        // filtered roster shows us again. vote / isLeader / voteFe /
+        // voteBe are preserved exactly because the record was never
+        // wiped — this is the whole point of preserving over removing.
+        await update(playerRef, { disconnected: false });
       }
 
-      onDisconnect(playerRef).remove();
+      // Mark disconnection instead of removing the record — preserves
+      // vote, voteFe, voteBe, isLeader, and joinedAt through a refresh.
+      // setupPlayer above clears the flag on reconnect. Consumers filter
+      // disconnected entries out of the visible grid / vote count, but
+      // the ceremony-trigger effect intentionally keeps them in scope so
+      // a leader's brief disconnect doesn't trigger a new coronation.
+      onDisconnect(playerRef).update({ disconnected: true });
       // Connectivity is now driven by the `.info/connected` subscription
       // below, not by a one-shot setConnected(true) at bootstrap. That way
       // a mid-session WebSocket drop actually flips connected back to false
@@ -203,45 +213,62 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
 
   // === PM Crowning Machine: detect leader-gap, fire ceremony =============
   //
-  // Replaces the old auto-promote effect. When the previous leader
-  // disconnects, the earliest-joined remaining non-PM candidate writes a
-  // `pmRoulette` ceremony payload — it does NOT bare-set isLeader. The
-  // ceremony itself (see `useSlotMachine` + `resolvePmRoulettePromotion`)
-  // performs the leader-flag flip atomically via a multi-path update at the
-  // start of the `cabinetOut` phase.
+  // When the previous leader disconnects, the earliest-joined remaining
+  // non-PM candidate writes a `pmRoulette` ceremony payload — it does NOT
+  // bare-set isLeader. The ceremony itself (see `useSlotMachine` +
+  // `resolvePmRoulettePromotion`) performs the leader-flag flip atomically
+  // via a multi-path update at the start of the `cabinetOut` phase.
+  //
+  // Grace window: the firing decision is wrapped in a 5s setTimeout. If
+  // the leader reconnects during that window — or if someone else fires
+  // the ceremony first — the effect re-runs (players / pmRoulette are
+  // deps), the cleanup cancels our pending timer, and no ceremony starts.
+  // This covers the common "leader refreshed their tab" case where their
+  // `isLeader` flag briefly disappears while onDisconnect + setupPlayer
+  // round-trip through Firebase.
   //
   // No code path here writes `isLeader = true` directly. The only sources
   // of `isLeader = true` are:
   //   (a) `setupPlayer` above for first-joiner into a fresh room, and
   //   (b) `resolvePmRoulettePromotion` below, fired during crownDelivery.
   useEffect(() => {
-    if (!roomCode || !playerId || Object.keys(players).length === 0) return;
+    if (!roomCode || !playerId || Object.keys(players).length === 0) return undefined;
 
-    // If there's already a leader, no work.
-    const hasLeader = Object.values(players).some(p => p.isLeader);
-    if (hasLeader) return;
+    // A leader who is marked `disconnected: true` (onDisconnect fired)
+    // is treated as absent for the ceremony-trigger purpose. Combined
+    // with the 5 s grace below, this means: leader refreshes → comes
+    // back within 5 s → grace timer cancelled, no ceremony. Leader
+    // closes the browser for good → after 5 s the ceremony fires and
+    // another player is crowned.
+    const hasConnectedLeader = Object.values(players).some(p => p.isLeader && !p.disconnected);
+    if (hasConnectedLeader) return undefined;
 
     // If an active ceremony already exists, do NOT race it.
     const nowCheck = Date.now();
     const hasActiveCeremony = pmRoulette
       && pmRoulette.schemaVersion === SCHEMA_VERSION
       && (pmRoulette.expiresAt || 0) > nowCheck;
-    if (hasActiveCeremony) return;
+    if (hasActiveCeremony) return undefined;
 
     // Only the earliest-joined candidate writes.
     const sorted = nonPmCandidatesSorted(players);
     if (sorted.length === 0) {
       // PM-only room: no ceremony needed. (Room cleanup when truly empty
       // is handled by the dedicated playerCount watcher effect below.)
-      return;
+      return undefined;
     }
-    if (sorted[0][0] !== playerId) return;
+    if (sorted[0][0] !== playerId) return undefined;
 
     // Guard so rapid re-renders don't double-fire the transaction.
-    if (firingRef.current) return;
-    firingRef.current = true;
+    if (firingRef.current) return undefined;
 
-    (async () => {
+    const CEREMONY_GRACE_MS = 5000;
+    const graceTimer = setTimeout(async () => {
+      // Double-check conditions at fire time — the DB may have changed
+      // while we were waiting for the grace window.
+      if (firingRef.current) return;
+      firingRef.current = true;
+
       try {
         // Re-read the live syncedEvent; if an important cinematic is
         // currently playing, yield — one scheduled retry at its expiry.
@@ -292,13 +319,15 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
         // subsequent ceremonies can fire in this room. 5s is long enough
         // to cover the Firebase round-trip for clearPmRoulette + leader
         // promotion, but short enough to not block legitimate consecutive
-        // ceremonies (the previous 30s TTL was excessive).
+        // ceremonies.
         setTimeout(() => { firingRef.current = false; }, 5000);
       } catch (err) {
         console.error('[useRoom] firePmRoulette failed', err);
         firingRef.current = false;
       }
-    })();
+    }, CEREMONY_GRACE_MS);
+
+    return () => clearTimeout(graceTimer);
   }, [players, roomCode, playerId, pmRoulette]);
 
   // Reset the firing guard when a ceremony clears AND the leader has been
@@ -309,8 +338,11 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
   // false and fire a duplicate ceremony.
   useEffect(() => {
     if (!pmRoulette) {
-      const hasLeader = Object.values(players).some(p => p.isLeader);
-      if (hasLeader) {
+      // Only reset the guard when a CONNECTED leader is present —
+      // mirrors the disconnected-aware check in the trigger effect so we
+      // don't race the 5 s grace window.
+      const hasConnectedLeader = Object.values(players).some(p => p.isLeader && !p.disconnected);
+      if (hasConnectedLeader) {
         firingRef.current = false;
       }
     }

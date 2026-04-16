@@ -1,7 +1,8 @@
 /* === Mobile PM position ===
- * The PM's bottom position is now handled by usePmPosition.js which
- * checks window.innerWidth at runtime. The old mobile override
- * has been removed.
+ * PM vertical position is computed centrally in
+ * `src/engine/characterLayout.js` (getGroundY) which reads
+ * window.innerWidth at runtime and returns a mobile- or desktop-specific
+ * ground-row y. The old @media override has been removed.
  */
 
 /* === Mobile header === */

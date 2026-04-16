@@ -176,7 +176,7 @@ describe('useRoom', () => {
     // The tests for the ceremony itself live in the dedicated
     // useSlotMachine/slotMachine test files.
     async function simulateCeremonyCompletion(hook) {
-      await waitFor(() => expect(hook.result.current.pmRoulette).not.toBeNull(), { timeout: 2000 });
+      await waitFor(() => expect(hook.result.current.pmRoulette).not.toBeNull(), { timeout: 8000 });
       const payload = hook.result.current.pmRoulette;
       await act(async () => {
         await hook.result.current.resolvePmRoulettePromotion(payload);
@@ -201,7 +201,7 @@ describe('useRoom', () => {
       await simulateCeremonyCompletion(alice);
 
       // Alice should now be the leader
-      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 2000 });
+      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 8000 });
     });
 
     it('takeover stamps leaderChangedAt via the ceremony promotion', async () => {
@@ -220,7 +220,7 @@ describe('useRoom', () => {
       // leader manually. See tech design §5.3.
       act(() => { __mock.removePlayer('ROOMH2', 'pm-id'); });
       await simulateCeremonyCompletion(alice);
-      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 2000 });
+      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 8000 });
 
       expect(alice.result.current.leaderChangedAt).toBeGreaterThan(0);
     });
@@ -257,7 +257,7 @@ describe('useRoom', () => {
           winnerId: 'alice-id',
         });
       });
-      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 2000 });
+      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 8000 });
 
       // Train is still there — the promotion multi-path update does NOT
       // touch the syncedEvent slot.
@@ -300,7 +300,7 @@ describe('useRoom', () => {
       // PM disconnects → ceremony fires (stale event does not block it)
       act(() => { __mock.removePlayer('ROOMSTALE', 'pm-id'); });
       await simulateCeremonyCompletion(alice);
-      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 2000 });
+      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 8000 });
     });
 
     it('Strict Mode simulated unmount/remount does NOT wipe the player node', async () => {

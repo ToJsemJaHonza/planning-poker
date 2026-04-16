@@ -32,7 +32,7 @@ describe('firingRef reset on ceremony clear', () => {
       const store = __mock.getStore();
       const meta = store.rooms?.ROOM_FR?.meta;
       return expect(meta?.pmRoulette).toBeTruthy();
-    }, { timeout: 3000 });
+    }, { timeout: 8000 });
 
     // Now simulate the ceremony completing by clearing pmRoulette
     const { set, ref, db } = await import('../test/firebase-mock.js');
@@ -67,6 +67,6 @@ describe('firingRef reset on ceremony clear', () => {
       const store = __mock.getStore();
       const meta = store.rooms?.ROOM_FR?.meta;
       return expect(meta?.pmRoulette).toBeTruthy();
-    }, { timeout: 3000 });
+    }, { timeout: 8000 });
   });
 });

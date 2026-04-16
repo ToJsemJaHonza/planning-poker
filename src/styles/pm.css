@@ -1,10 +1,9 @@
 /* === PM sprite idle walk ===
- * The PM's idle walk is now driven by JS (usePmPosition hook) instead
- * of CSS keyframes. The old @keyframes were removed.
- *
- * Position: { x, y, facingLeft } computed in usePmPosition.js
- * Sprite flip: inline scaleX(-1) on the sprite inner container
- * Bubble flip: inline scaleX(-1) counteracting the sprite flip
+ * The PM is a character on the unified CharacterStage; position / pose /
+ * facing all come from `usePmDirector` (computeIdleCenter for idle,
+ * ceremony mirror for pmRoulette + roomStartCrowning). This file only
+ * keeps the CSS effects that aren't character-state — sparkle bursts,
+ * SPECIAL ROUND splash.
  */
 
 /* Sparkle burst from wand */

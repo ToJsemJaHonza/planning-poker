@@ -49,9 +49,13 @@ const QUOTES = [
 ];
 
 const SPARKLE_MS = 1400;
-const QUOTE_CHANCE = 0.2;
-const WAIT_MIN_MS = 5000;
-const WAIT_RANDOM_MS = 8000;
+// Thinking-loop frequency. 0.2 × avg-cycle-12s ≈ one visible quote per
+// minute, which made the PM read as "silent" after the useFrameTicker
+// fix stopped the runaway firing. Bumped so quotes feel present without
+// chattering.
+const QUOTE_CHANCE = 0.4;
+const WAIT_MIN_MS = 3000;
+const WAIT_RANDOM_MS = 6000;
 const THINK_MIN_MS = 2500;
 const THINK_RANDOM_MS = 1500;
 
@@ -87,7 +91,7 @@ function pickQuote() {
  * @param {(() => void)|null} [opts.onCastComplete]     Fires once after
  *   the sparkle window closes.
  * @param {{x:number,y:number}|null} [opts.position]    Idle position from
- *   usePmPosition.
+ *   usePmDirector (the PM's live character position).
  * @param {boolean} [opts.facingLeft=false]             Idle facing.
  * @param {'cast'|'walk'|null} [opts.pmPose=null]       Ceremony-driven pose.
  * @param {string} [opts.pmBubble='']                   Ceremony bubble text.

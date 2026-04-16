@@ -1,19 +1,16 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import PlayerFigure from './PlayerFigure';
-import { useCinematicHandoff } from '../events/useCinematicHandoff';
 import { pixel } from './room/styles';
 import {
   NOSE, MID, TREE,
   PX, TPX, NOSE_W, MID_W, CAR_H, NUM_MID, TOTAL_W,
   spriteToShadows, flipGrid,
 } from '../sprites/trainSprites';
+import { trainDoorPosition } from '../events/useEntranceDirector';
 
-export default function Train({ fromRight, playerId, playerName, onPlayerExit, onDone }) {
+export default function Train({ fromRight, playerId, playerName, onPlayerExit, onDone, entranceDirector }) {
   const [phase, setPhase] = useState('rails');
-  const [showRichard, setShowRichard] = useState(false);
   const [showDust, setShowDust] = useState(false);
   const trainRef = useRef(null);
-  const richardRef = useRef(null);
 
   // Keep latest callbacks in refs so the animation effect doesn't restart on re-render.
   // Previously the effect depended on [onPlayerExit] which was a fresh function on every
@@ -21,20 +18,16 @@ export default function Train({ fromRight, playerId, playerName, onPlayerExit, o
   // why non-owners saw the train arrive twice.
   const onPlayerExitRef = useRef(onPlayerExit);
   const onDoneRef = useRef(onDone);
+  const directorRef = useRef(entranceDirector);
   useEffect(() => { onPlayerExitRef.current = onPlayerExit; }, [onPlayerExit]);
   useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
+  useEffect(() => { directorRef.current = entranceDirector; }, [entranceDirector]);
 
-  // Handoff hook — drives the continuous walk from train door to grid slot.
-  // The placeholder is keyed by the player's session ID, so that's what
-  // useCinematicHandoff must query. Unit tests pass only `playerName`; in
-  // that case we fall back to using the name as the target key (which is
-  // also what the test fixtures use for `data-entrance-target`).
-  const targetKey = playerId || playerName;
-  const handoff = useCinematicHandoff(
-    targetKey,
-    richardRef,
-    () => onPlayerExitRef.current?.()
-  );
+  // Richard's character lives on the shared CharacterStage — the entrance
+  // director teleports it to the train door and walks it to its grid slot
+  // at the "exit" beat. No more per-component PlayerFigure, no more
+  // `getBoundingClientRect` on an in-flight transition.
+  const richardId = playerId || playerName;
 
   const trainShadow = useMemo(() => {
     const all = [];
@@ -55,27 +48,27 @@ export default function Train({ fromRight, playerId, playerName, onPlayerExit, o
       setTimeout(() => setPhase('arrive'), 800),
       setTimeout(() => setPhase('stopped'), 3800),
       setTimeout(() => setPhase('bubble'), 4200),
-      // Richard steps out; mount the cinematic figure at the train door.
-      setTimeout(() => { setPhase('exit'); setShowRichard(true); }, 6500),
-      // One frame later, start the handoff walk-to-slot. The hook measures
-      // both rects, computes a distance-scaled duration, and the CSS
-      // transition carries Richard from the train door all the way to his
-      // reserved grid slot in a single continuous motion.
-      setTimeout(() => { handoff.startHandoff(); }, 6550),
+      // Richard steps out — the entrance director teleports his persistent
+      // character to the train door and starts its walk to the grid slot.
+      setTimeout(() => {
+        setPhase('exit');
+        const door = trainDoorPosition();
+        directorRef.current?.walkFromDoor({
+          playerId: richardId,
+          door,
+          onArrived: () => onPlayerExitRef.current?.(),
+        });
+      }, 6500),
       // Train departs while Richard is still walking toward the grid.
       setTimeout(() => setPhase('depart'), 8500),
       // Dust puff kicks up ~400ms before arrival.
       setTimeout(() => setShowDust(true), 8700),
-      // Arrival: tell the parent Richard has taken his seat, then unmount
-      // our cinematic figure on the next frame. finishHandoff flips the
-      // placeholder to visible first (via onPlayerExit → markArrived),
-      // so the grid figure appears exactly where our cinematic figure
-      // currently sits — no teleport.
+      // Arrival. The director's walkTo onDone also calls markArrived, but
+      // we fire onPlayerExit here too (idempotent in production) so unit
+      // tests that mount Train without a stage still observe the call.
       setTimeout(() => {
-        handoff.finishHandoff().then(() => {
-          setShowRichard(false);
-          setShowDust(false);
-        });
+        setShowDust(false);
+        onPlayerExitRef.current?.();
       }, 9100),
       // Rails fade
       setTimeout(() => setPhase('fadeRails'), 10500),
@@ -117,30 +110,20 @@ export default function Train({ fromRight, playerId, playerName, onPlayerExit, o
           </div>
         )}
 
-        {/* Richard — walks continuously from train door to his grid slot.
-            The outer div is position:fixed so `getBoundingClientRect` is
-            measured in viewport coordinates (matching the grid placeholder),
-            and its `transform` + `transition` are set by useCinematicHandoff. */}
-        {showRichard && (
+        {/* Richard's figure is drawn by the shared CharacterStage —
+            the dust puff still renders here, anchored at the door. */}
+        {showDust && (
           <div
-            ref={richardRef}
-            className="richard-exit-train"
             style={{
               position: 'fixed',
-              bottom: 210 + CAR_H + 16, /* container bottom + train height + gap */
+              bottom: 210 + CAR_H + 16,
               left: '50%',
               marginLeft: '-30px',
               zIndex: 185,
-              transform: handoff.transform,
-              transition: `transform ${handoff.duration}ms steps(${handoff.stepCount}, end)`,
+              pointerEvents: 'none',
             }}
           >
-            <PlayerFigure
-              name={playerName}
-              holdingCard={false}
-              walkFrame={handoff.walkFrame}
-            />
-            {showDust && <div className="dust-puff" />}
+            <div className="dust-puff" />
           </div>
         )}
 

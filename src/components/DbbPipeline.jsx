@@ -1,6 +1,4 @@
 import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
-import PlayerFigure from './PlayerFigure';
-import { useCinematicHandoff } from '../events/useCinematicHandoff';
 import { pixel } from './room/styles';
 import {
   DBB, THICKNESS,
@@ -100,17 +98,17 @@ export function buildPipePath(fromSide, viewport) {
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export default function DbbPipeline({ fromSide = 'top', playerId, playerName, onPlayerExit, onDone }) {
+export default function DbbPipeline({ fromSide = 'top', playerId, playerName, onPlayerExit, onDone, entranceDirector }) {
   const [phase, setPhase] = useState('hidden');
-  const [showTomas, setShowTomas] = useState(false);
   const [showArrivalBubble, setShowArrivalBubble] = useState(false);
-  const tomasRef = useRef(null);
   const pipeGroupRef = useRef(null);
 
   const onPlayerExitRef = useRef(onPlayerExit);
   const onDoneRef = useRef(onDone);
+  const directorRef = useRef(entranceDirector);
   useEffect(() => { onPlayerExitRef.current = onPlayerExit; }, [onPlayerExit]);
   useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
+  useEffect(() => { directorRef.current = entranceDirector; }, [entranceDirector]);
 
   const [viewport, setViewport] = useState(() => ({
     w: typeof window !== 'undefined' ? window.innerWidth : 1024,
@@ -123,15 +121,12 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
   }, []);
 
   const pipePath = useMemo(() => buildPipePath(fromSide, viewport), [fromSide, viewport]);
-
-  // Handoff hook targets the placeholder keyed by session ID.
-  // When unit tests pass only `playerName`, fall back to that.
+  // Store the live pipe path in a ref so the timer-driven effect (which
+  // can't re-declare itself to the new mouth each resize) reads the
+  // latest mouth coords when the walk handoff fires.
+  const pipePathRef = useRef(pipePath);
+  pipePathRef.current = pipePath;
   const targetKey = playerId || playerName;
-  const handoff = useCinematicHandoff(
-    targetKey,
-    tomasRef,
-    () => onPlayerExitRef.current?.()
-  );
 
   useEffect(() => {
     const timers = [];
@@ -141,22 +136,30 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
     timers.push(setTimeout(() => setPhase('bubble'), 1800));
     // t=3200: bubble starts fading out
     timers.push(setTimeout(() => setPhase('bubbleOut'), 3200));
-    // t=3600: plate appears, emerge starts — pipe + plate + Tomáš from mouth
-    timers.push(setTimeout(() => { setPhase('emerge'); setShowTomas(true); }, 3600));
-    // t=4400: walk starts (after 600ms emerge + 200ms breath)
+    // t=3600: plate appears, emerge visual plays (character handled below)
+    timers.push(setTimeout(() => { setPhase('emerge'); }, 3600));
+    // t=4400: Tomáš steps out of the pipe — director teleports the
+    // persistent character to the pipe mouth and walks it to its grid slot.
     timers.push(setTimeout(() => {
       setPhase('walk');
-      requestAnimationFrame(() => handoff.startHandoff());
+      const mouth = pipePathRef.current?.mouth;
+      if (mouth && directorRef.current) {
+        directorRef.current.walkFromDoor({
+          playerId: targetKey,
+          door: { x: mouth.x, y: mouth.y },
+        });
+      }
     }, 4400));
-    // t=6700: pipe starts retracting (walk handoff well underway)
+    // t=6700: pipe starts retracting.
     timers.push(setTimeout(() => setPhase('slideOut'), 6700));
-    // t=6900: finishHandoff → markArrived → arrival bubble
+    // t=6900: arrival bubble + onPlayerExit fallback. In production the
+    // director's walkTo onDone has already fired markArrived; the manual
+    // call here is idempotent and keeps unit tests without a stage
+    // working.
     timers.push(setTimeout(() => {
-      handoff.finishHandoff().then(() => {
-        setShowTomas(false);
-        setShowArrivalBubble(true);
-        setTimeout(() => setShowArrivalBubble(false), 1600);
-      });
+      setShowArrivalBubble(true);
+      setTimeout(() => setShowArrivalBubble(false), 1600);
+      onPlayerExitRef.current?.();
     }, 6900));
     // t=9500: done
     timers.push(setTimeout(() => { setPhase('done'); onDoneRef.current?.(); }, 9500));
@@ -206,18 +209,9 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
     bottom: 'translate(-50%, -100%)',
   }[bubblePos.anchor];
 
-  // Tomáš margins: put sprite's leading edge flush with the mouth face so
-  // the transform-origin emerge animation grows outward correctly.
-  const tomasMargin = (() => {
-    switch (mouth.dir) {
-      case 'right': return { marginLeft: 0,   marginTop: -35 };
-      case 'left':  return { marginLeft: -60, marginTop: -35 };
-      case 'down':  return { marginLeft: -30, marginTop: 0   };
-      case 'up':    return { marginLeft: -30, marginTop: -70 };
-      default:      return { marginLeft: -30, marginTop: -35 };
-    }
-  })();
-  const emergeClass = `dbb-tomas-emerge-${mouth.dir}`;
+  // Tomáš's figure is rendered by the shared CharacterStage now — the
+  // per-direction margin + emerge class that used to live here became
+  // dead code when the local figure mount was removed.
 
   // Collar placement:
   // First segment has a collar on its anchor-edge side.
@@ -353,32 +347,10 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
         </div>
       )}
 
-      {/* Tomáš — invisible until emerge. Directional emerge class grows the
-          sprite outward from the mouth face thanks to transform-origin. */}
-      {showTomas && (
-        <div
-          ref={tomasRef}
-          data-testid="dbb-tomas"
-          className={phase === 'emerge' ? emergeClass : ''}
-          style={{
-            position: 'absolute',
-            left: `${mouth.x}px`,
-            top: `${mouth.y}px`,
-            ...tomasMargin,
-            zIndex: 195,
-            ...((phase === 'walk' || phase === 'slideOut') ? {
-              transform: handoff.transform,
-              transition: `transform ${handoff.duration}ms steps(${handoff.stepCount}, end)`,
-            } : {}),
-          }}
-        >
-          <PlayerFigure
-            name={playerName}
-            holdingCard={false}
-            walkFrame={phase === 'walk' ? handoff.walkFrame : null}
-          />
-        </div>
-      )}
+      {/* Tomáš's figure is drawn by the shared CharacterStage — the
+          director teleports the character to the pipe mouth when the
+          emerge phase begins and walks it to the grid slot. Nothing to
+          render here locally. */}
 
       {showArrivalBubble && (
         <ArrivalBubble targetKey={targetKey} />
