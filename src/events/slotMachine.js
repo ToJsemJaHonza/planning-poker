@@ -285,10 +285,19 @@ export function rollFlourish(rand = Math.random) {
 // Candidate selection helpers
 // ---------------------------------------------------------------------------
 
-/** Sorted list of non-PM players keyed by joinedAt ASC. Stable for ties. */
+/**
+ * Sorted list of non-PM players keyed by joinedAt ASC. Stable for ties.
+ * Disconnected players are excluded so the ceremony firer (useRoom.js picks
+ * `sorted[0]`) and the winner pool only consider clients currently online.
+ * Without this filter, if the leader-player was the earliest joiner and
+ * then closed their browser, their stale record (still isLeader=true,
+ * disconnected=true) would be picked as the firer — they can't fire because
+ * they're offline, and every other client bails out because `sorted[0]` is
+ * not them, leaving the room leaderless forever.
+ */
 export function nonPmCandidatesSorted(players) {
   return Object.entries(players)
-    .filter(([, p]) => p && p.role !== 'pm')
+    .filter(([, p]) => p && p.role !== 'pm' && !p.disconnected)
     .sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0));
 }
 

@@ -15,6 +15,7 @@ import CardPicker, { SplitCardPicker } from './CardPicker';
 import PlayerList from './PlayerList';
 import ResultModal from './ResultModal';
 import CharacterStage from './CharacterStage';
+import CrownStage from './CrownStage';
 import RevealBackground from './RevealBackground';
 import ShameOverlay from './shame/ShameOverlay';
 import SlotMachineStage from './SlotMachineStage';
@@ -33,7 +34,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
     triggerOkta,
     syncedEvent, fireSyncedEvent,
     pmRoulette, resolvePmRoulettePromotion, clearPmRoulette,
-    roomStartCrowning, shameTimer, setShameTimer, roomDeleted,
+    roomStartCrowning, roomStartCrowned, shameTimer, setShameTimer, roomDeleted,
     isLeader, connected, leaderChangedAt, createdAt,
     castVote, castVoteFe, castVoteBe,
     toggleSplit, revealCards, newRound, updateTask,
@@ -52,14 +53,12 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
   // useLayoutEffect reads them after commit.
   const phaseStateRef = useRef(null);
   const roomStartStateRef = useRef(null);
-  const crownOwnershipRef = useRef(null);
 
   const { ceremonyStartPos } = usePmDirector({
     stage,
     ceremonyActive,
     phaseStateRef,
     roomStartStateRef,
-    crownOwnershipRef,
     isLeader,
     externalQuote: !isLeader ? pmQuote : '',
     onQuote: isLeader ? setPmQuote : null,
@@ -70,6 +69,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
     roomCode, playerId, role, connected, isLeader,
     players, roomStartCrowning, pmRoulette,
     ceremonyStartPos,
+    roomStartCrowned,
   });
 
   // --- Slot machine ceremony validation ---
@@ -113,7 +113,6 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
   // after commit, so it always sees the latest tick's values.
   phaseStateRef.current = slotMachinePhaseState;
   roomStartStateRef.current = roomStartState;
-  crownOwnershipRef.current = crownOwnership;
 
   // --- Derived state ---
   const isPM = role === 'pm';
@@ -292,6 +291,13 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
           at phase boundaries, so no teleport between idle and ceremony. */}
       <CharacterStage stage={stage} />
 
+      {/* Single crown renderer. Every place that used to paint its own
+          crown (PlayerFigure's head crown, PmSprite's ceremony block,
+          `char.crown` mirroring in both directors) has been deleted —
+          the crown's authoritative state is `crownOwnership` and this
+          is the one renderer that consumes it. */}
+      <CrownStage stage={stage} crownOwnership={crownOwnership} />
+
       <RoomHeader roomCode={roomCode} playerCount={playerCount} />
       <TaskBar task={task} canControl={canControl} phase={phase} onSave={updateTask} />
       <PhaseBar
@@ -307,10 +313,10 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
           splitMode={splitMode} syncedEvent={syncedEvent}
           fireSyncedEvent={fireSyncedEvent} isLeader={isLeader}
           createdAt={createdAt} pmRoulette={pmRoulette}
-          phaseState={slotMachinePhaseState} crownOwnership={crownOwnership}
+          phaseState={slotMachinePhaseState}
           shameTimer={shameTimer} shameStage={shame.stage}
           allVoted={allVotedClean} /* nod animation only for clean votes */
-          stage={stage}
+          stage={stage} roomCode={roomCode}
         />
       </div>
 

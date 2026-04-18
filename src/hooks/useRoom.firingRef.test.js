@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 
 vi.mock('../firebase.js', () => import('../test/firebase-mock.js'));
 
-import { useRoom } from './useRoom';
+import { useRoom, CEREMONY_GRACE_MS } from './useRoom';
 import { __mock } from '../test/firebase-mock.js';
 
 describe('firingRef reset on ceremony clear', () => {
@@ -12,6 +12,9 @@ describe('firingRef reset on ceremony clear', () => {
     vi.useRealTimers();
   });
 
+  // Two back-to-back ceremonies, each gated by CEREMONY_GRACE_MS. Needs a
+  // per-test timeout larger than the global default — roughly double the
+  // grace window plus Firebase round-trip margin.
   it('allows a new ceremony after the previous one clears (firingRef not stuck)', async () => {
     // Setup: Two players in a room. Alice is leader.
     const alice = renderHook(() => useRoom('ROOM_FR', 'alice-id', 'Alice', 'player'));
@@ -32,7 +35,7 @@ describe('firingRef reset on ceremony clear', () => {
       const store = __mock.getStore();
       const meta = store.rooms?.ROOM_FR?.meta;
       return expect(meta?.pmRoulette).toBeTruthy();
-    }, { timeout: 8000 });
+    }, { timeout: CEREMONY_GRACE_MS + 3000 });
 
     // Now simulate the ceremony completing by clearing pmRoulette
     const { set, ref, db } = await import('../test/firebase-mock.js');
@@ -67,6 +70,6 @@ describe('firingRef reset on ceremony clear', () => {
       const store = __mock.getStore();
       const meta = store.rooms?.ROOM_FR?.meta;
       return expect(meta?.pmRoulette).toBeTruthy();
-    }, { timeout: 8000 });
-  });
+    }, { timeout: CEREMONY_GRACE_MS + 3000 });
+  }, CEREMONY_GRACE_MS * 2 + 10000);
 });

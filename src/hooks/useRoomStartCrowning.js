@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { db, ref, set, get, runTransaction } from '../firebase';
+import { db, ref, set, get, update, runTransaction } from '../firebase';
 import { computePlayerGridPosition } from '../engine/gridPosition';
 import { easeInOutCubic, CEREMONY_WALK_FRAME_MS } from '../engine/animation';
 import { useAnimationLoop } from '../engine/useAnimationLoop';
@@ -54,6 +54,9 @@ const IDLE_STATE = {
  * @param {Record<string, any>} opts.players
  * @param {object|null} opts.roomStartCrowning  live payload from Firebase
  * @param {object|null} opts.pmRoulette  active ceremony (blocks mini-ceremony)
+ * @param {boolean} [opts.roomStartCrowned=false]  sticky flag set after the
+ *   first coronation completes. Guards against refresh re-fire: once this is
+ *   true, the trigger effect bails immediately regardless of other state.
  * @returns {object} { active, phase, elapsed, winnerId }
  */
 export function useRoomStartCrowning({
@@ -66,6 +69,7 @@ export function useRoomStartCrowning({
   roomStartCrowning,
   pmRoulette,
   ceremonyStartPos,
+  roomStartCrowned = false,
 }) {
   const [phaseState, setPhaseState] = useState(IDLE_STATE);
   const firedRef = useRef(false);
@@ -90,6 +94,11 @@ export function useRoomStartCrowning({
   useEffect(() => {
     if (!roomCode || !playerId || !connected) return;
     if (firedRef.current) return;
+    // Sticky "already crowned" flag — survives refresh. Without this, a
+    // leader reloading the page would re-enter the trigger effect with
+    // isLeader=true, no live payload, a single-player roster, and all
+    // guards passing, so the full coronation replayed on every F5.
+    if (roomStartCrowned) return;
     if (!walkInReady) return; // wait for walk-in animation to finish
     if (role !== 'player') return;
     if (!isLeader) return;
@@ -122,7 +131,7 @@ export function useRoomStartCrowning({
       // Reset guard if write fails so we can retry
       firedRef.current = false;
     });
-  }, [roomCode, playerId, role, connected, isLeader, players, roomStartCrowning, pmRoulette, walkInReady]);
+  }, [roomCode, playerId, role, connected, isLeader, players, roomStartCrowning, pmRoulette, walkInReady, roomStartCrowned]);
 
   // Precompute positions once when payload arrives (stable across ticks)
   const positionsRef = useRef(null);
@@ -205,7 +214,15 @@ async function cleanupPayload(roomCode, ceremonyId) {
     const snap = await get(ref(db, `rooms/${roomCode}/meta/roomStartCrowning`));
     const current = snap.val();
     if (current && current.ceremonyId === ceremonyId) {
-      await set(ref(db, `rooms/${roomCode}/meta/roomStartCrowning`), null);
+      // Atomic two-field write: null the payload AND set the sticky
+      // "already crowned" flag in the same update so there is no window
+      // where the payload is gone but the flag hasn't landed yet. Without
+      // atomicity, a refresh during that gap would satisfy every trigger
+      // guard and fire a second ceremony.
+      await update(ref(db, `rooms/${roomCode}/meta`), {
+        roomStartCrowning: null,
+        roomStartCrowned: true,
+      });
     }
   } catch {
     // Best-effort cleanup

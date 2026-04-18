@@ -43,8 +43,6 @@ function toPmModel(character) {
     showBubble: !!character.bubble,
     facingLeft: !!character.facingLeft,
     position: null,
-    crownState: character.crown,
-    crownGlowing: character.crown?.glowing ?? false,
   };
 }
 
@@ -65,9 +63,6 @@ export default function CharacterSprite({ character }) {
       character.walkFrame,
       character.facingLeft,
       character.bubble?.text,
-      character.crown?.mode,
-      character.crown?.progress,
-      character.crown?.glowing,
     ],
   );
 
@@ -103,7 +98,6 @@ export default function CharacterSprite({ character }) {
             name={character.name || 'anon'}
             walkFrame={character.walkFrame}
             pose={character.pose === 'walk1' || character.pose === 'walk2' ? null : character.pose}
-            showCrown={!!character.crown}
             fukEyes={!!character.fukEyes}
             stressStage={character.stressStage || 0}
           />

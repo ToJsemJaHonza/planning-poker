@@ -32,16 +32,20 @@
  *     name:        string | null           ← drives player-sprite hash
  *     zIndex:      number
  *     hidden:      boolean
- *     crown:       null | { mode, progress?, glowing? }
  *     bubble:      null | { text, opacity }
  *     action:      null | Action           ← current in-flight action
  *     queue:       Action[]                ← pending actions (FIFO)
  *   }
  *
+ * The crown is NOT a character property. It's rendered by <CrownStage>
+ * from the canonical `crownOwnership` object. Any attempt to add a
+ * `char.crown` field back creates exactly the coordination bug this
+ * refactor killed — a crown painted in two places that can disagree
+ * across a frame.
+ *
  * Methods attached for ergonomic director code: walkTo, wait, setPose,
- * setFacing, setBubble, setHidden, setZIndex, giveCrown, takeCrown,
- * arcCrownTo, teleport, sequence, interrupt, clearQueue. Each returns the
- * character so they can be chained.
+ * setFacing, setBubble, setHidden, setZIndex, teleport, sequence,
+ * interrupt, clearQueue. Each returns the character so they can be chained.
  */
 
 import { advanceAction, ACTION_TYPES } from './characterActions';
@@ -64,7 +68,6 @@ export function createCharacter({
   name = null,
   zIndex = 50,
   hidden = false,
-  crown = null,
   bubble = null,
   fukEyes = false,
   stressStage = 0,
@@ -85,7 +88,6 @@ export function createCharacter({
     name,
     zIndex,
     hidden,
-    crown,
     bubble,
     fukEyes,
     stressStage,
@@ -105,9 +107,6 @@ export function createCharacter({
   char.setHidden = (hidden) => enqueue(char, { type: ACTION_TYPES.SET_HIDDEN, hidden });
   char.setZIndex = (zIndex) => enqueue(char, { type: ACTION_TYPES.SET_ZINDEX, zIndex });
   char.setName = (name) => enqueue(char, { type: ACTION_TYPES.SET_NAME, name });
-  char.giveCrown = (state) => enqueue(char, { type: ACTION_TYPES.GIVE_CROWN, state });
-  char.takeCrown = () => enqueue(char, { type: ACTION_TYPES.TAKE_CROWN });
-  char.arcCrownTo = (opts) => enqueue(char, { type: ACTION_TYPES.ARC_CROWN_TO, ...opts });
   char.callback = (fn) => enqueue(char, { type: ACTION_TYPES.CALLBACK, fn });
   char.sequence = (actions) => {
     for (const a of actions) enqueue(char, a);

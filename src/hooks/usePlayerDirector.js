@@ -9,12 +9,15 @@
  * new slot. Because the character persists across all of those, there's
  * no unmount/remount handoff for a pop to hide inside.
  *
- * Outgoing leader handoff (Phase 4 concerns, handled here too): when
- * `pmRoulette.outgoingLeaderId` is set, the character for that id is kept
- * alive even if the player already left the `players` map — the ceremony
- * needs to animate them walking off. `outgoingLeaderLastData` is the fall-
- * back for the sprite's name. On `leaderWalkOff` the character walks
- * offscreen and is removed once the walk completes.
+ * Outgoing leader handoff: while a ceremony is active, the outgoing
+ * leader is kept in `sortedPlayers` (via `buildVisibleRoster`) so their
+ * figure stays rooted to its grid slot through the entire ceremony — the
+ * PM walks up to a standing character and lifts the crown from someone
+ * who's actually there, rather than miming it over empty air. Only after
+ * the ceremony ends (pmRoulette → null) does the outgoing leader walk
+ * offscreen. The shared roster helper also guarantees the grid renderer
+ * and the stage agree on every index, so name tags don't slide off their
+ * figures.
  *
  * The director writes slow-changing state (crown, tremble class, fukEyes,
  * stress stage, doNod) into the character on every render via a
@@ -25,6 +28,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { computePlayerGridPosition } from '../engine/gridPosition';
 import { SPRITE_W } from '../engine/characterLayout';
 import { hashDir } from '../components/playerList.utils';
+import { buildVisibleRoster } from '../engine/visibleRoster';
 
 // Player-motion durations — deliberately slow so arrivals / departures
 // read as a proper entrance rather than a pop. 5× the old CSS-keyframe
@@ -32,10 +36,49 @@ import { hashDir } from '../components/playerList.utils';
 const JOIN_WALK_MS = 14000;
 const LEAVE_WALK_MS = 11000;
 const RESHUFFLE_MS = 500;           // short shift when the grid widens — stays snappy
-const LEADER_WALK_OFF_MS = 12500;   // outgoing leader walking off after crown transfer
+const LEADER_WALK_OFF_MS = 12500;   // outgoing leader walking off after coronation ends
 
-const CROWN_REMOVAL_WALKOFF_MS = 3000;
-const CROWN_REMOVAL_TOTAL_MS = 5000;
+// If a player's `joinedAt` is older than this when we first see them on the
+// stage, we treat them as a reconnecting / already-present player and
+// teleport them straight into their grid slot instead of replaying the
+// walk-in-from-offscreen animation. Keeps a page refresh from looking like
+// the user arrived twice (once for real, once walking in over the static
+// figure left by the server). Wide enough to absorb slow Firebase cold
+// boots; narrower than any realistic "just joined" case.
+const JOIN_WINDOW_MS = 5000;
+
+// sessionStorage key — marks a character as "already walked in during this
+// tab session". Survives a hard refresh (same tab, same sessionStorage) but
+// not a new tab. Critical for the mid-walk-in refresh case: the player's
+// `joinedAt` age is still within JOIN_WINDOW_MS when they press Ctrl+R
+// two seconds into their own walk-in, so the age check alone would
+// classify them as a fresh join and replay the walk — visually reading
+// like the character was duplicated. The flag is set the moment we
+// schedule the walkTo, so any remount in the same tab sees it and
+// teleports instead. Scoped by room so moving between rooms in one tab
+// still shows a fresh walk-in for the new room.
+function walkInStorageKey(roomCode, charId) {
+  return `poker-walkedin:${roomCode || 'default'}:${charId}`;
+}
+
+function hasWalkedInThisSession(roomCode, charId) {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.sessionStorage.getItem(walkInStorageKey(roomCode, charId)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markWalkedInThisSession(roomCode, charId) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(walkInStorageKey(roomCode, charId), '1');
+  } catch {
+    // Private-mode / quota errors: best-effort. Worst case the age check
+    // still catches the common "refresh after settle" flavour.
+  }
+}
 
 function safeHashDir(name) {
   try {
@@ -73,7 +116,6 @@ function slotCenter(index, count, vw) {
  * @param {object} opts.stage          shared character stage
  * @param {Record<string, object>} opts.players  raw Firebase players map
  * @param {object|null} opts.pmRoulette
- * @param {object|null} opts.crownOwnership
  * @param {object|null} opts.shameTimer
  * @param {number} [opts.shameStage=0]
  * @param {boolean} [opts.allVoted=false]
@@ -82,26 +124,31 @@ function slotCenter(index, count, vw) {
  * @param {Set<string>} [opts.hiddenPlayers=new Set()]  ids hidden for
  *   cinematic entrances (their character exists but stays hidden until
  *   the cinematic hands off — see useEntranceDirector in Phase 5).
+ *
+ * The crown is NOT this hook's concern. CrownStage renders the crown from
+ * the canonical `crownOwnership` object; we don't mirror it into characters.
  */
 export function usePlayerDirector({
   stage,
   players,
   pmRoulette = null,
-  crownOwnership = null,
   shameTimer = null,
   shameStage = 0,
   allVoted = false,
   phaseState = null,
   fukEyesSet = null,
   hiddenPlayers = null,
+  roomCode = null,
 }) {
-  // Sorted non-PM roster. Must match the sort used by PlayerList /
-  // ceremonyPmWalk so target positions agree.
+  // Canonical roster shared with `usePlayerModels` — same helper, same
+  // rules. That guarantees a character's index on the stage matches the
+  // index of its card in the grid, so every name tag sits directly
+  // below its figure. See `engine/visibleRoster.js` for the filter rules
+  // (includes a still-isLeader disconnected player; injects the outgoing
+  // leader post-flip for the rest of the ceremony).
   const sortedPlayers = useMemo(
-    () => Object.entries(players || {})
-      .filter(([, d]) => d.role !== 'pm' && !d.disconnected)
-      .sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0)),
-    [players],
+    () => buildVisibleRoster(players, pmRoulette),
+    [players, pmRoulette],
   );
 
   // Remember last-known data so a player who disconnects during a ceremony
@@ -110,35 +157,14 @@ export function usePlayerDirector({
   for (const [id, data] of sortedPlayers) {
     lastDataRef.current[id] = data;
   }
-  if (pmRoulette?.outgoingLeaderId && pmRoulette.outgoingLeaderLastData) {
-    lastDataRef.current[pmRoulette.outgoingLeaderId] = {
-      ...(lastDataRef.current[pmRoulette.outgoingLeaderId] || {}),
-      ...pmRoulette.outgoingLeaderLastData,
-      role: pmRoulette.outgoingLeaderLastData.role || 'player',
-    };
-  }
 
-  // "Alive ids": players the stage should carry characters for right now.
-  // Normally just the sorted roster, but during crown removal we inject the
-  // outgoing leader so their walk-off can play even if they disconnected.
-  const liveIds = useMemo(() => {
-    const ids = sortedPlayers.map(([id]) => id);
-    if (pmRoulette?.outgoingLeaderId && !ids.includes(pmRoulette.outgoingLeaderId)) {
-      ids.push(pmRoulette.outgoingLeaderId);
-    }
-    return ids;
-  }, [sortedPlayers, pmRoulette?.outgoingLeaderId]);
+  const liveIds = useMemo(() => sortedPlayers.map(([id]) => id), [sortedPlayers]);
 
-  // Fast index lookup: where does each id sit in the visible grid? The
-  // outgoing leader (injected) appends to the end if they've already left.
   const indexById = useMemo(() => {
     const m = new Map();
     sortedPlayers.forEach(([id], i) => m.set(id, i));
-    if (pmRoulette?.outgoingLeaderId && !m.has(pmRoulette.outgoingLeaderId)) {
-      m.set(pmRoulette.outgoingLeaderId, sortedPlayers.length);
-    }
     return m;
-  }, [sortedPlayers, pmRoulette?.outgoingLeaderId]);
+  }, [sortedPlayers]);
 
   // Window-resize triggers reshuffle: when the viewport width changes,
   // every player's computed grid-slot x shifts, and we want the
@@ -168,8 +194,24 @@ export function usePlayerDirector({
         const dir = safeHashDir(displayName).dir;
         const index = indexById.get(id) ?? 0;
         const target = slotCenter(index, gridCount || 1, vw);
-        const startX = offscreenX(dir, vw);
         const startHidden = hiddenPlayers?.has(id) || false;
+        // Genuine fresh join (walk in from offscreen) vs. reconnect /
+        // refresh / already-present player (place directly at slot).
+        // Two guards combined:
+        //   1) sessionStorage flag — survives Ctrl+R in the same tab, so
+        //      a user who is two seconds into their own walk-in and hits
+        //      refresh does NOT see the walk-in replay from offscreen.
+        //      The age window alone can't catch this because `joinedAt`
+        //      is still < JOIN_WINDOW_MS on remount.
+        //   2) `joinedAt` age — catches the case where sessionStorage
+        //      is unavailable (private mode) or was cleared, and covers
+        //      other players whose flag was never set in our tab.
+        // `joinedAt` is preserved across refresh by useRoom.setupPlayer.
+        const alreadyWalkedIn = hasWalkedInThisSession(roomCode, charId);
+        const joinedAt = typeof data.joinedAt === 'number' ? data.joinedAt : 0;
+        const age = Date.now() - joinedAt;
+        const isFreshJoin = !alreadyWalkedIn && joinedAt > 0 && age <= JOIN_WINDOW_MS;
+        const startX = isFreshJoin ? offscreenX(dir, vw) : target.x;
         stage.add({
           id: charId,
           sprite: 'player',
@@ -179,11 +221,16 @@ export function usePlayerDirector({
           hidden: startHidden,
           zIndex: 30,
         });
-        // Walk-in. We schedule it even for hidden characters so that when
-        // the cinematic entrance director unhides them, the motion picks up.
-        stage.get(charId).walkTo({
-          x: target.x, y: target.y, duration: JOIN_WALK_MS,
-        });
+        if (isFreshJoin) {
+          // Mark BEFORE scheduling so a synchronous remount during the
+          // walk-in reliably sees the flag.
+          markWalkedInThisSession(roomCode, charId);
+          // Walk-in. We schedule it even for hidden characters so that when
+          // the cinematic entrance director unhides them, the motion picks up.
+          stage.get(charId).walkTo({
+            x: target.x, y: target.y, duration: JOIN_WALK_MS,
+          });
+        }
       }
     }
 
@@ -239,73 +286,70 @@ export function usePlayerDirector({
     knownIdsRef.current = currentSet;
   }, [liveIds, sortedPlayers, pmRoulette?.outgoingLeaderId, indexById, stage, hiddenPlayers, vw]);
 
-  // ── Outgoing-leader walk-off (Phase 4) ───────────────────────────────────
-  // Triggers once per ceremony when the walk-off timing hits.
-  const walkOffFiredForRef = useRef(null);
-  const startedAt = pmRoulette?.startedAt ?? null;
-
-  useEffect(() => {
-    if (!stage || !pmRoulette || !pmRoulette.outgoingLeaderId || !startedAt) {
-      walkOffFiredForRef.current = null;
-      return undefined;
-    }
-    const ceremonyKey = pmRoulette.ceremonyId || `t-${startedAt}`;
-    if (walkOffFiredForRef.current === ceremonyKey) return undefined;
-
-    const elapsed = Date.now() - startedAt;
-    const remainingUntilWalkoff = CROWN_REMOVAL_WALKOFF_MS - elapsed;
-    const fire = () => {
-      walkOffFiredForRef.current = ceremonyKey;
-      const id = pmRoulette.outgoingLeaderId;
-      const charId = `player-${id}`;
-      const char = stage.get(charId);
-      if (!char) return;
-      const data = lastDataRef.current[id] || { name: id };
-      const enterDir = safeHashDir(data.name || id).dir;
-      const exitDir = enterDir === 'left' ? 'right' : 'left';
-      const exitX = offscreenX(exitDir, getViewportWidth());
-      char.interrupt();
-      char.walkTo({
-        x: exitX, y: char.position.y, duration: LEADER_WALK_OFF_MS,
-        onDone: () => stage.remove(charId),
-      });
-    };
-
-    if (remainingUntilWalkoff <= 0) {
-      fire();
-      return undefined;
-    }
-    const t = setTimeout(fire, remainingUntilWalkoff);
-    return () => clearTimeout(t);
-  }, [startedAt, pmRoulette?.ceremonyId, pmRoulette?.outgoingLeaderId, stage]);
-
-  // After a ceremony ends, the outgoing leader character may have
-  // finished its walk-off already (via onDone), but a race where the
-  // ceremony payload cleared before our walk-off resolved should still
-  // clean up here. We only fire on the ceremony-end transition so the
-  // regular leave handler above (which queues a walk-off walkTo) isn't
-  // stomped by a same-tick removal.
+  // ── Outgoing-leader walk-off (post-ceremony) ─────────────────────────────
+  //
+  // The figure stays rooted to its grid slot for the full ceremony.
+  // Walk-off is triggered on the `pmRoulette` → null transition (i.e.
+  // `clearPmRoulette` fired after crownDelivery completes) so the user
+  // sees: crown lifted from standing figure → slot machine → new leader
+  // crowned → THEN the old leader exits. Any non-outgoing straggler that
+  // dropped out during the ceremony is walked off here too.
+  //
+  // We remember the most recent `outgoingLeaderId` across the ceremony
+  // because by the time pmRoulette is null the payload itself is gone,
+  // so we need a captured value to find which character to animate.
   const hadCeremonyRef = useRef(false);
+  const lastOutgoingLeaderIdRef = useRef(null);
+  if (pmRoulette?.outgoingLeaderId) {
+    lastOutgoingLeaderIdRef.current = pmRoulette.outgoingLeaderId;
+  }
+
   useEffect(() => {
     const hasCeremony = !!pmRoulette;
     if (stage && hadCeremonyRef.current && !hasCeremony) {
       const currentSet = new Set(sortedPlayers.map(([id]) => id));
+      const outgoingId = lastOutgoingLeaderIdRef.current;
       for (const char of stage.all()) {
         if (char.sprite !== 'player') continue;
         const id = char.id.replace(/^player-/, '');
-        if (!currentSet.has(id)) {
-          stage.remove(char.id);
+        if (currentSet.has(id)) continue;
+        const charId = char.id;
+        if (id === outgoingId) {
+          // Outgoing leader: walk them off ceremoniously now that the
+          // new leader has been crowned.
+          const data = lastDataRef.current[id] || { name: id };
+          const enterDir = safeHashDir(data.name || id).dir;
+          const exitDir = enterDir === 'left' ? 'right' : 'left';
+          const exitX = offscreenX(exitDir, getViewportWidth());
+          char.interrupt();
+          char.walkTo({
+            x: exitX, y: char.position.y, duration: LEADER_WALK_OFF_MS,
+            onDone: () => stage.remove(charId),
+          });
+        } else {
+          // Straggler — character was kept alive by the liveIds injection
+          // but isn't the outgoing leader (e.g. they disconnected during
+          // the ceremony). Remove without ceremony.
+          stage.remove(charId);
         }
       }
+      lastOutgoingLeaderIdRef.current = null;
     }
     hadCeremonyRef.current = hasCeremony;
   }, [pmRoulette, sortedPlayers, stage]);
 
-  // ── Slow-state mirror: shame tremble, nod, fukEyes, crown, stress ────────
+  // ── Slow-state mirror: shame tremble, nod, fukEyes, stress ─────────────
+  // Crown state is intentionally NOT mirrored here. CrownStage is the sole
+  // crown renderer and reads the authoritative crownOwnership directly —
+  // writing `char.crown` from multiple directors was the exact bug that
+  // made the crown vanish one frame before the PM visibly removed it.
   useLayoutEffect(() => {
     if (!stage) return;
     const outgoingId = pmRoulette?.outgoingLeaderId || null;
-    const leaderWalkOffActive = !!(pmRoulette && startedAt && (Date.now() - startedAt) >= CROWN_REMOVAL_WALKOFF_MS);
+    // During an active ceremony we suppress the "all voted" nod
+    // everywhere — the mood is ceremonial and the outgoing leader is
+    // standing still for the crown removal, not bobbing.
+    const ceremonyActive = !!pmRoulette;
 
     for (const [id, data] of sortedPlayers) {
       const char = stage.get(`player-${id}`);
@@ -317,15 +361,13 @@ export function usePlayerDirector({
       char.fukEyes = !!(fukEyesSet?.has(displayName)
         || (phaseState?.nonMatchRelief && phaseState?.nonMatchReliefPlayerId === id));
       char.stressStage = stressStage;
-      const onHead = crownOwnership?.location === 'player-head' && crownOwnership?.playerId === id;
-      char.crown = onHead ? { mode: 'settled', glowing: !!crownOwnership?.glowing } : null;
       // Shame tremble + "all voted" nod — applied as CSS class on the
-      // inner facing wrapper. The nod is suppressed for the synthetic
-      // outgoing-leader walking off (existing semantics).
+      // inner facing wrapper. The nod is suppressed during a ceremony
+      // and on the outgoing leader specifically.
       const trembleClass = stressStage >= 1
         ? `shame-tremble-${Math.min(stressStage, 5)}`
         : '';
-      const nodClass = allVoted && !leaderWalkOffActive && outgoingId !== id
+      const nodClass = allVoted && !ceremonyActive && outgoingId !== id
         ? 'player-nod'
         : '';
       char.className = [trembleClass, nodClass].filter(Boolean).join(' ');
@@ -341,9 +383,6 @@ export function usePlayerDirector({
         char.name = data.name || outgoingId;
         char.fukEyes = false;
         char.stressStage = 0;
-        // Outgoing leader never shows a crown on the grid — the crown is
-        // being transferred via the ceremony's PM arc.
-        char.crown = null;
         char.className = '';
         char.hidden = false;
       }
@@ -353,11 +392,13 @@ export function usePlayerDirector({
 
 export const __testing__ = {
   JOIN_WALK_MS,
+  JOIN_WINDOW_MS,
   LEAVE_WALK_MS,
   RESHUFFLE_MS,
   LEADER_WALK_OFF_MS,
-  CROWN_REMOVAL_WALKOFF_MS,
-  CROWN_REMOVAL_TOTAL_MS,
   offscreenX,
   slotCenter,
+  walkInStorageKey,
+  hasWalkedInThisSession,
+  markWalkedInThisSession,
 };

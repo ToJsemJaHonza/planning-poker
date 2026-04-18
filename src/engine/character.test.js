@@ -177,30 +177,6 @@ describe('instant actions drain in one tick', () => {
   });
 });
 
-describe('crown actions', () => {
-  it('giveCrown / takeCrown toggle crown state', () => {
-    const c = mk();
-    c.giveCrown({ mode: 'settled', glowing: true });
-    tickCharacter(c, 0);
-    expect(c.crown).toEqual({ mode: 'settled', glowing: true });
-    c.takeCrown();
-    tickCharacter(c, 1);
-    expect(c.crown).toBeNull();
-  });
-
-  it('arcCrownTo reports progress and snaps to settled on completion', () => {
-    const c = mk();
-    c.arcCrownTo({ duration: 300, glowing: true });
-    tickCharacter(c, 0);
-    expect(c.crown.mode).toBe('arcing');
-    tickCharacter(c, 150);
-    expect(c.crown.mode).toBe('arcing');
-    expect(c.crown.progress).toBeCloseTo(0.5, 5);
-    tickCharacter(c, 300);
-    expect(c.crown).toEqual({ mode: 'settled', glowing: true });
-  });
-});
-
 describe('interrupt and teleport', () => {
   it('interrupt freezes position in place and clears queue', () => {
     const c = mk({ position: { x: 0, y: 100 } });

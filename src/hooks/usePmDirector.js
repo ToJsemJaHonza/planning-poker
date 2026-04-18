@@ -74,40 +74,24 @@ function cycleTimeFromPosition(x, facingLeft, vw) {
 }
 
 /**
- * Map the canonical `crownOwnership` shape used across the app into the
- * `char.crown` shape the ceremony-mode PmSprite renderer understands.
- * Returns null when the crown is not on the PM.
- */
-function crownOwnershipToChar(ownership) {
-  if (!ownership) return null;
-  switch (ownership.location) {
-    case 'lifting':
-      return { mode: 'lifting', progress: ownership.progress, glowing: !!ownership.glowing };
-    case 'pm-hand':
-      return { mode: 'settled', progress: 1, glowing: !!ownership.glowing };
-    case 'arcing-to-player':
-      return { mode: 'arcing', progress: ownership.progress, glowing: !!ownership.glowing };
-    case 'materializing':
-      return { mode: 'materializing', progress: ownership.progress, glowing: !!ownership.glowing };
-    default:
-      return null;
-  }
-}
-
-/**
- * Downstream hooks (`useSlotMachine`, `useRoomStartCrowning`,
- * `useCrownOwnership`) depend on `ceremonyStartPos` from this hook — and
- * this hook's ceremony mirror depends on their output. The circular edge
- * is broken by passing Refs for the mirror inputs: they're assigned later
- * in the parent render but read by the layout effect after commit, which
- * is after all refs have been updated.
+ * Downstream hooks (`useSlotMachine`, `useRoomStartCrowning`) depend on
+ * `ceremonyStartPos` from this hook — and this hook's ceremony mirror
+ * depends on their output. The circular edge is broken by passing Refs
+ * for the mirror inputs: they're assigned later in the parent render but
+ * read by the layout effect after commit, which is after all refs have
+ * been updated.
+ *
+ * The PM character's `crown` field is NO LONGER written here. The crown
+ * is owned by `useCrownOwnership` and rendered by `<CrownStage>` — a single
+ * renderer consuming a single source of truth. Mirroring crown state onto
+ * the character mutated the same field the outgoing-leader path was also
+ * mirroring, creating the mid-ceremony flash where the crown disappeared.
  *
  * @param {object} opts
  * @param {object} opts.stage           shared CharacterStage runtime
  * @param {boolean} opts.ceremonyActive true when pmRoulette or roomStart is live
  * @param {{current: object|null}} [opts.phaseStateRef]     slotMachinePhaseState
  * @param {{current: object|null}} [opts.roomStartStateRef] useRoomStartCrowning output
- * @param {{current: object|null}} [opts.crownOwnershipRef] useCrownOwnership output
  * @param {boolean} [opts.isLeader=false]
  * @param {string} [opts.externalQuote='']
  * @param {((q:string)=>void)|null} [opts.onQuote=null]
@@ -118,7 +102,6 @@ export function usePmDirector({
   ceremonyActive,
   phaseStateRef = null,
   roomStartStateRef = null,
-  crownOwnershipRef = null,
   isLeader = false,
   externalQuote = '',
   onQuote = null,
@@ -157,8 +140,6 @@ export function usePmDirector({
     pmPose: null,
     pmBubble: '',
     ceremonyFacing: null,
-    crownState: null,
-    crownGlowing: false,
   });
 
   // ── Idle ping-pong ────────────────────────────────────────────────────────
@@ -254,13 +235,11 @@ export function usePmDirector({
       pmChar.bubble = pmModel.showBubble && pmModel.bubble
         ? { text: pmModel.bubble, opacity: 1 }
         : null;
-      pmChar.crown = null;
       return;
     }
 
     const phaseState = phaseStateRef?.current ?? null;
     const roomStartState = roomStartStateRef?.current ?? null;
-    const crownOwnership = crownOwnershipRef?.current ?? null;
 
     // Room-start mini-ceremony takes priority over slot-machine ceremony
     // (they never overlap — useRoomStartCrowning gates on `!pmRoulette` —
@@ -270,7 +249,6 @@ export function usePmDirector({
       pmChar.pose = roomStartState.pmPose || 'walk';
       pmChar.facingLeft = false;
       pmChar.bubble = null;
-      pmChar.crown = crownOwnershipToChar(crownOwnership);
       pmChar.zIndex = 55;
       return;
     }
@@ -289,7 +267,6 @@ export function usePmDirector({
             opacity: phaseState.pmCeremonyBubble.opacity ?? 1,
           }
         : null;
-      pmChar.crown = crownOwnershipToChar(crownOwnership);
       // Ceremony PM renders above SlotMachineStage backdrop (z 205) and its
       // procession spotlight (z 212). Match old SlotMachineStage value.
       pmChar.zIndex = 213;

@@ -234,13 +234,24 @@ export const __mock = {
     } else if (action?.type === 'set') {
       _setAt(norm, action.value);
       _notify(norm);
+    } else if (action?.type === 'update') {
+      const current = _getAt(norm);
+      const merged = { ...(current || {}), ...action.value };
+      _setAt(norm, merged);
+      _notify(norm);
     }
     disconnectQueue.delete(norm);
   },
   triggerDisconnectAll() {
     for (const [path, action] of Array.from(disconnectQueue.entries())) {
-      if (action === 'remove') _setAt(path, undefined);
-      else if (action?.type === 'set') _setAt(path, action.value);
+      if (action === 'remove') {
+        _setAt(path, undefined);
+      } else if (action?.type === 'set') {
+        _setAt(path, action.value);
+      } else if (action?.type === 'update') {
+        const current = _getAt(path);
+        _setAt(path, { ...(current || {}), ...action.value });
+      }
       _notify(path);
     }
     disconnectQueue.clear();

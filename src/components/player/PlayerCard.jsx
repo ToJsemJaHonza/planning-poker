@@ -29,7 +29,6 @@ export default function PlayerCard(props) {
     isPlaceholder,
     walking,
     fukEyes,
-    showCrown,
     justArrived,
     stressStage,
     shameStartedAt,
@@ -63,10 +62,11 @@ export default function PlayerCard(props) {
       style={{ width: SPRITE_W, height: 120 }}
     />
   );
-  // `walking`, `fukEyes`, `showCrown`, `stressStage` are now character
-  // properties — dereferenced here only to acknowledge the legacy prop
-  // surface; the character stage owns the actual rendering.
-  void walking; void fukEyes; void showCrown; void stressStage;
+  // `walking`, `fukEyes`, `stressStage` are now character properties —
+  // dereferenced here only to acknowledge the legacy prop surface; the
+  // character stage owns the actual rendering. The crown is handled by
+  // <CrownStage>, not this card.
+  void walking; void fukEyes; void stressStage;
 
   const cardContent = (
     <div
@@ -126,7 +126,7 @@ export default function PlayerCard(props) {
 function legacyPropsToModel(props) {
   const {
     id, data, currentPlayer, phase, splitMode,
-    activeQuote, fukEyes, showCrown, walking,
+    activeQuote, fukEyes, walking,
     isSyntheticLeader, justArrived, playerIndex = 0,
     allVoted = false, stressStage = 0, shameStartedAt = 0,
     className = '', style = {}, keySuffix = '', testIdOverride,
@@ -142,7 +142,6 @@ function legacyPropsToModel(props) {
     isPlaceholder: false,
     walking: !!walking,
     fukEyes: !!fukEyes,
-    showCrown: !!showCrown,
     justArrived: !!justArrived,
     stressStage,
     shameStartedAt,
@@ -179,9 +178,6 @@ const styles = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    // Extra clearance from the stage-rendered figure above — without it
-    // the name sits right under the sprite's feet and looks cramped.
-    marginTop: '12px',
   },
   nameTagMe: {
     background: '#d4a853',

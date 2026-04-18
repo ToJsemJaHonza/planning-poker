@@ -10,9 +10,11 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.js',
     css: false,
-    // 15 s instead of the default 5 s — the PM-ceremony trigger has a
-    // 5 s leader-reconnection grace window, and integration tests that
-    // await ceremony firing would otherwise race their own grace.
-    testTimeout: 15000,
+    // Longer than the ceremony grace window so integration tests that
+    // await ceremony firing don't race their own grace. The PM-ceremony
+    // trigger in useRoom waits CEREMONY_GRACE_MS (15 s) before firing;
+    // individual waitFors use CEREMONY_GRACE_MS + 3 s, and the test
+    // itself needs to outlast both plus Firebase round-trip.
+    testTimeout: 25000,
   },
 })

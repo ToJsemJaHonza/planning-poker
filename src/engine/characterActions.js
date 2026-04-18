@@ -25,9 +25,6 @@ export const ACTION_TYPES = Object.freeze({
   SET_HIDDEN: 'setHidden',
   SET_ZINDEX: 'setZIndex',
   SET_NAME: 'setName',
-  GIVE_CROWN: 'giveCrown',
-  TAKE_CROWN: 'takeCrown',
-  ARC_CROWN_TO: 'arcCrownTo',
   TELEPORT: 'teleport',
   CALLBACK: 'callback',
 });
@@ -79,22 +76,6 @@ export function advanceAction(char, action, now) {
     case ACTION_TYPES.SET_NAME:
       char.name = action.name ?? null;
       return true;
-    case ACTION_TYPES.GIVE_CROWN:
-      char.crown = action.state ?? { mode: 'settled', glowing: false };
-      return true;
-    case ACTION_TYPES.TAKE_CROWN:
-      char.crown = null;
-      return true;
-    case ACTION_TYPES.ARC_CROWN_TO: {
-      const duration = Math.max(0, action.duration ?? 500);
-      const progress = duration > 0 ? Math.min(1, elapsed / duration) : 1;
-      char.crown = { mode: 'arcing', progress, glowing: !!action.glowing };
-      if (progress >= 1) {
-        char.crown = { mode: 'settled', glowing: !!action.glowing };
-        return true;
-      }
-      return false;
-    }
     case ACTION_TYPES.TELEPORT:
       char.position = { x: action.x, y: action.y };
       return true;

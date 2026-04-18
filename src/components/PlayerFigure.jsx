@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import Crown from './Crown';
 import { spriteToBoxShadow, PX, SPRITE_PIXEL_STYLE } from '../engine/sprite';
 
 const _ = null;
@@ -461,7 +460,7 @@ export function computePlayerShadow(
   return spriteToBoxShadow(grid, PX);
 }
 
-export default function PlayerFigure({ name, holdingCard, fukEyes, walkFrame = null, pose = null, showCrown = false, stressStage = 0 }) {
+export default function PlayerFigure({ name, holdingCard, fukEyes, walkFrame = null, pose = null, stressStage = 0 }) {
   const shadow = useMemo(
     () => computePlayerShadow(name, { holdingCard, fukEyes, walkFrame, pose, stressStage }),
     [name, holdingCard, fukEyes, walkFrame, pose, stressStage]
@@ -473,7 +472,6 @@ export default function PlayerFigure({ name, holdingCard, fukEyes, walkFrame = n
   return (
     <div style={{ width: SPRITE_W, height: SPRITE_H, position: 'relative' }}>
       <div style={{ ...SPRITE_PIXEL_STYLE, boxShadow: shadow }} />
-      {showCrown && <Crown anchorMode="head" />}
       {exclamation && (
         <div style={{
           position: 'absolute',

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useEntranceEvents } from '../events/useEntranceEvents';
 import { useAmbientEvents } from './useAmbientEvents';
 import { usePlayerDirector } from './usePlayerDirector';
+import { buildVisibleRoster } from '../engine/visibleRoster';
 
 /**
  * Build the canonical per-player view models the grid renders from.
@@ -41,32 +42,22 @@ export function usePlayerModels({
   createdAt = 0,
   pmRoulette = null,
   phaseState = null,
-  crownOwnership = null,
   shameTimer = null,
   shameStage = 0,
   allVoted = false,
   stage = null,
+  roomCode = null,
 }) {
+  // The visible roster used here MUST match the roster used by
+  // `usePlayerDirector` on the stage — that's what keeps each name tag
+  // aligned with the figure it names. The shared helper handles the two
+  // tricky cases (still-isLeader disconnected leader inside the grace
+  // window; mid-ceremony outgoing leader after the promotion flip) so
+  // both surfaces produce identical ordered entries.
   const playerEntries = useMemo(
-    () => Object.entries(players)
-      .filter(([, data]) => data.role !== 'pm' && !data.disconnected)
-      .sort((a, b) => a[1].joinedAt - b[1].joinedAt),
-    [players],
+    () => buildVisibleRoster(players, pmRoulette),
+    [players, pmRoulette],
   );
-
-  // Outgoing-leader visibility window is the only ceremony-elapsed
-  // timestamp the renderer still cares about. The stage's director
-  // handles the figure walk-off; here we only need to know whether to
-  // keep rendering the card chrome (voting cards + name tag) for a player
-  // that has already disconnected mid-ceremony.
-  const ceremonyStartedAt = pmRoulette?.startedAt ?? null;
-  const CROWN_REMOVAL_TOTAL_MS = 5000;
-  const isInCrownRemoval = !!pmRoulette
-    && ceremonyStartedAt
-    && (Date.now() - ceremonyStartedAt) < CROWN_REMOVAL_TOTAL_MS;
-
-  const outgoingId = pmRoulette?.outgoingLeaderId || null;
-  const outgoingData = pmRoulette?.outgoingLeaderLastData || null;
 
   // ---- Entrance + ambient hooks -----------------------------------------
   const entranceEvents = useEntranceEvents({
@@ -82,13 +73,13 @@ export function usePlayerModels({
     stage,
     players,
     pmRoulette,
-    crownOwnership,
     shameTimer,
     shameStage,
     allVoted,
     phaseState,
     fukEyesSet,
     hiddenPlayers,
+    roomCode,
   });
 
   // ---- Per-player model factory -----------------------------------------
@@ -109,17 +100,15 @@ export function usePlayerModels({
 
     const justArrived = recentArrivals.has(id);
 
-    // Figure-side state (crown on head, fukEyes) — the character stage is
-    // the authority, but we still surface the derived values on the model
-    // for legacy consumers and backwards-compatible tests.
+    // Figure-side state (fukEyes) — the character stage is the authority,
+    // but we still surface the derived values on the model for legacy
+    // consumers and backwards-compatible tests. Crown is NOT on the model;
+    // it renders from CrownStage, which consumes crownOwnership directly.
     const isNonMatchRelief = !isSyntheticLeader
       && phaseState?.nonMatchRelief
       && phaseState.nonMatchReliefPlayerId === id;
     const fukEyes = !isSyntheticLeader
       && !!(fukEyesSet?.has(displayName) || isNonMatchRelief);
-    const showCrown = !opts.suppressCrown && !!crownOwnership
-      ? crownOwnership.location === 'player-head' && crownOwnership.playerId === id
-      : false;
 
     // Tremble / nod classes are applied to both the card wrapper (so voting
     // cards + name tag jitter with the figure) AND the character's inner
@@ -146,7 +135,6 @@ export function usePlayerModels({
       entering: null,
       leaving: null,
       fukEyes,
-      showCrown,
       justArrived,
       isHoldout,
       stressStage,
@@ -164,20 +152,11 @@ export function usePlayerModels({
     };
   };
 
-  // ---- Synthetic outgoing-leader card (still needed for the name tag
-  //      while the figure walks off via the stage) --------------------------
-  const showOutgoing =
-    outgoingId && outgoingData && outgoingData.role !== 'pm'
-    && isInCrownRemoval
-    && !playerEntries.some(([id]) => id === outgoingId);
-
-  const outgoingLeader = showOutgoing
-    ? buildModel(outgoingId, { ...outgoingData, isLeader: true }, {
-        keySuffix: '__synthetic-leader',
-        isSyntheticLeader: true,
-        testIdOverride: `player-${outgoingData.name}-outgoing`,
-      })
-    : null;
+  // The outgoing leader is now a regular entry in `playerEntries` (via
+  // `buildVisibleRoster`), so the separate synthetic-card code path is
+  // gone. Kept as `null` in the return shape so older call sites that
+  // destructure `{ outgoingLeader }` don't break.
+  const outgoingLeader = null;
 
   // ---- Active player models --------------------------------------------
   const activePlayers = playerEntries.map(([id, data], index) => {

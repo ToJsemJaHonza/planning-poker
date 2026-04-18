@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import Crown from './Crown';
 import { spriteToBoxShadow, PX, SPRITE_PIXEL_STYLE } from '../engine/sprite';
 import { usePmModel } from '../hooks/usePmModel';
 
@@ -110,8 +109,6 @@ export default function PmSprite({
   mode = 'idle',
   pmPose = null,
   pmBubble = '',
-  crownState = null,
-  crownGlowing = false,
   ceremonyFacing = null,
   position = null,
   facingLeft = false,
@@ -129,8 +126,6 @@ export default function PmSprite({
     pmPose,
     pmBubble,
     ceremonyFacing,
-    crownState,
-    crownGlowing,
   });
   const model = modelProp ?? localModel;
 
@@ -147,8 +142,10 @@ export default function PmSprite({
   }
 
   // --- CEREMONY MODE: position driven by parent ---
+  // The crown is NOT rendered here anymore. It lives on <CrownStage>, which
+  // reads `crownOwnership` (the one canonical source) and paints in one
+  // place. See src/components/CrownStage.jsx for the why.
   if (model.mode === 'ceremony') {
-    const crownPinned = model.crownState?.mode === 'settled';
     return (
       <div
         style={{
@@ -169,22 +166,6 @@ export default function PmSprite({
             ...styles.crowningBubble,
             transform: `translateX(-50%) ${model.facingLeft ? 'scaleX(-1)' : 'scaleX(1)'}`,
           }}>{model.bubble}</div>
-        )}
-        {model.crownState && !crownPinned && (
-          <Crown
-            glowing={model.crownGlowing}
-            style={{
-              left: 8 * PX,
-              top: 4 * PX,
-              transform: model.crownState.mode === 'arcing'
-                ? `translate(0px, ${model.crownState.progress * 45}px)`
-                : model.crownState.mode === 'lifting'
-                  ? `translate(0px, ${model.crownState.progress * -50}px)`
-                  : 'none',
-              transition: (model.crownState.mode === 'arcing' || model.crownState.mode === 'lifting')
-                ? 'transform 300ms steps(12, end)' : 'none',
-            }}
-          />
         )}
       </div>
     );

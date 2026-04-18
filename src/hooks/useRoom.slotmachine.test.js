@@ -20,7 +20,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 // Mock Firebase BEFORE importing useRoom
 vi.mock('../firebase.js', () => import('../test/firebase-mock.js'));
 
-import { useRoom } from './useRoom';
+import { useRoom, CEREMONY_GRACE_MS } from './useRoom';
 import { __mock } from '../test/firebase-mock.js';
 import { SCHEMA_VERSION, totalDurationFor, PHASE_TABLE_STANDARD } from '../events/slotMachine';
 
@@ -33,9 +33,9 @@ import { SCHEMA_VERSION, totalDurationFor, PHASE_TABLE_STANDARD } from '../event
  * wait for pmRoulette to appear, then promote winner and clear the payload.
  */
 async function simulateCeremonyCompletion(hook) {
-  // 5 s grace window in the trigger effect + Firebase round-trip → bump
-  // the timeout well past that or the test races its own grace period.
-  await waitFor(() => expect(hook.result.current.pmRoulette).not.toBeNull(), { timeout: 8000 });
+  // Grace window in the trigger effect + Firebase round-trip → bump the
+  // timeout well past that or the test races its own grace period.
+  await waitFor(() => expect(hook.result.current.pmRoulette).not.toBeNull(), { timeout: CEREMONY_GRACE_MS + 3000 });
   const payload = hook.result.current.pmRoulette;
   await act(async () => {
     await hook.result.current.resolvePmRoulettePromotion(payload);
@@ -79,7 +79,7 @@ describe('useRoom — PM Crowning Machine integration', () => {
       // A ceremony should fire
       await waitFor(
         () => expect(alice.result.current.pmRoulette).not.toBeNull(),
-        { timeout: 8000 }, // 5 s grace + margin
+        { timeout: CEREMONY_GRACE_MS + 3000 }, // grace + margin
       );
 
       const payload = alice.result.current.pmRoulette;
@@ -106,7 +106,7 @@ describe('useRoom — PM Crowning Machine integration', () => {
       act(() => { __mock.removePlayer('SLOT2', 'pm-id'); });
       await waitFor(
         () => expect(alice.result.current.pmRoulette).not.toBeNull(),
-        { timeout: 8000 }, // 5 s grace + margin
+        { timeout: CEREMONY_GRACE_MS + 3000 }, // grace + margin
       );
 
       const payload = alice.result.current.pmRoulette;
@@ -151,7 +151,7 @@ describe('useRoom — PM Crowning Machine integration', () => {
 
       await waitFor(
         () => expect(alice.result.current.pmRoulette).not.toBeNull(),
-        { timeout: 8000 }, // 5 s grace + margin
+        { timeout: CEREMONY_GRACE_MS + 3000 }, // grace + margin
       );
 
       const payload = alice.result.current.pmRoulette;
@@ -301,7 +301,7 @@ describe('useRoom — PM Crowning Machine integration', () => {
       // First ceremony fires
       await waitFor(
         () => expect(alice.result.current.pmRoulette).not.toBeNull(),
-        { timeout: 8000 }, // 5 s grace + margin
+        { timeout: CEREMONY_GRACE_MS + 3000 }, // grace + margin
       );
 
       const firstPayload = alice.result.current.pmRoulette;

@@ -758,6 +758,35 @@ describe('nonPmCandidatesSorted', () => {
     const sorted = nonPmCandidatesSorted(players);
     expect(sorted.length).toBe(1);
   });
+
+  // Regression: leader-player who closed their browser is marked
+  // disconnected=true by onDisconnect but keeps isLeader=true and their
+  // original joinedAt. If nonPmCandidatesSorted still returns them as
+  // sorted[0], every remaining client bails out of the ceremony-trigger
+  // effect ("that's not me"), the disconnected leader can't fire from the
+  // grave, and the room stays leaderless forever. The filter must exclude
+  // disconnected entries so the earliest-joined *connected* non-PM fires.
+  it('excludes disconnected players so the earliest live candidate fires', () => {
+    const players = {
+      leaver: {
+        name: 'Leaver', role: 'player', joinedAt: 1,
+        isLeader: true, disconnected: true,
+      },
+      alice: { name: 'Alice', role: 'player', joinedAt: 2 },
+      bob: { name: 'Bob', role: 'player', joinedAt: 3 },
+    };
+    const sorted = nonPmCandidatesSorted(players);
+    expect(sorted.map(([id]) => id)).toEqual(['alice', 'bob']);
+    expect(sorted[0][0]).toBe('alice');
+  });
+
+  it('a disconnected=false player is still included', () => {
+    const players = {
+      alice: { name: 'Alice', role: 'player', joinedAt: 1, disconnected: false },
+    };
+    const sorted = nonPmCandidatesSorted(players);
+    expect(sorted.length).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

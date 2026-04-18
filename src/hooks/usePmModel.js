@@ -96,8 +96,6 @@ function pickQuote() {
  * @param {'cast'|'walk'|null} [opts.pmPose=null]       Ceremony-driven pose.
  * @param {string} [opts.pmBubble='']                   Ceremony bubble text.
  * @param {'left'|'right'|null} [opts.ceremonyFacing]   Ceremony facing.
- * @param {object|null} [opts.crownState]               Crown phase from ceremony.
- * @param {boolean} [opts.crownGlowing=false]
  * @returns {{
  *   mode: 'idle'|'ceremony',
  *   walkFrame: 0|1,
@@ -107,8 +105,6 @@ function pickQuote() {
  *   showBubble: boolean,
  *   facingLeft: boolean,
  *   position: {x:number,y:number}|null,
- *   crownState: object|null,
- *   crownGlowing: boolean,
  * }}
  */
 export function usePmModel({
@@ -123,8 +119,6 @@ export function usePmModel({
   pmPose = null,
   pmBubble = '',
   ceremonyFacing = null,
-  crownState = null,
-  crownGlowing = false,
 } = {}) {
   // Walk-frame leg swap, shared rAF clock. Freezes during cast so the
   // sprite holds the cast pose cleanly.
@@ -227,8 +221,6 @@ export function usePmModel({
     showBubble: mode === 'ceremony' ? !!pmBubble : showIdleBubble,
     facingLeft: mode === 'ceremony' ? ceremonyFacing === 'left' : facingLeft,
     position,
-    crownState,
-    crownGlowing,
   };
 }
 
