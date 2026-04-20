@@ -30,7 +30,8 @@ describe('DbbPipeline (GH issue #2)', () => {
         />
       );
     }
-    act(() => { vi.advanceTimersByTime(5000); });
+    // Advance past onDone at t=10700 in the enriched timeline.
+    act(() => { vi.advanceTimersByTime(6000); });
     expect(onPlayerExit).toHaveBeenCalledTimes(1);
     expect(onDone).toHaveBeenCalledTimes(1);
   });
@@ -153,8 +154,9 @@ describe('DbbPipeline (GH issue #2)', () => {
     act(() => { vi.advanceTimersByTime(1000); });
     expect(group.style.transform).toContain('translate(0');
 
-    // After slideOut (> 6700 ms), transform should be offscreen again.
-    act(() => { vi.advanceTimersByTime(6000); });
+    // After slideOut (> 7900 ms in the enriched timeline), transform should
+    // be offscreen again.
+    act(() => { vi.advanceTimersByTime(7500); });
     expect(group.style.transform).toContain('-120vw');
   });
 
@@ -196,27 +198,27 @@ describe('DbbPipeline (GH issue #2)', () => {
       }
     );
 
-    it('C3: at t=2000ms bubble is visible and label is painted on the pipe', () => {
+    it('C3: during the bubble phase bubble is visible and label is painted on the pipe', () => {
       const { container } = render(
         <DbbPipeline fromSide="left" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
       );
-      act(() => { vi.advanceTimersByTime(2000); });
-      // Label lives inside a pipe segment — always in DOM with the pipe
+      // Bubble phase begins at t=2200 in the enriched timeline.
+      act(() => { vi.advanceTimersByTime(2500); });
       const label = container.querySelector('.dbb-label-on-pipe');
       expect(label).not.toBeNull();
       expect(label.parentElement.hasAttribute('data-dbb-segment')).toBe(true);
-      // Bubble text is rendered
       expect(container.textContent).toContain('DBB message has arrived');
     });
 
-    it('C3: at t=3900ms bubble is faded out, pipe label still painted on segment', () => {
+    it('C3: at t=5000ms bubble is faded out, pipe label still painted on segment', () => {
       const { container } = render(
         <DbbPipeline fromSide="left" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
       );
-      act(() => { vi.advanceTimersByTime(3900); });
+      // Emerge starts at t=4800 in the enriched timeline; showBubble
+      // (bubble || bubbleOut) is false from emerge onward.
+      act(() => { vi.advanceTimersByTime(5000); });
       const label = container.querySelector('.dbb-label-on-pipe');
       expect(label).not.toBeNull();
-      // Bubble is fully gone during emerge (showBubble false)
       const bubble = Array.from(container.querySelectorAll('div')).find((d) =>
         (d.textContent || '').includes('DBB message has arrived')
       );
@@ -226,5 +228,61 @@ describe('DbbPipeline (GH issue #2)', () => {
     // C2 used to assert Tomáš's directional emerge class. Tomáš is now
     // drawn by the CharacterStage, so there's no local emerge div to
     // carry that class — the corresponding test has been retired.
+  });
+
+  // -------------------------------------------------------------------------
+  // Industrial decorator regression: bolt bands appear at t=1600+, gauge
+  // lives on the last segment, packet particles stream during packetFlow,
+  // the pipe group carries `dbb-rumble` during rumble/packetFlow.
+  // -------------------------------------------------------------------------
+  describe('DBB industrial decorators', () => {
+    it('renders bolt bands once the bolt phase kicks in (t ≥ 1600ms)', () => {
+      const { container } = render(
+        <DbbPipeline fromSide="left" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
+      );
+      // Before bolt phase — no bolt bands yet (still in slideIn).
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(container.querySelectorAll('[data-testid="dbb-bolt-band"]').length).toBe(0);
+      // After bolt phase kicks in.
+      act(() => { vi.advanceTimersByTime(700); });
+      const bolts = container.querySelectorAll('[data-testid="dbb-bolt-band"]');
+      expect(bolts.length).toBeGreaterThan(0);
+    });
+
+    it('draws a gauge on the mouth-end segment once the pipe has landed', () => {
+      const { container } = render(
+        <DbbPipeline fromSide="top" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
+      );
+      act(() => { vi.advanceTimersByTime(2000); });
+      const gauges = container.querySelectorAll('[data-testid="dbb-gauge"]');
+      // Exactly one gauge — on the mouth-end segment.
+      expect(gauges.length).toBe(1);
+    });
+
+    it('adds `dbb-rumble` to the pipe group during the rumble beat', () => {
+      const { container } = render(
+        <DbbPipeline fromSide="left" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
+      );
+      // Before rumble — no class.
+      act(() => { vi.advanceTimersByTime(3500); });
+      const group = container.querySelector('[data-dbb-pipe-group]');
+      expect(group.className || '').not.toContain('dbb-rumble');
+      // Rumble starts at t=4000.
+      act(() => { vi.advanceTimersByTime(600); });
+      expect(group.className).toContain('dbb-rumble');
+    });
+
+    it('streams packet particles during packetFlow (t ≈ 4300ms)', () => {
+      const { container } = render(
+        <DbbPipeline fromSide="right" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
+      );
+      // Before packetFlow — no packets.
+      act(() => { vi.advanceTimersByTime(3000); });
+      expect(container.querySelectorAll('[data-testid="dbb-packet"]').length).toBe(0);
+      // After packetFlow kicks in.
+      act(() => { vi.advanceTimersByTime(1400); });
+      const packets = container.querySelectorAll('[data-testid="dbb-packet"]');
+      expect(packets.length).toBe(3);
+    });
   });
 });

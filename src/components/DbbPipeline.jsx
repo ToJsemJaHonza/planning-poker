@@ -5,6 +5,7 @@ import {
   horizontalSegmentStyle, verticalSegmentStyle,
   CollarH, CollarV,
   renderMouthRecess,
+  BoltBand, HazardStripe, Gauge, RustSpecks,
   PIPE_PATHS,
 } from '../sprites/dbbSprites.jsx';
 
@@ -132,13 +133,19 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
     const timers = [];
     // t=200: pipe starts sliding in
     timers.push(setTimeout(() => setPhase('slideIn'), 200));
-    // t=1800: pipe settled + 200ms rest, bubble appears (alone, no plate yet)
-    timers.push(setTimeout(() => setPhase('bubble'), 1800));
-    // t=3200: bubble starts fading out
-    timers.push(setTimeout(() => setPhase('bubbleOut'), 3200));
-    // t=3600: plate appears, emerge visual plays (character handled below)
-    timers.push(setTimeout(() => { setPhase('emerge'); }, 3600));
-    // t=4400: Tomáš steps out of the pipe — director teleports the
+    // t=1600: bolt bands fade in (decorative; pipe now looks bolted-down)
+    timers.push(setTimeout(() => setPhase('bolt'), 1600));
+    // t=2200: bubble appears (alone, no plate yet)
+    timers.push(setTimeout(() => setPhase('bubble'), 2200));
+    // t=3600: bubble starts fading out
+    timers.push(setTimeout(() => setPhase('bubbleOut'), 3600));
+    // t=4000: pipe rumbles — screen-local shake on the pipe group before emerge
+    timers.push(setTimeout(() => setPhase('rumble'), 4000));
+    // t=4300: packets stream through the pipe (build-up to emerge)
+    timers.push(setTimeout(() => setPhase('packetFlow'), 4300));
+    // t=4800: plate appears, emerge visual plays (character handled below)
+    timers.push(setTimeout(() => { setPhase('emerge'); }, 4800));
+    // t=5600: Tomáš steps out of the pipe — director teleports the
     // persistent character to the pipe mouth and walks it to its grid slot.
     timers.push(setTimeout(() => {
       setPhase('walk');
@@ -149,10 +156,10 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
           door: { x: mouth.x, y: mouth.y },
         });
       }
-    }, 4400));
-    // t=6700: pipe starts retracting.
-    timers.push(setTimeout(() => setPhase('slideOut'), 6700));
-    // t=6900: arrival bubble + onPlayerExit fallback. In production the
+    }, 5600));
+    // t=7900: pipe starts retracting.
+    timers.push(setTimeout(() => setPhase('slideOut'), 7900));
+    // t=8100: arrival bubble + onPlayerExit fallback. In production the
     // director's walkTo onDone has already fired markArrived; the manual
     // call here is idempotent and keeps unit tests without a stage
     // working.
@@ -160,9 +167,9 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
       setShowArrivalBubble(true);
       setTimeout(() => setShowArrivalBubble(false), 1600);
       onPlayerExitRef.current?.();
-    }, 6900));
-    // t=9500: done
-    timers.push(setTimeout(() => { setPhase('done'); onDoneRef.current?.(); }, 9500));
+    }, 8100));
+    // t=10700: done
+    timers.push(setTimeout(() => { setPhase('done'); onDoneRef.current?.(); }, 10700));
     return () => timers.forEach(clearTimeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -182,6 +189,14 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
   const groupTransform = (phase === 'hidden' || phase === 'slideOut')
     ? edgeOffscreen
     : 'translate(0, 0)';
+
+  // Decorators become visible once the pipe has landed.
+  const showDecorators = !['hidden', 'slideIn', 'slideOut'].includes(phase);
+  // Bolt bands fade in from the `bolt` phase onward.
+  const showBolts = showDecorators && !['bolt-waiting'].includes(phase)
+    && ['bolt','bubble','bubbleOut','rumble','packetFlow','emerge','walk'].includes(phase);
+  const showPackets = phase === 'packetFlow' || phase === 'emerge';
+  const isRumbling = phase === 'rumble' || phase === 'packetFlow';
 
   const showBubble = phase === 'bubble' || phase === 'bubbleOut';
   const bubbleOpacity = phase === 'bubble' ? 1 : 0;
@@ -209,15 +224,9 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
     bottom: 'translate(-50%, -100%)',
   }[bubblePos.anchor];
 
-  // Tomáš's figure is rendered by the shared CharacterStage now — the
-  // per-direction margin + emerge class that used to live here became
-  // dead code when the local figure mount was removed.
-
   // Collar placement:
   // First segment has a collar on its anchor-edge side.
   // Last segment has a collar on its mouth-end side.
-  // For horizontal pipes: 'start' = left side, 'end' = right side.
-  // For vertical pipes:   'start' = top side,  'end' = bottom side.
   function collarFor(seg, i) {
     const isFirst = i === 0;
     const isLast = i === lastIdx;
@@ -226,7 +235,6 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
     const items = [];
 
     if (isFirst) {
-      // Anchor-edge collar depends on fromSide
       if (fromSide === 'left') items.push(<CollarH key="f" position="start" />);
       else if (fromSide === 'right') items.push(<CollarH key="f" position="end" />);
       else if (fromSide === 'top') items.push(<CollarV key="f" position="start" />);
@@ -234,7 +242,6 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
     }
 
     if (isLast) {
-      // Mouth-end collar depends on mouth.dir
       if (mouth.dir === 'right') items.push(<CollarH key="l" position="end" />);
       else if (mouth.dir === 'left') items.push(<CollarH key="l" position="start" />);
       else if (mouth.dir === 'down') items.push(<CollarV key="l" position="end" />);
@@ -244,12 +251,40 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
     return items;
   }
 
+  // Packet particles — stream along the segments during `packetFlow`/`emerge`.
+  // 4 packets staggered; each segment holds one row.
+  const packets = showPackets ? segments.map((seg, i) => {
+    const horizontal = seg.w > seg.h;
+    const commonStyle = {
+      position: 'absolute',
+      width: 10,
+      height: 6,
+      background: '#fde047',
+      boxShadow: `0 0 0 2px ${DBB.outline}`,
+    };
+    return (
+      <div
+        key={`packet-${i}`}
+        className="dbb-packet"
+        data-testid="dbb-packet"
+        data-segment-idx={i}
+        style={{
+          ...commonStyle,
+          ...(horizontal
+            ? { top: '50%', left: 4, marginTop: -3, animationDelay: `${i * 80}ms` }
+            : { left: '50%', top: 4, marginLeft: -5, animationDelay: `${i * 80}ms` }),
+        }}
+      />
+    );
+  }) : [];
+
   return (
     <div style={styles.container} data-testid="dbb-pipeline">
       {/* Pipe group — retracts via inline transform driven by phase. */}
       <div
         ref={pipeGroupRef}
         data-dbb-pipe-group
+        className={isRumbling ? 'dbb-rumble' : undefined}
         style={{
           position: 'absolute',
           inset: 0,
@@ -262,6 +297,8 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
           const horizontal = seg.w > seg.h;
           const segStyle = horizontal ? horizontalSegmentStyle() : verticalSegmentStyle();
           const isLabelSegVertical = seg.h > seg.w;
+          const segOrient = horizontal ? 'horizontal' : 'vertical';
+          const isLast = i === lastIdx;
           return (
             <div
               key={i}
@@ -277,6 +314,43 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
             >
               {collarFor(seg, i)}
               {i === lastIdx && renderMouthRecess(mouth.dir)}
+
+              {/* Rust specks on every segment — purely decorative. */}
+              {showDecorators && (
+                <RustSpecks
+                  seed={i + 1}
+                  orientation={segOrient}
+                  size={horizontal ? seg.w : seg.h}
+                />
+              )}
+
+              {/* Bolt bands — first segment: near the anchor end.
+                  Middle segment: around midpoint. Last segment: near mouth. */}
+              {showBolts && (
+                <BoltBand
+                  orientation={segOrient}
+                  offset={Math.round((horizontal ? seg.w : seg.h) * 0.28)}
+                />
+              )}
+
+              {/* Hazard stripe + gauge on the mouth-end segment. */}
+              {isLast && showDecorators && (
+                <HazardStripe
+                  orientation={segOrient}
+                  length={Math.round((horizontal ? seg.w : seg.h) * 0.3)}
+                  offset={Math.round((horizontal ? seg.w : seg.h) * 0.5)}
+                />
+              )}
+              {isLast && showDecorators && (
+                <Gauge style={horizontal
+                  ? { top: -18, left: Math.round(seg.w * 0.35) }
+                  : { left: -22, top: Math.round(seg.h * 0.35) }
+                } />
+              )}
+
+              {/* Packets inside a segment during packetFlow. */}
+              {showPackets && packets[i]}
+
               {i === labelSegmentIndex && (
                 <div
                   className="dbb-label-on-pipe"

@@ -191,7 +191,25 @@
   /* DBB Tomáš pipeline — these are class-driven, so direct disable works. */
   .dbb-tomas-emerge-right, .dbb-tomas-emerge-left,
   .dbb-tomas-emerge-up,    .dbb-tomas-emerge-down,
-  .dbb-steam-puff, .dbb-mouth-flash { animation: none !important; }
+  .dbb-steam-puff, .dbb-mouth-flash,
+  .dbb-rumble, .dbb-packet, .dbb-bolt-band, .dbb-gauge-needle,
+  .dbb-hazard-stripe { animation: none !important; }
+
+  /* Enriched Shinkansen beats — class-driven, so direct disable works. */
+  .train-station-sign, .horn-bubble, .train-steam-cloud,
+  .door-flash, .richard-wave { animation: none !important; }
+
+  /* Neutralise the enriched train/DBB keyframes at the keyframe level so
+   * any residual inline `animation` references become no-ops. */
+  @keyframes stationSignIn  { from, to { opacity: 1; transform: scaleX(1); } }
+  @keyframes hornBubble     { from, to { opacity: 0; } }
+  @keyframes doorsFlash     { from, to { opacity: 0; } }
+  @keyframes richardWave    { from, to { opacity: 0; } }
+  @keyframes steamCloud     { from, to { opacity: 0; } }
+  @keyframes dbbRumble      { from, to { transform: translate(0, 0); } }
+  @keyframes dbbPacketFlow  { from, to { opacity: 0; } }
+  @keyframes dbbBoltFadeIn  { from, to { opacity: 1; transform: scale(1); } }
+  @keyframes dbbGaugeSweep  { from, to { transform: rotate(-45deg); } }
 
   /* Richard's walk from train door to his slot uses inline transform +
    * transition (not a CSS animation), so killing the transition snaps him

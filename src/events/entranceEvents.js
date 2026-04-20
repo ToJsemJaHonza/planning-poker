@@ -33,8 +33,7 @@ import SpecialRoundOverlay from '../components/room/SpecialRoundOverlay';
 import { isRichardName, isTomasName } from '../components/playerList.utils';
 
 // Probability an eligible player triggers a cinematic entrance.
-// Keep at 0.1 — "magic moments" should be rare.
-export const ENTRANCE_CHANCE = 0.1;
+export const ENTRANCE_CHANCE = 0.25;
 
 /**
  * Categories used by the registry. Centralised so the engine and the stage
@@ -71,7 +70,7 @@ export const ENTRANCE_EVENTS = [
       playerName: name,
       fromRight: Math.random() > 0.5,
     }),
-    duration: 12000,
+    duration: 14000,
     Component: Train,
     getHiddenPlayer: (payload) => payload.playerId,
   },
@@ -88,7 +87,7 @@ export const ENTRANCE_EVENTS = [
         fromSide: sides[Math.floor(Math.random() * sides.length)],
       };
     },
-    duration: 10000,
+    duration: 11000,
     Component: DbbPipeline,
     getHiddenPlayer: (payload) => payload.playerId,
   },
