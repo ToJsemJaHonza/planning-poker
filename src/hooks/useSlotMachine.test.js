@@ -795,10 +795,10 @@ describe('computePlayerGridPosition', () => {
     // rowLeft = (1440 - 80) / 2 = 680
     // x = 680 + 0 * 108 + 40 = 720 (center of viewport)
     expect(pos.x).toBe(720);
-    // y = 174 + 0 * (220 + 16) + 136 = 310  (ITEM_HEIGHT and
-    // FIGURE_OFFSET_FROM_TOP both bumped so the stage sprite has vertical
-    // clearance from voting card + name tag in the new flex-column geometry.)
-    expect(pos.y).toBe(310);
+    // y = 220 + 0 * (212 + 16) + 138 = 358  (FIGURE_OFFSET_FROM_TOP
+    // bumped 136→138 and figureSlot shrank 120→100 so the name tag
+    // sits closer under the sprite instead of looking stranded.)
+    expect(pos.y).toBe(358);
   });
 
   it('places second player to the right of the first', () => {

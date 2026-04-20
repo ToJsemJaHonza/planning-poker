@@ -51,15 +51,16 @@ export default function PlayerCard(props) {
   // the grid card only reserves an invisible slot so card chrome
   // (voting cards above, name tag below) keeps its flex layout. We
   // reserve 100 px of height instead of just SPRITE_H (70 px) so the
-  // sprite has visual clearance from the voting card above and the
-  // name tag below; otherwise the sprite ends up tight against the
-  // name tag. The stage character's y is `computePlayerGridPosition`'s
+  // sprite has 15 px of visual clearance above the voting card and
+  // below the name tag; the previous 120 px slot gave 25 px below,
+  // which made the name tag look stranded far under the figure. The
+  // stage character's y is `computePlayerGridPosition`'s
   // FIGURE_OFFSET_FROM_TOP, which matches this slot's center.
   const figureSlot = (
     <div
       aria-hidden="true"
       data-figure-placeholder={id}
-      style={{ width: SPRITE_W, height: 120 }}
+      style={{ width: SPRITE_W, height: 100 }}
     />
   );
   // `walking`, `fukEyes`, `stressStage` are now character properties —
@@ -185,7 +186,13 @@ const styles = {
   },
   devBubble: {
     position: 'absolute',
-    bottom: '100%',
+    // Anchor to slot top and lift an extra 14 px so the bubble floats
+    // clear above the sprite's own top edge (sprite center sits 15 px
+    // below slot top, so sprite top is ~15 px above slot top — we lift
+    // past that). Without this, the bubble overlapped the character
+    // and, because z-index was below the CharacterStage z=50, got
+    // painted behind it.
+    bottom: 'calc(100% + 14px)',
     left: '50%',
     transform: 'translateX(-50%)',
     background: '#fff',
@@ -200,7 +207,8 @@ const styles = {
     textAlign: 'center',
     lineHeight: '1.5',
     boxShadow: '2px 2px 0 #2074a8',
-    zIndex: 10,
-    marginBottom: '4px',
+    // CharacterStage sprites render at z=50; we need to sit above
+    // them so an overlapping bubble paints on top of the figure.
+    zIndex: 100,
   },
 };

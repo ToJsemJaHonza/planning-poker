@@ -51,16 +51,22 @@ export default function App() {
   const [playerId] = useState(getOrCreatePlayerId);
   const [roomCode, setRoomCode] = useState(() => getRoomFromURL());
   const [role, setRole] = useState(() => localStorage.getItem('poker-role') || 'player');
+  // Initial grooming backlog seeded by the Landing Manager flow. Empty
+  // for joiners and for Manager sessions where the user hit Skip. Read
+  // once by useRoom during the first-join bootstrap (see `setupPlayer`
+  // there) and then ignored — the live source of truth is Firebase.
+  const [initialTasks, setInitialTasks] = useState([]);
 
   const handleSetName = (name) => {
     setPlayerName(name);
   };
 
-  const handleJoinRoom = (code, selectedRole) => {
+  const handleJoinRoom = (code, selectedRole, tasksForSeed = []) => {
     if (selectedRole) {
       setRole(selectedRole);
       localStorage.setItem('poker-role', selectedRole);
     }
+    setInitialTasks(Array.isArray(tasksForSeed) ? tasksForSeed : []);
     setRoomCode(code);
     const url = new URL(window.location);
     url.searchParams.set('room', code);
@@ -90,6 +96,7 @@ export default function App() {
         playerId={playerId}
         playerName={playerName}
         role={role}
+        initialTasks={initialTasks}
       />
     );
   }

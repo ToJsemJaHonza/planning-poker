@@ -21,15 +21,17 @@ import ShameOverlay from './shame/ShameOverlay';
 import SlotMachineStage from './SlotMachineStage';
 import RoomHeader from './room/RoomHeader';
 import TaskBar from './room/TaskBar';
+import TaskListPanel from './room/TaskListPanel';
+import TaskSwitchToast from './room/TaskSwitchToast';
 import PhaseBar from './room/PhaseBar';
 import StatusBar from './room/StatusBar';
 import LeaderBanner from './room/LeaderBanner';
 import OverlayStage from '../events/OverlayStage';
 import { pixel, computeRoomPaddingBottom } from './room/styles';
 
-export default function Room({ roomCode, playerId, playerName, role = 'player' }) {
+export default function Room({ roomCode, playerId, playerName, role = 'player', initialTasks = [] }) {
   const {
-    players, phase, task, splitMode,
+    players, phase, task, taskList, taskSwitchNotice, setActiveTask, upsertTasks, splitMode,
     pmQuote, setPmQuote,
     triggerOkta,
     syncedEvent, fireSyncedEvent,
@@ -38,7 +40,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
     isLeader, connected, leaderChangedAt, createdAt,
     castVote, castVoteFe, castVoteBe,
     toggleSplit, revealCards, newRound, updateTask,
-  } = useRoom(roomCode, playerId, playerName, role);
+  } = useRoom(roomCode, playerId, playerName, role, initialTasks);
 
   // --- Unified character stage ---
   // The PM (and, after later phases, players and entering cinematics) live
@@ -299,7 +301,21 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
       <CrownStage stage={stage} crownOwnership={crownOwnership} />
 
       <RoomHeader roomCode={roomCode} playerCount={playerCount} />
-      <TaskBar task={task} canControl={canControl} phase={phase} onSave={updateTask} />
+      <TaskBar task={task} canControl={canControl} phase={phase} onSave={updateTask} taskList={taskList} />
+      {/* The side panel is leader-only: everyone else sees the full backlog
+          inline in the TaskBar strip above. Hiding it here (rather than
+          inside TaskListPanel) keeps the panel's own logic focused on the
+          leader's edit/export/jump affordances. */}
+      {canControl && (
+        <TaskListPanel
+          taskList={taskList}
+          isLeader={canControl}
+          onSetActive={setActiveTask}
+          onEdit={upsertTasks}
+          roomCode={roomCode}
+        />
+      )}
+      <TaskSwitchToast notice={taskSwitchNotice} />
       <PhaseBar
         phase={phase} splitMode={splitMode}
         votedCount={votedCount} playerCount={playerCount}
@@ -363,9 +379,18 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
         phaseState={slotMachinePhaseState}
       />
 
-      {showResult && phase === 'revealed' && (
-        <ResultModal players={players} splitMode={splitMode} onNewRound={handleNewRound} />
-      )}
+      {showResult && phase === 'revealed' && (() => {
+        const active = taskList?.activeId ? taskList.items?.[taskList.activeId] : null;
+        return (
+          <ResultModal
+            players={players}
+            splitMode={splitMode}
+            onNewRound={handleNewRound}
+            taskTitle={active?.title || task || ''}
+            taskUrl={active?.url || null}
+          />
+        );
+      })()}
     </div>
   );
 }

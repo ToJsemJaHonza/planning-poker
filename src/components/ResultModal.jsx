@@ -56,7 +56,31 @@ function ResultSection({ title, titleColor, stats }) {
   );
 }
 
-export default function ResultModal({ players, splitMode, onNewRound }) {
+// Header shown above the verdict/histogram. Once cards are revealed we
+// finally know which task was being estimated — surface it prominently so
+// the room isn't left wondering "wait, what were we voting on again?".
+function ResultHeader({ title, url }) {
+  if (!title) return null;
+  return (
+    <div data-result-task-header style={styles.taskHeader}>
+      <div style={styles.taskHeaderLabel}>Task</div>
+      <div style={styles.taskHeaderTitle}>{title}</div>
+      {url && (
+        <a
+          data-result-task-link
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={styles.taskHeaderLink}
+        >
+          🔗 open
+        </a>
+      )}
+    </div>
+  );
+}
+
+export default function ResultModal({ players, splitMode, onNewRound, taskTitle, taskUrl }) {
   // Players are keyed by stable session ID — pull the display name off the
   // entry itself so the histogram and "special" rows show human-readable
   // names instead of opaque IDs. Two same-named players are independent
@@ -79,6 +103,7 @@ export default function ResultModal({ players, splitMode, onNewRound }) {
           data-split-modal
           style={{ ...styles.modal, width: 'min(500px, calc(100vw - 32px))' }}
         >
+          <ResultHeader title={taskTitle} url={taskUrl} />
           <div style={styles.splitResults} data-split-modal-body>
             <ResultSection title="Frontend" titleColor="#3498db" stats={feStats} />
             <div style={styles.divider} />
@@ -102,6 +127,7 @@ export default function ResultModal({ players, splitMode, onNewRound }) {
   return (
     <div style={styles.overlay}>
       <div data-result-modal style={styles.modal}>
+        <ResultHeader title={taskTitle} url={taskUrl} />
         <ResultSection stats={stats} />
         <button onClick={onNewRound} style={styles.button}>
           New Round
@@ -141,6 +167,35 @@ const styles = {
     width: '3px',
     background: '#d4a853',
     margin: '0 1rem',
+  },
+  taskHeader: {
+    marginBottom: '0.8rem',
+    paddingBottom: '0.6rem',
+    borderBottom: '3px solid #e0d6bb',
+    textAlign: 'center',
+  },
+  taskHeaderLabel: {
+    fontSize: '0.45rem',
+    color: '#b8922e',
+    letterSpacing: '2px',
+    textTransform: 'uppercase',
+    marginBottom: '0.3rem',
+    fontFamily: pixel,
+  },
+  taskHeaderTitle: {
+    fontSize: '0.85rem',
+    fontWeight: 'bold',
+    color: '#2a2a3a',
+    fontFamily: pixel,
+    wordBreak: 'break-word',
+  },
+  taskHeaderLink: {
+    display: 'inline-block',
+    marginTop: '0.4rem',
+    fontSize: '0.55rem',
+    color: '#b8922e',
+    textDecoration: 'underline',
+    fontFamily: pixel,
   },
   section: {
     flex: 1,

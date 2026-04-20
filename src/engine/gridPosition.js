@@ -54,12 +54,19 @@ export function computePlayerGridPosition(index, playerCount, viewportWidth) {
   const ITEM_WIDTH = 80;
   const COL_GAP = 28;
   const ROW_GAP = 16;
-  // Total card height: voting-card (72) + gap (4) + figure spacer (120) +
-  // gap (4) + name tag (20) ≈ 220 px. Spacer grew to give the stage
-  // sprite vertical clearance from both the voting card above and the
-  // name tag below.
-  const ITEM_HEIGHT = 220;
-  const GRID_TOP = 174;
+  // Total card height: voting-card (80) + margin+gap (8) + figure spacer
+  // (100) + gap (4) + name tag (≈20) ≈ 212 px. Spacer was 120 px but
+  // that gave 25 px of dead space below the 70-px sprite, pushing the
+  // name tag visibly below the figure; 100 px keeps 15 px of clearance
+  // on each side so the sprite still breathes.
+  const ITEM_HEIGHT = 212;
+  // GRID_TOP = header (≈40) + TaskBar list-mode strip (≈105) + PhaseBar
+  // (≈76) worst-case. The TaskBar grew when the horizontal chip strip
+  // replaced the old one-line "Now grooming" display; before this bump
+  // the figures stayed at y=310 while the grid flow shifted down with
+  // the taller bar, which dropped the name tags visibly below their
+  // sprites.
+  const GRID_TOP = 220;
   const CONTAINER_PAD_X = 16;
 
   const availableWidth = viewportWidth - 2 * CONTAINER_PAD_X;
@@ -77,13 +84,17 @@ export function computePlayerGridPosition(index, playerCount, viewportWidth) {
   const rowLeft = (viewportWidth - rowWidth) / 2;
 
   const x = rowLeft + col * slotPitch + ITEM_WIDTH / 2;
-  // Figure-center y — center of the invisible 120-px spacer inside the
+  // Figure-center y — center of the invisible 100-px spacer inside the
   // PlayerCard flex column:
-  //   voting-card (72) + gap (4) + spacer_half (60) = 136 px from card top.
-  // Sprite spans 136 ± 35 = 101–171. Name tag follows at offset 200 →
-  // 29 px clearance below, 29 px clearance above. Good visual breathing
-  // room either side.
-  const FIGURE_OFFSET_FROM_TOP = 136;
+  //   voting-card (80) + margin+gap (8) + spacer_half (50) = 138 px
+  //   from card top.
+  // Sprite spans 138 ± 35 = 103–173. Name tag follows at offset 192 →
+  // 19 px clearance below sprite bottom (down from the old 29 px, which
+  // visually stranded the name). The DevBubble in PlayerCard anchors to
+  // slot top (88) and is lifted another 14 px so it always floats
+  // above the sprite's top edge regardless of DOM-flow vs. math
+  // alignment drift.
+  const FIGURE_OFFSET_FROM_TOP = 138;
   const y = GRID_TOP + row * (ITEM_HEIGHT + ROW_GAP) + FIGURE_OFFSET_FROM_TOP;
 
   return { x, y };
