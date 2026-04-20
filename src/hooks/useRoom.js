@@ -7,6 +7,8 @@ import {
   nonPmCandidatesSorted,
   SCHEMA_VERSION,
 } from '../events/slotMachine';
+import { computeStats, roundToCard } from '../components/resultModal.utils';
+import { normalizeUrl } from '../components/urls.utils';
 
 // Important events are mutually exclusive cinematics — once one is playing
 // in a room, nothing (not even another important event) can overwrite it
@@ -51,10 +53,80 @@ function generateRoomCode() {
   return code;
 }
 
-export function useRoom(roomCode, playerId, playerName, role = 'player') {
+// Build the initial meta/taskList payload from a normalized initialTasks
+// array. Ids are generated internally (`t1`, `t2`, …) so no Firebase-unsafe
+// character from user input can ever land in a path key.
+function buildInitialTaskList(initialTasks) {
+  if (!Array.isArray(initialTasks) || initialTasks.length === 0) return null;
+  const items = {};
+  initialTasks.forEach((t, i) => {
+    const id = `t${i + 1}`;
+    items[id] = {
+      title: t.title,
+      url: t.url ?? null,
+      order: i,
+      score: null,
+      scoreFe: null,
+      scoreBe: null,
+      scoredAt: null,
+    };
+  });
+  return { activeId: 't1', items };
+}
+
+// Helper: finalize the active item's score + pick the next pending id.
+// Returns the partial updates object so the caller can fold it into the
+// rest of the newRound multi-path update.
+function computeTaskListUpdates({ taskList, players, splitMode, roomCode }) {
+  if (!taskList || !taskList.activeId || !taskList.items?.[taskList.activeId]) {
+    return {};
+  }
+  const activeId = taskList.activeId;
+  const voting = Object.values(players || {}).filter(
+    (p) => p && p.role !== 'pm' && !p.disconnected,
+  );
+  const updates = {};
+
+  if (splitMode) {
+    const feStats = computeStats(voting.filter((p) => p.voteFe != null).map((p) => ({ vote: p.voteFe })));
+    const beStats = computeStats(voting.filter((p) => p.voteBe != null).map((p) => ({ vote: p.voteBe })));
+    const scoreFe = roundToCard(feStats.avg);
+    const scoreBe = roundToCard(beStats.avg);
+    updates[`rooms/${roomCode}/meta/taskList/items/${activeId}/scoreFe`] =
+      scoreFe == null ? (feStats.avg === '-' ? '-' : null) : String(scoreFe);
+    updates[`rooms/${roomCode}/meta/taskList/items/${activeId}/scoreBe`] =
+      scoreBe == null ? (beStats.avg === '-' ? '-' : null) : String(scoreBe);
+  } else {
+    const stats = computeStats(voting.filter((p) => p.vote != null).map((p) => ({ vote: p.vote })));
+    const rounded = roundToCard(stats.avg);
+    updates[`rooms/${roomCode}/meta/taskList/items/${activeId}/score`] =
+      rounded == null ? (stats.avg === '-' ? '-' : null) : String(rounded);
+  }
+  updates[`rooms/${roomCode}/meta/taskList/items/${activeId}/scoredAt`] = Date.now();
+
+  // Find next pending item by order (items with no score fields set).
+  const sorted = Object.entries(taskList.items)
+    .map(([id, it]) => ({ id, ...(it || {}) }))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const nextPending = sorted.find(
+    (it) => it.id !== activeId && it.score == null && it.scoreFe == null && it.scoreBe == null,
+  );
+  if (nextPending) {
+    updates[`rooms/${roomCode}/meta/taskList/activeId`] = nextPending.id;
+    updates[`rooms/${roomCode}/meta/task`] = nextPending.title;
+  } else {
+    updates[`rooms/${roomCode}/meta/taskList/activeId`] = null;
+    updates[`rooms/${roomCode}/meta/task`] = '';
+  }
+  return updates;
+}
+
+export function useRoom(roomCode, playerId, playerName, role = 'player', initialTasks = []) {
   const [players, setPlayers] = useState({});
   const [phase, setPhase] = useState('voting');
   const [task, setTask] = useState('');
+  const [taskList, setTaskList] = useState(null);
+  const [taskSwitchNotice, setTaskSwitchNotice] = useState(null);
   const [splitMode, setSplitMode] = useState(false);
   const [pmQuote, setPmQuote] = useState('');
   const [createdAt, setCreatedAt] = useState(0);
@@ -114,12 +186,15 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
         // Establish meta separately so concurrent joiners can't wipe each
         // other's player nodes. Whichever client's set() lands last wins the
         // meta race — both players still end up in `players/`.
-        await set(metaRef, {
-          task: '',
+        const seededList = buildInitialTaskList(initialTasks);
+        const metaPayload = {
+          task: seededList ? seededList.items.t1.title : '',
           phase: 'voting',
           splitMode: false,
           createdAt: serverTimestamp(),
-        });
+        };
+        if (seededList) metaPayload.taskList = seededList;
+        await set(metaRef, metaPayload);
       }
 
       // Determine leadership based on current player map (post-meta-write)
@@ -192,6 +267,8 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
       if (data) {
         setPhase(data.phase || 'voting');
         setTask(data.task || '');
+        setTaskList(data.taskList || null);
+        setTaskSwitchNotice(data.taskSwitchNotice || null);
         setSplitMode(data.splitMode || false);
         setPmQuote(data.pmQuote || '');
         setSyncedEvent(data.syncedEvent || null);
@@ -214,6 +291,8 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
         setPmRoulette(null);
         setRoomStartCrowning(null);
         setRoomStartCrowned(false);
+        setTaskList(null);
+        setTaskSwitchNotice(null);
         // Room was populated but is now empty -- all players left.
         if (roomLoadedRef.current) {
           setRoomDeleted(true);
@@ -226,6 +305,11 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
     return () => {
       unsubscribesRef.current.forEach(unsub => unsub());
     };
+    // `role` and `initialTasks` are intentionally read from closure on the
+    // first-mount path only. Adding them to deps would retrigger setupPlayer
+    // on a parent re-render and re-seed the room from scratch — a
+    // first-join-only write guarded by `!existingMeta` handles this safely.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode, playerId, playerName]);
 
   // === PM Crowning Machine: detect leader-gap, fire ceremony =============
@@ -426,17 +510,44 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
 
   const newRound = useCallback(async () => {
     if (!roomCode || !isLeader) return;
-    // Reset split mode back to normal for next round
-    await set(ref(db, `rooms/${roomCode}/meta/splitMode`), false);
-    await set(ref(db, `rooms/${roomCode}/meta/phase`), 'voting');
-    const playersSnap = await get(ref(db, `rooms/${roomCode}/players`));
-    const data = playersSnap.val() || {};
-    const updates = {};
-    Object.keys(data).forEach(id => {
+    // Before we blow away the votes, read the live score-relevant state
+    // (taskList + players + splitMode + phase) from Firebase. Reading live
+    // instead of React-closure state guarantees we score whatever was
+    // actually on screen at reveal time, even if the React subscription
+    // hasn't propagated every intermediate value yet.
+    const [metaSnap, playersSnap] = await Promise.all([
+      get(ref(db, `rooms/${roomCode}/meta`)),
+      get(ref(db, `rooms/${roomCode}/players`)),
+    ]);
+    const meta = metaSnap.val() || {};
+    const livePlayers = playersSnap.val() || {};
+    const liveTaskList = meta.taskList || null;
+    const liveSplit = !!meta.splitMode;
+    const livePhase = meta.phase || 'voting';
+
+    const updates = {
+      [`rooms/${roomCode}/meta/splitMode`]: false,
+      [`rooms/${roomCode}/meta/phase`]: 'voting',
+    };
+    Object.keys(livePlayers).forEach((id) => {
       updates[`rooms/${roomCode}/players/${id}/vote`] = null;
       updates[`rooms/${roomCode}/players/${id}/voteFe`] = null;
       updates[`rooms/${roomCode}/players/${id}/voteBe`] = null;
     });
+    // Only persist a score when this newRound follows a revealed round
+    // AND a task is active. If the leader clicks New Round from the
+    // voting phase (rare, e.g. to abandon without reveal), we just reset
+    // votes and leave the task's score null — which is what the user
+    // would expect.
+    if (livePhase === 'revealed' && liveTaskList?.activeId) {
+      const taskUpdates = computeTaskListUpdates({
+        taskList: liveTaskList,
+        players: livePlayers,
+        splitMode: liveSplit,
+        roomCode,
+      });
+      Object.assign(updates, taskUpdates);
+    }
     await update(ref(db), updates);
   }, [roomCode, isLeader]);
 
@@ -603,6 +714,155 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
     return fireSyncedEvent({ type: 'okta' }, 4500);
   }, [roomCode, fireSyncedEvent]);
 
+  // === Grooming backlog helpers (leader-only) ============================
+
+  // Set which backlog item is currently being groomed. Mirrors the new
+  // item's title into `meta/task` so the legacy TaskBar display path and
+  // any downstream consumers of `task` keep working.
+  //
+  // If the leader switches to a different item while the current one has
+  // no score yet (cards never revealed / round never closed), also write
+  // `meta/taskSwitchNotice` — every client reads that and flashes a
+  // short-lived toast so players aren't left wondering why their vote
+  // context silently changed under them.
+  const setActiveTask = useCallback(async (id) => {
+    if (!roomCode || !isLeader || !id) return;
+    // Read list + players in parallel. We need the list for the target
+    // item + switch-notice decision, and the player map to zero every
+    // player's vote columns when the active task actually changes.
+    const [listSnap, playersSnap] = await Promise.all([
+      get(ref(db, `rooms/${roomCode}/meta/taskList`)),
+      get(ref(db, `rooms/${roomCode}/players`)),
+    ]);
+    const list = listSnap.val() || {};
+    const items = list.items || {};
+    const item = items[id];
+    if (!item) return; // unknown id — no-op
+
+    const currentActiveId = list.activeId || null;
+    const currentItem = currentActiveId ? items[currentActiveId] : null;
+    const currentScored = !!currentItem && (
+      currentItem.score != null
+      || currentItem.scoreFe != null
+      || currentItem.scoreBe != null
+    );
+    const isDifferent = currentActiveId && currentActiveId !== id;
+
+    const updates = {
+      [`rooms/${roomCode}/meta/taskList/activeId`]: id,
+      [`rooms/${roomCode}/meta/task`]: item.title || '',
+    };
+
+    // When the active task actually changes, wipe every player's vote
+    // columns and bounce phase back to 'voting'. Without this, players
+    // walking into a new task would see their last task's cards still
+    // selected — which both looks broken and could accidentally seed
+    // the next score via a stale "Reveal" click. Also clear the shame
+    // timer since the previous holdout's clock no longer makes sense
+    // once everyone is back to zero votes.
+    if (isDifferent) {
+      const livePlayers = playersSnap.val() || {};
+      Object.keys(livePlayers).forEach((pid) => {
+        updates[`rooms/${roomCode}/players/${pid}/vote`] = null;
+        updates[`rooms/${roomCode}/players/${pid}/voteFe`] = null;
+        updates[`rooms/${roomCode}/players/${pid}/voteBe`] = null;
+      });
+      updates[`rooms/${roomCode}/meta/phase`] = 'voting';
+      updates[`rooms/${roomCode}/meta/shameTimer`] = null;
+    }
+
+    // "Leader bailed on an unfinished task" — surface a notice. The
+    // TTL (4.5s) is slightly longer than the display duration so a
+    // late-arriving client subscription still sees it.
+    if (currentItem && isDifferent && !currentScored) {
+      const now = Date.now();
+      const notice = {
+        prevTitle: currentItem.title || '',
+        nextTitle: item.title || '',
+        startedAt: now,
+        expiresAt: now + 4500,
+      };
+      updates[`rooms/${roomCode}/meta/taskSwitchNotice`] = notice;
+      // Best-effort cleanup so the key doesn't linger in Firebase. Match
+      // by startedAt so a newer notice can't be wiped accidentally.
+      setTimeout(() => {
+        get(ref(db, `rooms/${roomCode}/meta/taskSwitchNotice`)).then((snap) => {
+          const current = snap.val();
+          if (current && current.startedAt === notice.startedAt) {
+            set(ref(db, `rooms/${roomCode}/meta/taskSwitchNotice`), null);
+          }
+        }).catch(() => { /* ignore */ });
+      }, 4500);
+    }
+
+    await update(ref(db), updates);
+  }, [roomCode, isLeader]);
+
+  // Replace the whole items map with a new set of rows. Each incoming row
+  // may carry an `id` to preserve its existing score; rows without an id
+  // get a freshly-minted one. `activeId` is kept if it still exists in
+  // the new list, otherwise it falls to the first pending item (or null
+  // if everything is already scored).
+  const upsertTasks = useCallback(async (rows) => {
+    if (!roomCode || !isLeader || !Array.isArray(rows)) return;
+    const existingSnap = await get(ref(db, `rooms/${roomCode}/meta/taskList`));
+    const existing = existingSnap.val();
+    const existingItems = existing?.items || {};
+    const currentActiveId = existing?.activeId || null;
+
+    // Figure out the next free id (`t${N+1}` where N is the highest
+    // existing numeric suffix). Works even if some ids were removed.
+    let nextN = 0;
+    Object.keys(existingItems).forEach((id) => {
+      const m = /^t(\d+)$/.exec(id);
+      if (m) nextN = Math.max(nextN, parseInt(m[1], 10));
+    });
+
+    const nextItems = {};
+    rows.forEach((row, i) => {
+      if (!row || typeof row !== 'object') return;
+      const title = typeof row.title === 'string' ? row.title.trim() : '';
+      if (!title) return;
+      const url = normalizeUrl(row.url);
+      let id = row.id && existingItems[row.id] ? row.id : null;
+      if (!id) { nextN += 1; id = `t${nextN}`; }
+      const prior = existingItems[id] || {};
+      nextItems[id] = {
+        title,
+        url,
+        order: i,
+        score: prior.score ?? null,
+        scoreFe: prior.scoreFe ?? null,
+        scoreBe: prior.scoreBe ?? null,
+        scoredAt: prior.scoredAt ?? null,
+      };
+    });
+
+    // Pick the activeId: keep the current one if it survived; otherwise
+    // jump to the first pending item by order.
+    let nextActiveId = currentActiveId && nextItems[currentActiveId] ? currentActiveId : null;
+    if (!nextActiveId) {
+      const sorted = Object.entries(nextItems)
+        .map(([id, it]) => ({ id, ...it }))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const firstPending = sorted.find(
+        (it) => it.score == null && it.scoreFe == null && it.scoreBe == null,
+      );
+      nextActiveId = firstPending ? firstPending.id : null;
+    }
+
+    const updates = {
+      [`rooms/${roomCode}/meta/taskList`]: { activeId: nextActiveId, items: nextItems },
+    };
+    // Keep meta/task mirrored to the active item's title (or empty).
+    if (nextActiveId && nextItems[nextActiveId]) {
+      updates[`rooms/${roomCode}/meta/task`] = nextItems[nextActiveId].title;
+    } else {
+      updates[`rooms/${roomCode}/meta/task`] = '';
+    }
+    await update(ref(db), updates);
+  }, [roomCode, isLeader]);
+
   // Toggle the FE/BE split. When turning ON we also fire the
   // SPECIAL ROUND splash via syncedEvent so every client sees it.
   const toggleSplit = useCallback(() => {
@@ -618,6 +878,10 @@ export function useRoom(roomCode, playerId, playerName, role = 'player') {
     players,
     phase,
     task,
+    taskList,
+    taskSwitchNotice,
+    setActiveTask,
+    upsertTasks,
     splitMode,
     pmQuote,
     setPmQuote: setPmQuoteFirebase,

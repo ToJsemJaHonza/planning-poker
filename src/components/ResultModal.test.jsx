@@ -81,6 +81,49 @@ describe('ResultModal — rendering', () => {
     expect(screen.getByText('Backend')).toBeInTheDocument();
   });
 
+  it('renders the task header when taskTitle is provided', () => {
+    const players = mkPlayers({ Alice: { vote: '5' } });
+    const { container } = render(
+      <ResultModal
+        players={players}
+        splitMode={false}
+        onNewRound={() => {}}
+        taskTitle="Login page"
+        taskUrl="https://jira/1"
+      />,
+    );
+    const header = container.querySelector('[data-result-task-header]');
+    expect(header).not.toBeNull();
+    expect(header.textContent).toContain('Login page');
+    const link = container.querySelector('[data-result-task-link]');
+    expect(link.getAttribute('href')).toBe('https://jira/1');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('omits the task header when taskTitle is empty', () => {
+    const players = mkPlayers({ Alice: { vote: '5' } });
+    const { container } = render(
+      <ResultModal players={players} splitMode={false} onNewRound={() => {}} />,
+    );
+    expect(container.querySelector('[data-result-task-header]')).toBeNull();
+  });
+
+  it('renders the task header in split mode too', () => {
+    const players = mkPlayers({ Alice: { voteFe: '3', voteBe: '5' } });
+    const { container } = render(
+      <ResultModal
+        players={players}
+        splitMode={true}
+        onNewRound={() => {}}
+        taskTitle="Payment flow"
+      />,
+    );
+    const header = container.querySelector('[data-result-task-header]');
+    expect(header).not.toBeNull();
+    expect(header.textContent).toContain('Payment flow');
+  });
+
   it('New Round button calls onNewRound', async () => {
     const user = userEvent.setup();
     const onNewRound = vi.fn();

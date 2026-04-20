@@ -1,18 +1,42 @@
 import { useState } from 'react';
 import { generateRoomCode } from '../hooks/useRoom';
 import { pixel } from './room/styles';
+import { normalizeTaskRows } from './landing.utils';
+import TaskRowsEditor from './room/TaskRowsEditor';
 
 export default function Landing({ playerName, onJoinRoom }) {
   const [joinCode, setJoinCode] = useState('');
   const [showRolePick, setShowRolePick] = useState(false);
+  const [showTaskEntry, setShowTaskEntry] = useState(false);
+  // Role chosen before the task-entry step — remembered so "Back" returns
+  // to role pick and so both Player and Manager creators flow through the
+  // same seed path. Defaults to 'pm' to match the prior behavior when no
+  // role was picked yet (should never actually be read in that state).
+  const [pickedRole, setPickedRole] = useState('pm');
+  const [taskRows, setTaskRows] = useState([{ title: '', url: '' }]);
 
   const handleCreate = () => {
     setShowRolePick(true);
   };
 
+  // Both roles get the task-entry step when CREATING a room — a Player
+  // who creates a fresh room becomes that room's leader and would
+  // otherwise have no path to seed a backlog until after the room
+  // existed. Joining an existing room (via code) still skips this
+  // entirely — joiners can't write the initial task list.
   const handlePickRole = (role) => {
+    setPickedRole(role);
+    setShowTaskEntry(true);
+  };
+
+  const handleStartGrooming = () => {
     const code = generateRoomCode();
-    onJoinRoom(code, role);
+    onJoinRoom(code, pickedRole, normalizeTaskRows(taskRows));
+  };
+
+  const handleSkipTasks = () => {
+    const code = generateRoomCode();
+    onJoinRoom(code, pickedRole, []);
   };
 
   const handleJoin = (e) => {
@@ -22,9 +46,51 @@ export default function Landing({ playerName, onJoinRoom }) {
     // always produces values matching this shape.
     const code = joinCode.trim().toUpperCase();
     if (/^[A-Z0-9]{6}$/.test(code)) {
-      onJoinRoom(code, 'player'); // joining = always player
+      onJoinRoom(code, 'player', []); // joining = always player
     }
   };
+
+  // Manager task-entry step — after picking the Manager role.
+  if (showTaskEntry) {
+    return (
+      <div data-landing data-task-entry style={styles.container}>
+        <h1 style={styles.title}>Planning Poker</h1>
+        <p style={styles.subtitle}>Tasks to groom</p>
+
+        <div style={styles.taskCard}>
+          <TaskRowsEditor
+            rows={taskRows}
+            onChange={setTaskRows}
+            autoFocusFirst
+          />
+
+          <div style={styles.taskActions}>
+            <button
+              data-task-skip
+              onClick={handleSkipTasks}
+              style={styles.skipBtn}
+            >
+              Skip
+            </button>
+            <button
+              data-task-start
+              onClick={handleStartGrooming}
+              style={styles.startBtn}
+            >
+              Start grooming
+            </button>
+          </div>
+        </div>
+
+        <button
+          onClick={() => { setShowTaskEntry(false); setShowRolePick(true); }}
+          style={styles.changeName}
+        >
+          Back
+        </button>
+      </div>
+    );
+  }
 
   // Role selection after clicking "Vytvořit místnost"
   if (showRolePick) {
@@ -209,5 +275,44 @@ const styles = {
     fontSize: '0.45rem',
     textDecoration: 'underline',
     fontFamily: pixel,
+  },
+  taskCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem',
+    padding: '1.2rem',
+    background: '#f5f0e4',
+    border: '3px solid #d4a853',
+    boxShadow: '4px 4px 0 #b8922e',
+    width: 'min(640px, calc(100vw - 2rem))',
+    maxHeight: '70vh',
+    overflowY: 'auto',
+  },
+  taskActions: {
+    display: 'flex',
+    gap: '0.6rem',
+    justifyContent: 'space-between',
+    marginTop: '0.4rem',
+  },
+  skipBtn: {
+    padding: '0.5rem 1rem',
+    fontSize: '0.55rem',
+    background: 'transparent',
+    color: '#888',
+    border: '3px solid #d0c4ae',
+    borderRadius: 0,
+    cursor: 'pointer',
+    fontFamily: pixel,
+  },
+  startBtn: {
+    padding: '0.5rem 1.2rem',
+    fontSize: '0.6rem',
+    background: '#d4a853',
+    color: '#1e1e2e',
+    border: '3px solid #b8922e',
+    borderRadius: 0,
+    cursor: 'pointer',
+    fontFamily: pixel,
+    boxShadow: '3px 3px 0 #b8922e',
   },
 };

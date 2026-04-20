@@ -59,7 +59,13 @@ export function computePlayerGridPosition(index, playerCount, viewportWidth) {
   // sprite vertical clearance from both the voting card above and the
   // name tag below.
   const ITEM_HEIGHT = 220;
-  const GRID_TOP = 174;
+  // GRID_TOP = header (≈40) + TaskBar list-mode strip (≈105) + PhaseBar
+  // (≈76) worst-case. The TaskBar grew when the horizontal chip strip
+  // replaced the old one-line "Now grooming" display; before this bump
+  // the figures stayed at y=310 while the grid flow shifted down with
+  // the taller bar, which dropped the name tags visibly below their
+  // sprites.
+  const GRID_TOP = 220;
   const CONTAINER_PAD_X = 16;
 
   const availableWidth = viewportWidth - 2 * CONTAINER_PAD_X;
