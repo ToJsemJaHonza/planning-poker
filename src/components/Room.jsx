@@ -4,7 +4,8 @@ import { useShameTimer } from '../hooks/useShameTimer';
 import { useRoomStartCrowning } from '../hooks/useRoomStartCrowning';
 import { useSlotMachine } from '../hooks/useSlotMachine';
 import { useCrownOwnership } from '../hooks/useCrownOwnership';
-import { usePmPosition } from '../hooks/usePmPosition';
+import { useCharacterStage } from '../hooks/useCharacterStage';
+import { usePmDirector } from '../hooks/usePmDirector';
 import { useOktaKeys } from '../hooks/useOktaKeys';
 import {
   isValidCeremonyPayload,
@@ -13,7 +14,8 @@ import {
 import CardPicker, { SplitCardPicker } from './CardPicker';
 import PlayerList from './PlayerList';
 import ResultModal from './ResultModal';
-import PmSprite from './PmSprite';
+import CharacterStage from './CharacterStage';
+import CrownStage from './CrownStage';
 import RevealBackground from './RevealBackground';
 import ShameOverlay from './shame/ShameOverlay';
 import SlotMachineStage from './SlotMachineStage';
@@ -32,26 +34,42 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
     triggerOkta,
     syncedEvent, fireSyncedEvent,
     pmRoulette, resolvePmRoulettePromotion, clearPmRoulette,
-    roomStartCrowning, shameTimer, setShameTimer, roomDeleted,
+    roomStartCrowning, roomStartCrowned, shameTimer, setShameTimer, roomDeleted,
     isLeader, connected, leaderChangedAt, createdAt,
     castVote, castVoteFe, castVoteBe,
     toggleSplit, revealCards, newRound, updateTask,
   } = useRoom(roomCode, playerId, playerName, role);
 
-  // --- Unified PM positioning (JS-driven) ---
-  // The usePmPosition hook owns the PM's canonical position.
-  // During idle mode it runs a rAF ping-pong walk. When a ceremony starts,
-  // it freezes the current position and returns it as `startPos` for the
-  // ceremony to use. No more getBoundingClientRect needed.
+  // --- Unified character stage ---
+  // The PM (and, after later phases, players and entering cinematics) live
+  // on a single long-running stage whose characters persist across every
+  // mode. No mount/unmount at ceremony boundaries — so no handoff jump.
+  const stage = useCharacterStage();
   const ceremonyActive = !!(pmRoulette || roomStartCrowning);
-  const pmPos = usePmPosition({ ceremonyActive });
-  const ceremonyStartPos = pmPos.startPos;
+
+  // Downstream hooks need `ceremonyStartPos` from the director, and the
+  // director's ceremony mirror needs their output. Refs break the cycle:
+  // they're assigned later in this render and the director's
+  // useLayoutEffect reads them after commit.
+  const phaseStateRef = useRef(null);
+  const roomStartStateRef = useRef(null);
+
+  const { ceremonyStartPos } = usePmDirector({
+    stage,
+    ceremonyActive,
+    phaseStateRef,
+    roomStartStateRef,
+    isLeader,
+    externalQuote: !isLeader ? pmQuote : '',
+    onQuote: isLeader ? setPmQuote : null,
+  });
 
   // --- Room-start mini-ceremony ---
   const roomStartState = useRoomStartCrowning({
     roomCode, playerId, role, connected, isLeader,
     players, roomStartCrowning, pmRoulette,
     ceremonyStartPos,
+    roomStartCrowned,
   });
 
   // --- Slot machine ceremony validation ---
@@ -90,6 +108,12 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
     players, slotMachinePhaseState, roomStartState, pmRoulette,
   });
 
+  // Wire late-computed state back into the director's mirror. Assigning
+  // refs during render is fine — the director's useLayoutEffect reads them
+  // after commit, so it always sees the latest tick's values.
+  phaseStateRef.current = slotMachinePhaseState;
+  roomStartStateRef.current = roomStartState;
+
   // --- Derived state ---
   const isPM = role === 'pm';
   const canControl = isLeader;
@@ -97,7 +121,10 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
   const myVote = me?.vote || null;
   const myVoteFe = me?.voteFe || null;
   const myVoteBe = me?.voteBe || null;
-  const votingPlayers = Object.values(players).filter(p => p.role !== 'pm');
+  // Disconnected players keep their DB record (so the ceremony trigger
+  // still sees hasLeader=true when the leader refreshes), but the vote
+  // count / grid / shame timer must treat them as absent.
+  const votingPlayers = Object.values(players).filter(p => p.role !== 'pm' && !p.disconnected);
   const playerCount = votingPlayers.length;
   const votedCount = splitMode
     ? votingPlayers.filter(p => p.voteFe != null && p.voteBe != null).length
@@ -146,14 +173,37 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
       const holdout = notVoted[0];
       const holdoutEntry = Object.entries(players).find(([, d]) => d === holdout);
       if (holdoutEntry && shameHoldoutRef.current !== holdoutEntry[0]) {
-        shameHoldoutRef.current = holdoutEntry[0];
-        setShameTimer({
-          holdoutName: holdout.name,
-          holdoutId: holdoutEntry[0],
-          startedAt: Date.now(),
-        });
+        const holdoutId = holdoutEntry[0];
+        // If Firebase already has a live shameTimer for THIS holdout, the
+        // previous leader already started the stress clock. Restore the
+        // ref from it instead of overwriting with a fresh `startedAt` —
+        // that's what used to zero-out the accumulated stage whenever
+        // the leader's own tab refreshed while a holdout was stressed.
+        const existingMatches = shameTimer && shameTimer.holdoutId === holdoutId;
+        shameHoldoutRef.current = holdoutId;
+        if (!existingMatches) {
+          setShameTimer({
+            holdoutName: holdout.name,
+            holdoutId,
+            startedAt: Date.now(),
+          });
+        }
       }
     } else {
+      // If the current holdout just disconnected (is marked
+      // `disconnected: true` but still in the raw players map and hasn't
+      // voted), don't tear down the shame timer. Otherwise they'd come
+      // back from a refresh, re-enter `votingPlayers`, and we'd write a
+      // brand-new shameTimer with a fresh startedAt — wiping the
+      // accumulated stress stage the user had built up to.
+      const holdoutId = shameHoldoutRef.current;
+      if (holdoutId) {
+        const raw = players[holdoutId];
+        const stillNotVoted = raw && (
+          splitMode ? (raw.voteFe == null || raw.voteBe == null) : raw.vote == null
+        );
+        if (raw && raw.disconnected && stillNotVoted) return;
+      }
       if (shameTimer || shameHoldoutRef.current) {
         setShameTimer(null);
         shameHoldoutRef.current = null;
@@ -236,18 +286,17 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
         </div>
       )}
 
-      {/* Idle PM sprite — hidden during ceremonies. Position driven by
-          usePmPosition hook (JS-driven, no CSS keyframes). */}
-      {!ceremonyActive && (
-        <PmSprite
-          isCasting={false}
-          onCastComplete={() => {}}
-          onQuote={canControl ? setPmQuote : null}
-          externalQuote={!canControl ? pmQuote : null}
-          position={{ x: pmPos.x, y: pmPos.y }}
-          facingLeft={pmPos.facingLeft}
-        />
-      )}
+      {/* Every animated character (PM now, players + entering cinematics
+          in later phases) lives on one persistent stage. No mount/unmount
+          at phase boundaries, so no teleport between idle and ceremony. */}
+      <CharacterStage stage={stage} />
+
+      {/* Single crown renderer. Every place that used to paint its own
+          crown (PlayerFigure's head crown, PmSprite's ceremony block,
+          `char.crown` mirroring in both directors) has been deleted —
+          the crown's authoritative state is `crownOwnership` and this
+          is the one renderer that consumes it. */}
+      <CrownStage stage={stage} crownOwnership={crownOwnership} />
 
       <RoomHeader roomCode={roomCode} playerCount={playerCount} />
       <TaskBar task={task} canControl={canControl} phase={phase} onSave={updateTask} />
@@ -264,9 +313,10 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
           splitMode={splitMode} syncedEvent={syncedEvent}
           fireSyncedEvent={fireSyncedEvent} isLeader={isLeader}
           createdAt={createdAt} pmRoulette={pmRoulette}
-          phaseState={slotMachinePhaseState} crownOwnership={crownOwnership}
+          phaseState={slotMachinePhaseState}
           shameTimer={shameTimer} shameStage={shame.stage}
           allVoted={allVotedClean} /* nod animation only for clean votes */
+          stage={stage} roomCode={roomCode}
         />
       </div>
 
@@ -303,35 +353,14 @@ export default function Room({ roomCode, playerId, playerName, role = 'player' }
 
       {phase === 'revealed' && <RevealBackground players={players} splitMode={splitMode} />}
 
-      {/* Room-start crown delivery mini-ceremony */}
-      {roomStartState.active && roomStartState.pmPosition && (
-        <div
-          style={{
-            position: 'fixed', left: 0, top: 0,
-            width: 60, height: 70,
-            transform: `translate(${roomStartState.pmPosition.x - 30}px, ${roomStartState.pmPosition.y - 35}px)`,
-            zIndex: 55, pointerEvents: 'none', willChange: 'transform',
-          }}
-          data-room-start-pm
-        >
-          <PmSprite
-            mode="ceremony"
-            pmPose={roomStartState.pmPose}
-            crownState={
-              crownOwnership.location === 'arcing-to-player'
-                ? { mode: 'arcing', progress: crownOwnership.progress }
-                : crownOwnership.location === 'materializing'
-                  ? { mode: 'materializing', progress: crownOwnership.progress }
-                  : null
-            }
-            crownGlowing={crownOwnership.glowing}
-          />
-        </div>
-      )}
+      {/* The room-start mini-ceremony PM used to mount here with its own
+          <PmSprite> wrapper. It now runs through the unified character
+          stage (driven by usePmDirector's ceremony mirror) — so no
+          duplicate PM DOM and no teleport at ceremony start. */}
 
       <SlotMachineStage
         pmRoulette={ceremonyForHook} players={players}
-        phaseState={slotMachinePhaseState} crownOwnership={crownOwnership}
+        phaseState={slotMachinePhaseState}
       />
 
       {showResult && phase === 'revealed' && (

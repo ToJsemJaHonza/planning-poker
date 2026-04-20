@@ -135,6 +135,167 @@ export function renderMouthRecess(mouthDir) {
 }
 
 // ---------------------------------------------------------------------------
+// Industrial decorator components — bolt bands, hazard stripes, gauge, rust.
+// Rendered as children of a pipe segment so they scale with the pipe.
+// ---------------------------------------------------------------------------
+
+/**
+ * BoltBand — 4 bolt heads on a narrow perpendicular band. Orientation
+ * 'horizontal' draws a vertical band across a horizontal segment; vice versa.
+ */
+export function BoltBand({ orientation = 'horizontal', offset = 30 }) {
+  const isHorizontalSeg = orientation === 'horizontal';
+  const bandStyle = isHorizontalSeg
+    ? {
+        position: 'absolute',
+        top: -3,
+        left: offset,
+        width: 10,
+        height: THICKNESS + 6,
+        background: DBB.fillDark,
+        boxShadow: `inset 0 0 0 2px ${DBB.outline}`,
+        zIndex: 2,
+      }
+    : {
+        position: 'absolute',
+        left: -3,
+        top: offset,
+        height: 10,
+        width: THICKNESS + 6,
+        background: DBB.fillDark,
+        boxShadow: `inset 0 0 0 2px ${DBB.outline}`,
+        zIndex: 2,
+      };
+  const boltStyle = {
+    position: 'absolute',
+    width: 6,
+    height: 6,
+    background: DBB.specular,
+    boxShadow: `inset 0 0 0 1px ${DBB.outline}, 0 0 0 1px ${DBB.outline}`,
+    borderRadius: 1,
+  };
+  // 4 bolts spread across the band (positions along the long axis of the band)
+  const positions = [0.15, 0.38, 0.62, 0.85];
+  return (
+    <div className="dbb-bolt-band" data-testid="dbb-bolt-band" style={bandStyle}>
+      {positions.map((p, i) => {
+        const coord = Math.round(p * (THICKNESS + 6) - 3);
+        return (
+          <div
+            key={i}
+            style={{
+              ...boltStyle,
+              ...(isHorizontalSeg ? { top: coord, left: 2 } : { left: coord, top: 2 }),
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * HazardStripe — repeating diagonal yellow-black band on a pipe segment.
+ */
+export function HazardStripe({ orientation = 'horizontal', length = 40, offset = 10 }) {
+  const isHorizontalSeg = orientation === 'horizontal';
+  const common = {
+    position: 'absolute',
+    background: 'repeating-linear-gradient(45deg, #fde047 0 6px, #0a0b11 6px 12px)',
+    boxShadow: `inset 0 0 0 2px ${DBB.outline}`,
+    zIndex: 2,
+  };
+  const style = isHorizontalSeg
+    ? { ...common, top: 4, left: offset, width: length, height: 8 }
+    : { ...common, left: 4, top: offset, height: length, width: 8 };
+  return <div className="dbb-hazard-stripe" data-testid="dbb-hazard-stripe" style={style} />;
+}
+
+/**
+ * Gauge — 20×16 pressure dial with a sweeping needle. Positioned via `style`
+ * overrides; the needle animates via the `dbb-gauge-needle` class.
+ */
+export function Gauge({ style: overrideStyle = {} }) {
+  return (
+    <div
+      className="dbb-gauge"
+      data-testid="dbb-gauge"
+      style={{
+        position: 'absolute',
+        width: 20,
+        height: 16,
+        background: '#0a0b11',
+        boxShadow: `inset 0 0 0 2px ${DBB.specular}`,
+        zIndex: 3,
+        ...overrideStyle,
+      }}
+    >
+      {/* Dial face */}
+      <div style={{
+        position: 'absolute',
+        inset: 2,
+        background: DBB.labelBg,
+        boxShadow: `inset 0 0 0 1px ${DBB.outline}`,
+      }} />
+      {/* Needle */}
+      <div
+        className="dbb-gauge-needle"
+        style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          width: 7,
+          height: 2,
+          background: '#b91c1c',
+          transformOrigin: '1px 1px',
+          transform: 'rotate(-45deg)',
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * RustSpecks — 6 seeded, pseudo-random rust spots scattered over a segment.
+ * Pure decoration; positions are fixed per `seed` so renders are stable.
+ */
+export function RustSpecks({ seed = 1, orientation = 'horizontal', size = 120 }) {
+  // Deterministic pseudo-random — small LCG so positions are stable per seed.
+  const rand = (i) => {
+    const x = Math.sin((seed + i) * 9301) * 10000;
+    return x - Math.floor(x);
+  };
+  const isHorizontalSeg = orientation === 'horizontal';
+  const specks = [];
+  for (let i = 0; i < 6; i++) {
+    const along = Math.round(rand(i) * size);
+    const across = Math.round(rand(i + 100) * (THICKNESS - 8)) + 4;
+    specks.push({ along, across, w: 2 + Math.round(rand(i + 200) * 3) });
+  }
+  return (
+    <div
+      className="dbb-rust-specks"
+      data-testid="dbb-rust-specks"
+      style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}
+    >
+      {specks.map((s, i) => (
+        <div
+          key={i}
+          style={{
+            position: 'absolute',
+            ...(isHorizontalSeg ? { left: s.along, top: s.across } : { top: s.along, left: s.across }),
+            width: s.w,
+            height: s.w,
+            background: '#7f3f1a',
+            boxShadow: `0 0 0 1px rgba(40, 18, 8, 0.55)`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Pipe path tables (stored as CSS px)
 // ---------------------------------------------------------------------------
 export const PIPE_PATHS = {

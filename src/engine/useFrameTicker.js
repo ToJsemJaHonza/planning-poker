@@ -49,11 +49,26 @@ export function useAnimationFrame(callback, enabled = true) {
 export function useFrameTicker(intervalMs, callback, enabled = true) {
   const cbRef = useRef(callback);
   cbRef.current = callback;
+  // `lastFireRef` persists across re-subscribes: if `intervalMs` changes
+  // mid-cycle (e.g. usePmModel swapping wait-duration ↔ think-duration
+  // after each fire), we must NOT reset the "last fire at" timestamp —
+  // otherwise the effect re-runs, the ref goes back to 0, and the next
+  // rAF tick fires immediately regardless of intervalMs. That bug made
+  // the PM talk non-stop because every state transition re-primed the
+  // ticker to fire on the next frame.
   const lastFireRef = useRef(0);
+  // Only reset the ref on enabled false→true so a re-enable starts fresh.
+  const wasEnabledRef = useRef(false);
 
   useEffect(() => {
-    if (!enabled || !intervalMs || intervalMs <= 0) return undefined;
-    lastFireRef.current = 0;
+    if (!enabled || !intervalMs || intervalMs <= 0) {
+      wasEnabledRef.current = false;
+      return undefined;
+    }
+    if (!wasEnabledRef.current) {
+      lastFireRef.current = 0;
+      wasEnabledRef.current = true;
+    }
     return subscribe((now) => {
       if (lastFireRef.current === 0) {
         lastFireRef.current = now;

@@ -65,6 +65,47 @@
 
 .dbb-label-on-pipe { image-rendering: pixelated; }
 
+/* Pipe rumble — tiny translate shake applied to the whole pipe group. */
+@keyframes dbbRumble {
+  0%   { transform: translate(0, 0); }
+  20%  { transform: translate(-1px, 0); }
+  40%  { transform: translate(1px, -1px); }
+  60%  { transform: translate(-1px, 1px); }
+  80%  { transform: translate(1px, 0); }
+  100% { transform: translate(0, 0); }
+}
+.dbb-rumble { animation: dbbRumble 120ms steps(5, end) infinite; }
+
+/* Bolt band fade-in when the `bolt` phase kicks in. */
+@keyframes dbbBoltFadeIn {
+  0%   { opacity: 0; transform: scale(0.4); }
+  50%  { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 1; transform: scale(1);   }
+}
+.dbb-bolt-band { animation: dbbBoltFadeIn 260ms steps(4, end) forwards; }
+
+/* Gauge needle sweep — simulate a pressure spike during rumble/packetFlow. */
+@keyframes dbbGaugeSweep {
+  0%   { transform: rotate(-45deg); }
+  50%  { transform: rotate(60deg);  }
+  70%  { transform: rotate(40deg);  }
+  100% { transform: rotate(50deg);  }
+}
+.dbb-gauge-needle { animation: dbbGaugeSweep 900ms steps(8, end) forwards; }
+
+/* Packets stream through a pipe segment (horizontal segments flow left→right;
+   vertical segments flow top→bottom). `.dbb-packet` + data attr determines axis.
+   Using two keyframe sets keyed by a wrapper class set on the parent. */
+@keyframes dbbPacketFlow {
+  0%   { opacity: 0; transform: translate(0, 0); }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(120px, 0); }
+}
+.dbb-packet {
+  animation: dbbPacketFlow 900ms steps(6, end) forwards;
+}
+
 /* === Chicken easter egg === */
 @keyframes chickenRun {
   0% { left: -50px; top: 60%; transform: scaleX(1); }
@@ -80,6 +121,54 @@
 @keyframes trainDepartRight { 0% { left: calc(50% - 208px); }   100% { left: -500px; } }
 
 .richard-exit-train { will-change: transform; }
+
+/* Station sign slide-in — scales from narrow strip to full plate. */
+@keyframes stationSignIn {
+  0%   { opacity: 0; transform: scaleX(0.1); }
+  60%  { opacity: 1; transform: scaleX(1.05); }
+  100% { opacity: 1; transform: scaleX(1); }
+}
+.train-station-sign {
+  transform-origin: left center;
+  animation: stationSignIn 500ms steps(5, end) forwards;
+}
+
+/* Horn bubble — pops in, holds, pops out. */
+@keyframes hornBubble {
+  0%   { opacity: 0; transform: translateX(-50%) scale(0.5); }
+  25%  { opacity: 1; transform: translateX(-50%) scale(1.1); }
+  40%  { opacity: 1; transform: translateX(-50%) scale(1);   }
+  80%  { opacity: 1; transform: translateX(-50%) scale(1);   }
+  100% { opacity: 0; transform: translateX(-50%) scale(0.9); }
+}
+.horn-bubble { animation: hornBubble 600ms steps(6, end) forwards; }
+
+/* Steam cloud — drifts up while fading. */
+@keyframes steamCloud {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.9); }
+  30%  { opacity: 1; transform: translate(-2px, -4px) scale(1); }
+  75%  { opacity: 0.6; transform: translate(-4px, -10px) scale(1.2); }
+  100% { opacity: 0; transform: translate(-6px, -18px) scale(1.4); }
+}
+.train-steam-cloud { animation: steamCloud 700ms steps(5, end) forwards; }
+
+/* Door opening white flash at the doorsOpen beat. */
+@keyframes doorsFlash {
+  0%   { opacity: 0; }
+  25%  { opacity: 1; }
+  60%  { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+.door-flash { animation: doorsFlash 300ms steps(4, end) forwards; }
+
+/* Richard's goodbye wave bubble. */
+@keyframes richardWave {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  25%  { opacity: 1; transform: translateX(-50%) translateY(-2px); }
+  75%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+}
+.richard-wave { animation: richardWave 900ms steps(6, end) forwards; }
 
 /* === Dust puff === */
 @keyframes dust-puff {
@@ -114,11 +203,16 @@
   0% { left: -100%; top: 35%; } 100% { left: 120%; top: 35%; }
 }
 
-/* === Reveal background numbers === */
+/* === Reveal background numbers ===
+   Numbers stay visible until the leader clicks "New Round" — the Room
+   component unmounts RevealBackground when phase leaves 'revealed', so
+   these keyframes only need to pop in and then hold steady. */
 @keyframes revealBgFade {
-  0% { opacity: 0; } 8% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; }
+  0% { opacity: 0; } 8% { opacity: 1; } 100% { opacity: 1; }
 }
 @keyframes revealNumberPop {
-  0% { opacity: 0; transform: scale(0.5); } 10% { opacity: 0.5; transform: scale(1.15); }
-  20% { opacity: 0.35; transform: scale(1); } 75% { opacity: 0.25; } 100% { opacity: 0; }
+  0% { opacity: 0; transform: scale(0.5); }
+  10% { opacity: 0.5; transform: scale(1.15); }
+  20% { opacity: 0.35; transform: scale(1); }
+  100% { opacity: 0.35; transform: scale(1); }
 }

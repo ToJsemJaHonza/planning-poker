@@ -4,7 +4,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 // Mock the Firebase wrapper BEFORE importing useRoom
 vi.mock('../firebase.js', () => import('../test/firebase-mock.js'));
 
-import { useRoom } from './useRoom';
+import { useRoom, CEREMONY_GRACE_MS } from './useRoom';
 import { __mock } from '../test/firebase-mock.js';
 
 // Helper: look up a player entry by display name. With the session-ID
@@ -176,7 +176,7 @@ describe('useRoom', () => {
     // The tests for the ceremony itself live in the dedicated
     // useSlotMachine/slotMachine test files.
     async function simulateCeremonyCompletion(hook) {
-      await waitFor(() => expect(hook.result.current.pmRoulette).not.toBeNull(), { timeout: 2000 });
+      await waitFor(() => expect(hook.result.current.pmRoulette).not.toBeNull(), { timeout: CEREMONY_GRACE_MS + 3000 });
       const payload = hook.result.current.pmRoulette;
       await act(async () => {
         await hook.result.current.resolvePmRoulettePromotion(payload);
@@ -201,7 +201,7 @@ describe('useRoom', () => {
       await simulateCeremonyCompletion(alice);
 
       // Alice should now be the leader
-      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 2000 });
+      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: CEREMONY_GRACE_MS + 3000 });
     });
 
     it('takeover stamps leaderChangedAt via the ceremony promotion', async () => {
@@ -220,7 +220,7 @@ describe('useRoom', () => {
       // leader manually. See tech design §5.3.
       act(() => { __mock.removePlayer('ROOMH2', 'pm-id'); });
       await simulateCeremonyCompletion(alice);
-      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 2000 });
+      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: CEREMONY_GRACE_MS + 3000 });
 
       expect(alice.result.current.leaderChangedAt).toBeGreaterThan(0);
     });
@@ -257,7 +257,7 @@ describe('useRoom', () => {
           winnerId: 'alice-id',
         });
       });
-      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 2000 });
+      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: CEREMONY_GRACE_MS + 3000 });
 
       // Train is still there — the promotion multi-path update does NOT
       // touch the syncedEvent slot.
@@ -300,8 +300,72 @@ describe('useRoom', () => {
       // PM disconnects → ceremony fires (stale event does not block it)
       act(() => { __mock.removePlayer('ROOMSTALE', 'pm-id'); });
       await simulateCeremonyCompletion(alice);
-      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: 2000 });
+      await waitFor(() => expect(alice.result.current.isLeader).toBe(true), { timeout: CEREMONY_GRACE_MS + 3000 });
     });
+
+    // Regression for the "leader closes browser, nobody is crowned" bug.
+    // In production, onDisconnect fires `.update({ disconnected: true })` —
+    // it does NOT remove the player node. So the old leader keeps
+    // isLeader=true + their original joinedAt. Before the fix,
+    // `nonPmCandidatesSorted` returned the disconnected leader as
+    // sorted[0]; every surviving client then bailed out of the ceremony
+    // trigger ("sorted[0] isn't me"), the offline leader obviously
+    // couldn't fire from the grave, and the room stayed leaderless.
+    it('leader-player disconnect (disconnected=true) triggers ceremony fired by next earliest', async () => {
+      // Leader-player (created the room as a player) — they are the
+      // earliest joiner, so without the disconnected filter they would
+      // still be sorted[0] after vanishing.
+      const leader = renderHook(() => useRoom('ROOMDCP', 'leader-id', 'Leader', 'player'));
+      await waitFor(() => expect(leader.result.current.isLeader).toBe(true));
+
+      const alice = renderHook(() => useRoom('ROOMDCP', 'alice-id', 'Alice', 'player'));
+      await waitFor(() => expect(alice.result.current.connected).toBe(true));
+      const bob = renderHook(() => useRoom('ROOMDCP', 'bob-id', 'Bob', 'player'));
+      await waitFor(() => expect(bob.result.current.connected).toBe(true));
+      await waitFor(() => expect(Object.keys(alice.result.current.players).length).toBe(3));
+
+      // Simulate real disconnect: the onDisconnect queue update fires,
+      // marking leader disconnected=true WITHOUT removing the node. The
+      // leader hook is also unmounted — the browser window is gone, so
+      // its copy of useRoom no longer runs. Without the unmount, the
+      // still-mounted leader hook would satisfy its own `sorted[0] === me`
+      // check and fire the ceremony, masking the real bug in prod where
+      // no surviving client fires.
+      leader.unmount();
+      act(() => {
+        __mock.triggerDisconnect('/rooms/ROOMDCP/players/leader-id');
+      });
+      await waitFor(() => expect(
+        alice.result.current.players['leader-id']?.disconnected
+      ).toBe(true));
+      // Sanity: the stale leader record is still present with isLeader=true.
+      expect(alice.result.current.players['leader-id']?.isLeader).toBe(true);
+
+      // Alice (joinedAt #2) is the earliest CONNECTED non-PM and must fire.
+      // The trigger has a CEREMONY_GRACE_MS grace window, so allow time.
+      await waitFor(
+        () => expect(alice.result.current.pmRoulette).not.toBeNull(),
+        { timeout: CEREMONY_GRACE_MS + 3000 }
+      );
+      const payload = alice.result.current.pmRoulette;
+      expect(payload).toBeTruthy();
+      // Winner must NOT be the disconnected leader.
+      expect(payload.winnerId).not.toBe('leader-id');
+      // Candidate pool must exclude the disconnected leader.
+      expect(payload.candidateIds).not.toContain('leader-id');
+
+      // Complete the ceremony (what SlotMachineStage does in the real UI).
+      await act(async () => {
+        await alice.result.current.resolvePmRoulettePromotion(payload);
+        await alice.result.current.clearPmRoulette(payload);
+      });
+      // Some non-disconnected player was promoted.
+      await waitFor(() => {
+        const promoted = Object.entries(alice.result.current.players)
+          .find(([id, p]) => p?.isLeader && id !== 'leader-id');
+        expect(promoted).toBeTruthy();
+      }, { timeout: CEREMONY_GRACE_MS + 3000 });
+    }, CEREMONY_GRACE_MS * 2 + 5000);
 
     it('Strict Mode simulated unmount/remount does NOT wipe the player node', async () => {
       const hook = renderHook(() => useRoom('ROOMSTRICT', 'alice-id', 'Alice', 'pm'));

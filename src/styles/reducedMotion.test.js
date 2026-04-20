@@ -51,6 +51,16 @@ describe('responsive.css — reduced-motion entrance events', () => {
     'trainDepartRight',
     'revealBgFade',
     'revealNumberPop',
+    // Enriched Richard / Tomáš keyframes
+    'stationSignIn',
+    'hornBubble',
+    'doorsFlash',
+    'richardWave',
+    'steamCloud',
+    'dbbRumble',
+    'dbbPacketFlow',
+    'dbbBoltFadeIn',
+    'dbbGaugeSweep',
   ])('redefines @keyframes %s inside the reduced-motion block', (name) => {
     expect(body).toMatch(new RegExp(`@keyframes\\s+${name}\\b`));
   });
@@ -65,6 +75,18 @@ describe('responsive.css — reduced-motion entrance events', () => {
     '.richard-exit-train',
     '.dust-puff',
     '.name-tag-arrived',
+    // Enriched Richard selectors
+    '.train-station-sign',
+    '.horn-bubble',
+    '.train-steam-cloud',
+    '.door-flash',
+    '.richard-wave',
+    // Enriched DBB selectors
+    '.dbb-rumble',
+    '.dbb-packet',
+    '.dbb-bolt-band',
+    '.dbb-gauge-needle',
+    '.dbb-hazard-stripe',
   ])('disables %s inside the reduced-motion block', (selector) => {
     expect(body).toContain(selector);
   });

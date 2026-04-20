@@ -49,9 +49,13 @@ const QUOTES = [
 ];
 
 const SPARKLE_MS = 1400;
-const QUOTE_CHANCE = 0.2;
-const WAIT_MIN_MS = 5000;
-const WAIT_RANDOM_MS = 8000;
+// Thinking-loop frequency. 0.2 × avg-cycle-12s ≈ one visible quote per
+// minute, which made the PM read as "silent" after the useFrameTicker
+// fix stopped the runaway firing. Bumped so quotes feel present without
+// chattering.
+const QUOTE_CHANCE = 0.4;
+const WAIT_MIN_MS = 3000;
+const WAIT_RANDOM_MS = 6000;
 const THINK_MIN_MS = 2500;
 const THINK_RANDOM_MS = 1500;
 
@@ -87,13 +91,11 @@ function pickQuote() {
  * @param {(() => void)|null} [opts.onCastComplete]     Fires once after
  *   the sparkle window closes.
  * @param {{x:number,y:number}|null} [opts.position]    Idle position from
- *   usePmPosition.
+ *   usePmDirector (the PM's live character position).
  * @param {boolean} [opts.facingLeft=false]             Idle facing.
  * @param {'cast'|'walk'|null} [opts.pmPose=null]       Ceremony-driven pose.
  * @param {string} [opts.pmBubble='']                   Ceremony bubble text.
  * @param {'left'|'right'|null} [opts.ceremonyFacing]   Ceremony facing.
- * @param {object|null} [opts.crownState]               Crown phase from ceremony.
- * @param {boolean} [opts.crownGlowing=false]
  * @returns {{
  *   mode: 'idle'|'ceremony',
  *   walkFrame: 0|1,
@@ -103,8 +105,6 @@ function pickQuote() {
  *   showBubble: boolean,
  *   facingLeft: boolean,
  *   position: {x:number,y:number}|null,
- *   crownState: object|null,
- *   crownGlowing: boolean,
  * }}
  */
 export function usePmModel({
@@ -119,8 +119,6 @@ export function usePmModel({
   pmPose = null,
   pmBubble = '',
   ceremonyFacing = null,
-  crownState = null,
-  crownGlowing = false,
 } = {}) {
   // Walk-frame leg swap, shared rAF clock. Freezes during cast so the
   // sprite holds the cast pose cleanly.
@@ -223,8 +221,6 @@ export function usePmModel({
     showBubble: mode === 'ceremony' ? !!pmBubble : showIdleBubble,
     facingLeft: mode === 'ceremony' ? ceremonyFacing === 'left' : facingLeft,
     position,
-    crownState,
-    crownGlowing,
   };
 }
 

@@ -1,7 +1,8 @@
 /* Feature-scoped CSS modules — each file owns one concern. */
 @import './styles/base.css';
 @import './styles/pm.css';
-@import './styles/walk.css';
+/* walk.css (player-walk-in / -out keyframes) deleted — player motion is
+   now driven by the unified character stage via `usePlayerDirector`. */
 @import './styles/events.css';
 @import './styles/ceremony.css';
 @import './styles/shame.css';

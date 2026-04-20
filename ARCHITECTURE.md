@@ -187,19 +187,63 @@ Shared constants:
 
 ## 3. Animations — how they really work
 
-Every moving thing in the app uses one of three techniques:
+### 3.0 Unified character stage (the single source of figure motion)
 
-### 3.1 Sliding CSS `@keyframes` (the Wizard's walk, SPECIAL ROUND overlay, train, chicken, sheep)
+Every animated character in the app — PM, grid players, entering cinematic
+figures (Richard's train, Tomáš's pipe), the outgoing leader during crown
+ceremonies — lives on ONE `CharacterStage` and is driven by the same
+`Character` model. The stage is created once in `Room.jsx`
+(`useCharacterStage`) and mounted as a single `<CharacterStage stage={stage} />`
+overlay.
 
-Pure CSS animation on a positioned element. No React re-renders involved. Fast and cheap.
+**Why:** Before this refactor each figure had its own mount site with its
+own coordinate convention and its own snapshot logic. Whenever control
+handed off between subsystems (idle PM → slot-machine PM, train figure →
+grid player, leader → outgoing-leader walk-off) the two sides disagreed
+about the starting pixel and the user saw a teleport. The unified stage
+kills the handoff as a concept: the same character instance persists
+across every mode, so the next action always starts from
+`char.position` — whatever pixel it actually is right now.
 
-### 3.2 JS-driven sprite frame toggle (players walking in/out)
+**Files:**
+- `src/engine/character.js` — `createCharacter`, `tickCharacter`,
+  imperative actions (`walkTo`, `wait`, `setPose`, `setBubble`,
+  `giveCrown`, `arcCrownTo`, `teleport`, `interrupt`, `sequence`).
+- `src/engine/characterActions.js` — action dispatcher (one `advanceAction`
+  per type).
+- `src/engine/characterLayout.js` — shared coordinate convention. CENTER
+  coords everywhere; `getGroundY()` is the ground-row y for every ground
+  walker.
+- `src/hooks/useCharacterStage.js` — stage runtime, subscribes to the
+  shared `MotionRuntime` for per-frame `tickAll(characters, now)`.
+- `src/components/CharacterStage.jsx`, `CharacterSprite.jsx` — rendering.
+- Directors that write to the stage:
+  - `usePmDirector` — PM idle ping-pong + ceremony mirror (Act 1 / Act 3
+    position, pose, facing, bubble, crown).
+  - `usePlayerDirector` — grid players (join, leave, reshuffle) + outgoing
+    leader walk-off at crown ceremony `leaderWalkOff`.
+  - `useEntranceDirector` — cinematic entrances (train, DBB pipe) exposing
+    `walkFromDoor({ playerId, door })`; `Train.jsx` / `DbbPipeline.jsx`
+    render scenery only and call this at their "exit" beat.
 
-`WalkingFigure` is a module-level component that holds a `frame` state, flips it on a `setInterval`, and passes `walkFrame` to `PlayerFigure`. `PlayerFigure` rewrites rows 7–13 of the sprite grid based on the frame — legs, arms, and silhouette all change. A `.walk-bob-{frame}` class on the wrapper adds a vertical bob that syncs with the step.
+**The one invariant (src/engine/character.js `startAction`):**
+```js
+char.action = { ...action, from: { ...char.position }, startedAt: now };
+```
+Breaking this line — e.g. caching `from` at mount, or snapshotting via
+`useEffect` — reintroduces the original PM teleport. `character.test.js`
+and `usePmDirector.test.js` contain regression tests that fail under
+that sabotage.
 
-**Why JS instead of CSS?** With `box-shadow` pixel sprites there is no sprite sheet to shift via `background-position`. We'd need to stack two figures and crossfade opacity, which we tried — it "worked" in principle but felt wrong because both frames blended mid-step instead of snapping cleanly. JS state flips are rock-solid and directly drive a single re-render per step.
+Every moving non-character thing (train, pipe, chicken, sheep, reveal
+background) uses one of these supporting techniques:
 
-**Why module scope?** If `WalkingFigure` is defined *inside* another component, React treats each render of the parent as a brand-new component type, which unmounts/remounts the figure and resets the `setInterval` before it can even tick. This was one of the bugs we hit — we now enforce module scope via a comment in the file and a test that catches the regression.
+### 3.1 Sliding CSS `@keyframes` (train, chicken, sheep, SPECIAL ROUND overlay)
+
+Pure CSS animation on a positioned element. No React re-renders involved.
+Fast and cheap. Character motion *used* to live here too (player walk-in /
+walk-out, PM idle walk); those are all gone now — `src/styles/walk.css`
+was deleted with this refactor.
 
 ### 3.3 Firebase-synced timed sequences (Richard's train)
 
@@ -207,15 +251,22 @@ The train is a fully-synced visual event:
 
 1. Leader detects Richard joining → `fireSyncedEvent({ type: 'train', ... }, 9500)`
 2. Every client sees the event and mounts `<Train>`
-3. Train's own `useEffect` runs a cascading `setTimeout` schedule from `rails → arrive → stopped → bubble → exit → depart → fadeRails → done`
-4. On `exit` it calls `onPlayerExit` (Richard now appears in `PlayerList`)
+3. Train's own `useEffect` runs a cascading `setTimeout` schedule from
+   `rails → arrive → stopped → bubble → exit → depart → fadeRails → done`
+4. On `exit` it asks the entrance director to teleport Richard's
+   persistent character to the train door and walk it to his grid slot.
+   On arrival the director calls `markArrived` so PlayerList's placeholder
+   flips to a visible card — the character is already sitting on it, so
+   there's no DOM swap.
 5. On `done` it calls `onDone` (the parent unmounts Train)
 
-**The bug we fixed:** the effect used to depend on `[onPlayerExit]`. Every parent re-render passed a new callback reference, which made React re-run the effect — which cleared the old timers via the cleanup and started a brand-new set. Result: the animation restarted from `rails` mid-way, so non-owners saw the train arrive twice. Fix: callbacks are stashed in refs, the effect has `[]` deps, and we have a regression test that re-renders the parent with fresh callbacks every 1 s and asserts `onPlayerExit` fires exactly once.
-
-### 3.4 Body bob via CSS class switch
-
-The walking bob uses `.walk-bob-{frame}` where `frame` comes from React state. A `transition` smooths the ~3 px step so the eye reads it as a single rolling motion with the leg swap.
+**The bug we fixed:** the effect used to depend on `[onPlayerExit]`. Every
+parent re-render passed a new callback reference, which made React re-run
+the effect — clearing the old timers via the cleanup and starting a
+brand-new set. Result: non-owners saw the train arrive twice. Fix:
+callbacks and the director are stashed in refs, the effect has `[]` deps,
+and we have a regression test that re-renders the parent with fresh
+callbacks every 1 s and asserts `onPlayerExit` fires exactly once.
 
 ---
 

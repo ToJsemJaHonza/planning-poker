@@ -176,6 +176,7 @@ export function onDisconnect(r) {
   return {
     remove: async () => { disconnectQueue.set(p, 'remove'); },
     set: async (v) => { disconnectQueue.set(p, { type: 'set', value: v }); },
+    update: async (v) => { disconnectQueue.set(p, { type: 'update', value: v }); },
     cancel: async () => { disconnectQueue.delete(p); },
   };
 }
@@ -233,13 +234,24 @@ export const __mock = {
     } else if (action?.type === 'set') {
       _setAt(norm, action.value);
       _notify(norm);
+    } else if (action?.type === 'update') {
+      const current = _getAt(norm);
+      const merged = { ...(current || {}), ...action.value };
+      _setAt(norm, merged);
+      _notify(norm);
     }
     disconnectQueue.delete(norm);
   },
   triggerDisconnectAll() {
     for (const [path, action] of Array.from(disconnectQueue.entries())) {
-      if (action === 'remove') _setAt(path, undefined);
-      else if (action?.type === 'set') _setAt(path, action.value);
+      if (action === 'remove') {
+        _setAt(path, undefined);
+      } else if (action?.type === 'set') {
+        _setAt(path, action.value);
+      } else if (action?.type === 'update') {
+        const current = _getAt(path);
+        _setAt(path, { ...(current || {}), ...action.value });
+      }
       _notify(path);
     }
     disconnectQueue.clear();

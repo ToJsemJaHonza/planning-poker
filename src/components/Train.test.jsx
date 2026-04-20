@@ -41,8 +41,8 @@ describe('Train component — Richard arrival regression', () => {
       );
     }
 
-    // Push past 9000ms (onPlayerExit trigger) in total
-    act(() => { vi.advanceTimersByTime(5000); });
+    // Push past 10600ms (onPlayerExit trigger in the new 14-phase timeline) in total.
+    act(() => { vi.advanceTimersByTime(6000); });
 
     expect(onPlayerExit).toHaveBeenCalledTimes(1);
   });
@@ -60,7 +60,8 @@ describe('Train component — Richard arrival regression', () => {
       />
     );
 
-    act(() => { vi.advanceTimersByTime(12000); });
+    // onDone fires at t=13500 in the 14-phase timeline.
+    act(() => { vi.advanceTimersByTime(14000); });
 
     expect(onPlayerExit).toHaveBeenCalledTimes(1);
     expect(onDone).toHaveBeenCalledTimes(1);
@@ -79,8 +80,8 @@ describe('Train component — Richard arrival regression', () => {
       />
     );
 
-    // Advance past the first timer (800ms → arrive)
-    act(() => { vi.advanceTimersByTime(4500); });
+    // Advance past the arrive timer (1800ms)
+    act(() => { vi.advanceTimersByTime(5500); });
     // Now re-render with brand-new callbacks — the old bug would restart timers here
     rerender(
       <Train
@@ -90,11 +91,88 @@ describe('Train component — Richard arrival regression', () => {
         onDone={() => onDone()}
       />
     );
-    // Advance enough total time to fire onPlayerExit (9000ms in real timeline)
-    act(() => { vi.advanceTimersByTime(5000); });
+    // Advance enough total time to fire onPlayerExit (10600ms in the new timeline).
+    act(() => { vi.advanceTimersByTime(6000); });
 
-    // If the timers had restarted on rerender, we'd still be at phase 'arrive'
-    // and onPlayerExit wouldn't have been called yet. We verify it HAS been called.
+    // If the timers had restarted on rerender, we'd still be pre-exit and
+    // onPlayerExit wouldn't have been called yet.
     expect(onPlayerExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the station sign during the approach beat', () => {
+    const { queryByTestId } = render(
+      <Train
+        fromRight={false}
+        playerName="Richard"
+        onPlayerExit={() => {}}
+        onDone={() => {}}
+      />
+    );
+    // Before approach (t < 400) the station sign is not mounted.
+    expect(queryByTestId('train-station-sign')).toBeNull();
+    // After approach begins, the sign is on screen.
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(queryByTestId('train-station-sign')).not.toBeNull();
+  });
+
+  it('shows a horn bubble at the horn beat', () => {
+    const { queryByTestId } = render(
+      <Train
+        fromRight={false}
+        playerName="Richard"
+        onPlayerExit={() => {}}
+        onDone={() => {}}
+      />
+    );
+    // Horn phase starts at t=1200.
+    act(() => { vi.advanceTimersByTime(1300); });
+    expect(queryByTestId('train-horn-bubble')).not.toBeNull();
+    expect(queryByTestId('train-steam-cloud')).not.toBeNull();
+  });
+
+  it('renders a door flash during the doorsOpen beat', () => {
+    const { queryByTestId } = render(
+      <Train
+        fromRight={false}
+        playerName="Richard"
+        onPlayerExit={() => {}}
+        onDone={() => {}}
+      />
+    );
+    // Before doorsOpen (t < 5100) no flash.
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect(queryByTestId('train-door-flash')).toBeNull();
+    // During doorsOpen.
+    act(() => { vi.advanceTimersByTime(200); });
+    expect(queryByTestId('train-door-flash')).not.toBeNull();
+  });
+
+  it('shows a goodbye wave bubble at the wave beat', () => {
+    const { queryByTestId } = render(
+      <Train
+        fromRight={false}
+        playerName="Richard"
+        onPlayerExit={() => {}}
+        onDone={() => {}}
+      />
+    );
+    // Wave phase starts at t=9000.
+    act(() => { vi.advanceTimersByTime(9100); });
+    expect(queryByTestId('train-wave-bubble')).not.toBeNull();
+  });
+
+  it('draws 3 pantograph decorations once the train is on screen', () => {
+    const { container } = render(
+      <Train
+        fromRight={false}
+        playerName="Richard"
+        onPlayerExit={() => {}}
+        onDone={() => {}}
+      />
+    );
+    // After arrive phase kicks in, the train is mounted.
+    act(() => { vi.advanceTimersByTime(2000); });
+    const pantographs = container.querySelectorAll('[data-testid="train-pantograph"]');
+    expect(pantographs.length).toBe(3);
   });
 });

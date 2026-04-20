@@ -30,7 +30,8 @@ describe('DbbPipeline (GH issue #2)', () => {
         />
       );
     }
-    act(() => { vi.advanceTimersByTime(5000); });
+    // Advance past onDone at t=10700 in the enriched timeline.
+    act(() => { vi.advanceTimersByTime(6000); });
     expect(onPlayerExit).toHaveBeenCalledTimes(1);
     expect(onDone).toHaveBeenCalledTimes(1);
   });
@@ -135,58 +136,10 @@ describe('DbbPipeline (GH issue #2)', () => {
     }
   });
 
-  it('does not render Tomáš until the emerge phase', () => {
-    const { queryByTestId } = render(
-      <DbbPipeline fromSide="left" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
-    );
-    // Before emerge (~3000 ms in — still bubbleOut)
-    act(() => { vi.advanceTimersByTime(3000); });
-    expect(queryByTestId('dbb-tomas')).toBeNull();
-
-    // After emerge kicks in (~3700 ms in)
-    act(() => { vi.advanceTimersByTime(800); });
-    expect(queryByTestId('dbb-tomas')).not.toBeNull();
-  });
-
-  it('spawns Tomáš at the pipe mouth coordinates (non-zero, inside viewport)', () => {
-    const { queryByTestId } = render(
-      <DbbPipeline fromSide="left" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
-    );
-    act(() => { vi.advanceTimersByTime(3800); });
-    const tomas = queryByTestId('dbb-tomas');
-    expect(tomas).not.toBeNull();
-    // Inline left/top should be non-empty and non-zero.
-    expect(tomas.style.left).toBeTruthy();
-    expect(tomas.style.top).toBeTruthy();
-    const lx = parseInt(tomas.style.left, 10);
-    const ty = parseInt(tomas.style.top, 10);
-    expect(Number.isFinite(lx)).toBe(true);
-    expect(Number.isFinite(ty)).toBe(true);
-    expect(lx).toBeGreaterThan(0);
-    expect(ty).toBeGreaterThan(0);
-  });
-
-  it('keeps Tomas transform applied after phase flips to slideOut (INV5)', () => {
-    const { queryByTestId } = render(
-      <DbbPipeline fromSide="top" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
-    );
-
-    // Advance past emerge (3600ms) and into the walk phase (4500ms)
-    act(() => { vi.advanceTimersByTime(4500); });
-    const tomas = queryByTestId('dbb-tomas');
-    expect(tomas).not.toBeNull();
-    const walkTransform = tomas.style.transform;
-    expect(walkTransform).toMatch(/translate\(/);
-
-    // Advance into slideOut phase (total 6800ms). The transform MUST still be
-    // applied — this is the INV5 regression guard (previously it was stripped
-    // and Tomáš teleported back to the mouth).
-    act(() => { vi.advanceTimersByTime(2300); });
-    const stillTomas = queryByTestId('dbb-tomas');
-    expect(stillTomas).not.toBeNull();
-    expect(stillTomas.style.transform).not.toBe('');
-    expect(stillTomas.style.transform).toMatch(/translate\(/);
-  });
+  // Tomáš's figure is rendered by the shared CharacterStage as of the
+  // unified-character-stage refactor; the DOM assertions that used to
+  // live here (data-testid="dbb-tomas") no longer apply. Stage-driven
+  // motion is covered by useEntranceDirector + usePlayerDirector tests.
 
   it('anchors the pipe group offscreen before slideIn and onscreen afterwards', () => {
     const { container } = render(
@@ -201,8 +154,9 @@ describe('DbbPipeline (GH issue #2)', () => {
     act(() => { vi.advanceTimersByTime(1000); });
     expect(group.style.transform).toContain('translate(0');
 
-    // After slideOut (> 6700 ms), transform should be offscreen again.
-    act(() => { vi.advanceTimersByTime(6000); });
+    // After slideOut (> 7900 ms in the enriched timeline), transform should
+    // be offscreen again.
+    act(() => { vi.advanceTimersByTime(7500); });
     expect(group.style.transform).toContain('-120vw');
   });
 
@@ -244,43 +198,91 @@ describe('DbbPipeline (GH issue #2)', () => {
       }
     );
 
-    it('C3: at t=2000ms bubble is visible and label is painted on the pipe', () => {
+    it('C3: during the bubble phase bubble is visible and label is painted on the pipe', () => {
       const { container } = render(
         <DbbPipeline fromSide="left" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
       );
-      act(() => { vi.advanceTimersByTime(2000); });
-      // Label lives inside a pipe segment — always in DOM with the pipe
+      // Bubble phase begins at t=2200 in the enriched timeline.
+      act(() => { vi.advanceTimersByTime(2500); });
       const label = container.querySelector('.dbb-label-on-pipe');
       expect(label).not.toBeNull();
       expect(label.parentElement.hasAttribute('data-dbb-segment')).toBe(true);
-      // Bubble text is rendered
       expect(container.textContent).toContain('DBB message has arrived');
     });
 
-    it('C3: at t=3900ms bubble is faded out, label and Tomáš are in DOM', () => {
-      const { container, queryByTestId } = render(
+    it('C3: at t=5000ms bubble is faded out, pipe label still painted on segment', () => {
+      const { container } = render(
         <DbbPipeline fromSide="left" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
       );
-      act(() => { vi.advanceTimersByTime(3900); });
+      // Emerge starts at t=4800 in the enriched timeline; showBubble
+      // (bubble || bubbleOut) is false from emerge onward.
+      act(() => { vi.advanceTimersByTime(5000); });
       const label = container.querySelector('.dbb-label-on-pipe');
       expect(label).not.toBeNull();
-      expect(queryByTestId('dbb-tomas')).not.toBeNull();
-      // Bubble is fully gone during emerge (showBubble false)
       const bubble = Array.from(container.querySelectorAll('div')).find((d) =>
         (d.textContent || '').includes('DBB message has arrived')
       );
       expect(bubble).toBeUndefined();
     });
 
-    it('C2: Tomáš uses a directional emerge class matching mouth.dir', () => {
-      const { queryByTestId } = render(
+    // C2 used to assert Tomáš's directional emerge class. Tomáš is now
+    // drawn by the CharacterStage, so there's no local emerge div to
+    // carry that class — the corresponding test has been retired.
+  });
+
+  // -------------------------------------------------------------------------
+  // Industrial decorator regression: bolt bands appear at t=1600+, gauge
+  // lives on the last segment, packet particles stream during packetFlow,
+  // the pipe group carries `dbb-rumble` during rumble/packetFlow.
+  // -------------------------------------------------------------------------
+  describe('DBB industrial decorators', () => {
+    it('renders bolt bands once the bolt phase kicks in (t ≥ 1600ms)', () => {
+      const { container } = render(
         <DbbPipeline fromSide="left" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
       );
-      act(() => { vi.advanceTimersByTime(3800); });
-      const tomas = queryByTestId('dbb-tomas');
-      expect(tomas).not.toBeNull();
-      // left fromSide → last seg dir = 'right' → class 'dbb-tomas-emerge-right'
-      expect(tomas.className).toBe('dbb-tomas-emerge-right');
+      // Before bolt phase — no bolt bands yet (still in slideIn).
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(container.querySelectorAll('[data-testid="dbb-bolt-band"]').length).toBe(0);
+      // After bolt phase kicks in.
+      act(() => { vi.advanceTimersByTime(700); });
+      const bolts = container.querySelectorAll('[data-testid="dbb-bolt-band"]');
+      expect(bolts.length).toBeGreaterThan(0);
+    });
+
+    it('draws a gauge on the mouth-end segment once the pipe has landed', () => {
+      const { container } = render(
+        <DbbPipeline fromSide="top" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
+      );
+      act(() => { vi.advanceTimersByTime(2000); });
+      const gauges = container.querySelectorAll('[data-testid="dbb-gauge"]');
+      // Exactly one gauge — on the mouth-end segment.
+      expect(gauges.length).toBe(1);
+    });
+
+    it('adds `dbb-rumble` to the pipe group during the rumble beat', () => {
+      const { container } = render(
+        <DbbPipeline fromSide="left" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
+      );
+      // Before rumble — no class.
+      act(() => { vi.advanceTimersByTime(3500); });
+      const group = container.querySelector('[data-dbb-pipe-group]');
+      expect(group.className || '').not.toContain('dbb-rumble');
+      // Rumble starts at t=4000.
+      act(() => { vi.advanceTimersByTime(600); });
+      expect(group.className).toContain('dbb-rumble');
+    });
+
+    it('streams packet particles during packetFlow (t ≈ 4300ms)', () => {
+      const { container } = render(
+        <DbbPipeline fromSide="right" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
+      );
+      // Before packetFlow — no packets.
+      act(() => { vi.advanceTimersByTime(3000); });
+      expect(container.querySelectorAll('[data-testid="dbb-packet"]').length).toBe(0);
+      // After packetFlow kicks in.
+      act(() => { vi.advanceTimersByTime(1400); });
+      const packets = container.querySelectorAll('[data-testid="dbb-packet"]');
+      expect(packets.length).toBe(3);
     });
   });
 });

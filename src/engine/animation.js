@@ -5,7 +5,7 @@
  * animated component in the app uses consistent, smooth motion.
  */
 
-/** Walk-frame toggle interval (ms). Used by WalkingFigure and PmSprite. */
+/** Walk-frame toggle interval (ms). Used by tickCharacter and usePmModel. */
 export const WALK_FRAME_MS = 500;
 
 /** Ceremony walk-frame toggle interval (ms). Faster pace during ceremonies. */

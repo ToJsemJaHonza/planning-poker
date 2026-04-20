@@ -97,26 +97,14 @@ describe('usePlayerModels', () => {
     expect(bob.className).toContain('shame-tremble-3');
   });
 
-  it('attaches showCrown only to the player crownOwnership points at', () => {
+  it('injects the outgoing leader into activePlayers during the ceremony so the name tag stays anchored to the on-stage figure', () => {
+    // Outgoing leader's record was already removed from the players map.
+    // Previously the hook rendered a separate "synthetic" card without
+    // voting cards above it; that shorter layout pulled the name tag up
+    // into the figure's sprite. Now the outgoing leader is a normal
+    // activePlayer entry, rendered with the full card chrome, so the
+    // name tag sits at the same y as every other grid slot.
     const players = makePlayers('Alice', 'Bob');
-    const { result } = renderHook(() => usePlayerModels({
-      players,
-      currentPlayer: 'p0',
-      phase: 'voting',
-      splitMode: false,
-      syncedEvent: null,
-      fireSyncedEvent: () => {},
-      isLeader: true,
-      crownOwnership: { location: 'player-head', playerId: 'p1' },
-    }));
-    const alice = result.current.activePlayers.find(m => m.id === 'p0');
-    const bob = result.current.activePlayers.find(m => m.id === 'p1');
-    expect(alice.showCrown).toBe(false);
-    expect(bob.showCrown).toBe(true);
-  });
-
-  it('emits a synthetic outgoing-leader model while the crown ceremony is active', () => {
-    const players = makePlayers('Alice', 'Bob'); // outgoing already removed from players
     const outgoingId = 'p99';
     const { result } = renderHook(() => usePlayerModels({
       players,
@@ -133,9 +121,44 @@ describe('usePlayerModels', () => {
         ceremonyId: 'c1',
       },
     }));
-    expect(result.current.outgoingLeader).not.toBeNull();
-    expect(result.current.outgoingLeader.id).toBe(outgoingId);
-    expect(result.current.outgoingLeader.isSyntheticLeader).toBe(true);
+    expect(result.current.outgoingLeader).toBeNull();
+    const ids = result.current.activePlayers.map(m => m.id);
+    expect(ids).toContain(outgoingId);
+    const outgoing = result.current.activePlayers.find(m => m.id === outgoingId);
+    // The outgoing card must render the full chrome (voting card slot
+    // above the figure) — otherwise its flex column is shorter and the
+    // name tag pulls up into the figure. We assert on the two flags
+    // PlayerCard checks when deciding what to render.
+    expect(outgoing.isSyntheticLeader).toBe(false);
+    expect(outgoing.isPlaceholder).toBe(false);
+    expect(outgoing.displayName).toBe('Old Boss');
+  });
+
+  it('keeps the grid and stage indices aligned when the leader disconnects mid-ceremony (no name-tag shift)', () => {
+    // REGRESSION: prior to the shared-roster fix, usePlayerModels filtered
+    // disconnected players out of the grid while usePlayerDirector kept
+    // the disconnected leader on stage. With Alice (index 0) disconnected
+    // but isLeader=true, the grid rendered Bob and Cara at indices 0/1
+    // while the stage painted Alice/Bob/Cara at 0/1/2 — so "Bob" name tag
+    // ended up under Alice's figure.
+    const players = {
+      p0: { name: 'Alice', role: 'player', joinedAt: 1000, isLeader: true, disconnected: true },
+      p1: { name: 'Bob', role: 'player', joinedAt: 2000 },
+      p2: { name: 'Cara', role: 'player', joinedAt: 3000 },
+    };
+    const { result } = renderHook(() => usePlayerModels({
+      players,
+      currentPlayer: 'p1',
+      phase: 'voting',
+      splitMode: false,
+      syncedEvent: null,
+      fireSyncedEvent: () => {},
+      isLeader: false,
+    }));
+    const ids = result.current.activePlayers.map(m => m.id);
+    expect(ids).toEqual(['p0', 'p1', 'p2']); // Alice kept — figure and name tag stay together
+    const alice = result.current.activePlayers.find(m => m.id === 'p0');
+    expect(alice.displayName).toBe('Alice');
   });
 
   it('marks every active player with doNod when allVoted and the entrance window has passed', () => {
@@ -164,7 +187,13 @@ describe('usePlayerModels', () => {
     vi.useRealTimers();
   });
 
-  it('suppresses doNod for a player still in their walk-in animation', () => {
+  it('still fires doNod on the injected outgoing leader, but the stage director suppresses the nod CSS class during the ceremony', () => {
+    // The model-side `doNod` is just the "allVoted" gate — it fires even
+    // for the outgoing leader. What MUST NOT happen is the nod CSS class
+    // landing on the figure while the crowning ceremony is playing; that
+    // suppression is owned by `usePlayerDirector`, which has its own
+    // dedicated regression coverage. Here we only prove the model hasn't
+    // quietly regressed to emitting a special doNod override.
     const players = makePlayers('Alice', 'Bob');
     const { result } = renderHook(() => usePlayerModels({
       players,
@@ -175,10 +204,16 @@ describe('usePlayerModels', () => {
       fireSyncedEvent: () => {},
       isLeader: true,
       allVoted: true,
+      pmRoulette: {
+        outgoingLeaderId: 'p99',
+        outgoingLeaderLastData: { name: 'Old Boss', role: 'player', isLeader: true },
+        startedAt: Date.now(),
+        ceremonyId: 'c1',
+      },
     }));
-    // Players just appeared — they should be walking in, not nodding.
-    for (const m of result.current.activePlayers) {
-      expect(m.doNod).toBe(false);
-    }
+    expect(result.current.outgoingLeader).toBeNull();
+    const outgoing = result.current.activePlayers.find(m => m.id === 'p99');
+    expect(outgoing).toBeDefined();
+    expect(outgoing.doNod).toBe(true);
   });
 });
