@@ -795,10 +795,10 @@ describe('computePlayerGridPosition', () => {
     // rowLeft = (1440 - 80) / 2 = 680
     // x = 680 + 0 * 108 + 40 = 720 (center of viewport)
     expect(pos.x).toBe(720);
-    // y = 220 + 0 * (220 + 16) + 136 = 356  (GRID_TOP bumped from 174
-    // to 220 to accommodate the taller TaskBar list-mode strip that
-    // now renders every backlog task as a horizontal chip row.)
-    expect(pos.y).toBe(356);
+    // y = 220 + 0 * (212 + 16) + 138 = 358  (FIGURE_OFFSET_FROM_TOP
+    // bumped 136→138 and figureSlot shrank 120→100 so the name tag
+    // sits closer under the sprite instead of looking stranded.)
+    expect(pos.y).toBe(358);
   });
 
   it('places second player to the right of the first', () => {
