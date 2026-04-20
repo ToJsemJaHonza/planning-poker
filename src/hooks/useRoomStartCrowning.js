@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { db, ref, set, get, update, runTransaction } from '../firebase';
+import { db, ref, get, update, runTransaction } from '../firebase';
 import { computePlayerGridPosition } from '../engine/gridPosition';
 import { easeInOutCubic, CEREMONY_WALK_FRAME_MS } from '../engine/animation';
 import { useAnimationLoop } from '../engine/useAnimationLoop';
