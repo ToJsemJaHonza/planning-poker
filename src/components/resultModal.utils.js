@@ -37,6 +37,15 @@ export function computeStats(voteList) {
     ? (numeric.reduce((a, b) => a + b, 0) / numeric.length).toFixed(1)
     : '-';
 
+  // The rounded result is what the room actually commits to after the
+  // discussion — the nearest card in DECK, with ties rounding UP. We show
+  // only this in the modal (the raw fractional average tends to invite
+  // bikeshedding about whether "4.3" means 3 or 5, which is the opposite
+  // of what planning-poker's deck gaps are designed to force a decision on).
+  const result = numeric.length > 0 ? String(roundToCard(
+    numeric.reduce((a, b) => a + b, 0) / numeric.length,
+  )) : '-';
+
   const spread = numeric.length > 0
     ? Math.max(...numeric) - Math.min(...numeric)
     : 0;
@@ -65,5 +74,5 @@ export function computeStats(voteList) {
   // team picked this card, etc. — directly comparable across FE/BE.
   const totalVotes = voteList.length;
 
-  return { avg, spread, emoji, verdict, color, distribution, maxCount, totalVotes, special };
+  return { avg, result, spread, emoji, verdict, color, distribution, maxCount, totalVotes, special };
 }

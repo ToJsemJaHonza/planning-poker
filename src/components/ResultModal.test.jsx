@@ -124,6 +124,34 @@ describe('ResultModal — rendering', () => {
     expect(header.textContent).toContain('Payment flow');
   });
 
+  // Regression: modal used to show "Average: 4.3" (raw average). Users
+  // asked for the committed card instead — no fractional numbers, no
+  // bikeshedding over rounding at read time.
+  it('renders the rounded Result instead of the raw Average', () => {
+    const players = mkPlayers({
+      Alice: { vote: '1' },
+      Bob:   { vote: '3' },
+      Carol: { vote: '5' },
+      Dave:  { vote: '8' },
+    });
+    const { container } = render(
+      <ResultModal players={players} splitMode={false} onNewRound={() => {}} />,
+    );
+    const body = container.textContent;
+    expect(body).not.toMatch(/Average/i);
+    expect(body).toMatch(/Result:\s*5/);
+    // And no fractional number anywhere in the modal body.
+    expect(body).not.toMatch(/\d+\.\d/);
+  });
+
+  it('omits the Result line when nobody voted numerically', () => {
+    const players = mkPlayers({ Alice: { vote: '?' } });
+    const { container } = render(
+      <ResultModal players={players} splitMode={false} onNewRound={() => {}} />,
+    );
+    expect(container.textContent).not.toMatch(/Result:/i);
+  });
+
   it('New Round button calls onNewRound', async () => {
     const user = userEvent.setup();
     const onNewRound = vi.fn();

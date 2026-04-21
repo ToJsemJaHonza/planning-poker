@@ -149,6 +149,43 @@ describe('computeStats', () => {
     expect(s.avg).toBe('4.3'); // (1+3+5+8)/4 = 4.25 → "4.3" rounded
   });
 
+  // The modal no longer shows the raw fractional average; it shows the
+  // rounded card so the room commits to a concrete estimate. These tests
+  // guard the `result` field that the modal renders.
+  it('result is the rounded card for numeric votes', () => {
+    // avg=4.25 → closer to 5 than to 3 (dist 0.75 vs 1.25) → "5"
+    const s = computeStats([
+      { name: 'A', vote: '1' },
+      { name: 'B', vote: '3' },
+      { name: 'C', vote: '5' },
+      { name: 'D', vote: '8' },
+    ]);
+    expect(s.result).toBe('5');
+  });
+
+  it('result rounds UP on exact ties', () => {
+    // avg=4 → equidistant from 3 and 5, pessimistic round UP → "5"
+    const s = computeStats([
+      { name: 'A', vote: '3' },
+      { name: 'B', vote: '5' },
+    ]);
+    expect(s.result).toBe('5');
+  });
+
+  it('result is "-" when nobody voted numerically', () => {
+    expect(computeStats([]).result).toBe('-');
+    expect(computeStats([{ name: 'A', vote: '?' }]).result).toBe('-');
+  });
+
+  it('result matches the winning card on perfect match', () => {
+    const s = computeStats([
+      { name: 'A', vote: '8' },
+      { name: 'B', vote: '8' },
+      { name: 'C', vote: '8' },
+    ]);
+    expect(s.result).toBe('8');
+  });
+
   it('builds a distribution histogram', () => {
     const s = computeStats([
       { name: 'A', vote: '3' }, { name: 'B', vote: '3' }, { name: 'C', vote: '5' },
