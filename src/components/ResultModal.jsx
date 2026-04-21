@@ -2,7 +2,7 @@ import { computeStats } from './resultModal.utils';
 import { pixel } from './room/styles';
 
 function ResultSection({ title, titleColor, stats }) {
-  const { emoji, verdict, color, avg, distribution, totalVotes, special } = stats;
+  const { emoji, verdict, color, result, distribution, totalVotes, special } = stats;
   // Bars are scaled to totalVotes (not section-local maxCount) so a full
   // bar always means "everyone voted this", directly comparable between
   // the Frontend and Backend histograms in split mode.
@@ -14,9 +14,9 @@ function ResultSection({ title, titleColor, stats }) {
       <div style={{ fontSize: '1.8rem' }}>{emoji}</div>
       <div style={{ ...styles.verdict, color }}>{verdict}</div>
 
-      {avg !== '-' && (
+      {result !== '-' && (
         <div style={styles.average}>
-          Average: <strong>{avg}</strong>
+          Result: <strong>{result}</strong>
         </div>
       )}
 
