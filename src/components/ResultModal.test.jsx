@@ -234,6 +234,42 @@ describe('ResultModal — split histogram bar heights', () => {
     expect(beH).toBeCloseTo(60, 1);
   });
 
+  // Regression: ? and ☕ are abstain cards — they used to be folded into
+  // `totalVotes` (the bar-height denominator) AND rendered as gray bars in
+  // the histogram. That broke the "full bar = 100% agreement" invariant
+  // (3-of-3 consensus + 1× ☕ rendered at 75% height) AND duplicated the
+  // special votes that already appear in the `specials` row below.
+  it('special votes (☕/?) do not shrink the numeric consensus bar', () => {
+    // 3 players vote 5 (perfect numeric consensus), 1 votes ☕.
+    // The "5" bar must still be full-height — abstains don't dilute agreement.
+    const players = mkPlayers({
+      A: { vote: '5' }, B: { vote: '5' }, C: { vote: '5' },
+      D: { vote: '☕' },
+    });
+    const { container } = render(
+      <ResultModal players={players} splitMode={false} onNewRound={() => {}} />
+    );
+    const consensusH = getBarHeight(container, '5');
+    expect(consensusH).toBeCloseTo(60, 1);
+  });
+
+  it('special votes are not rendered as histogram bars', () => {
+    // ☕ and ? appear in the "specials" row below the chart — they should
+    // NOT additionally show up as gray bars in the histogram.
+    const players = mkPlayers({
+      A: { vote: '5' }, B: { vote: '5' },
+      C: { vote: '☕' }, D: { vote: '?' },
+    });
+    const { container } = render(
+      <ResultModal players={players} splitMode={false} onNewRound={() => {}} />
+    );
+    // No bar label with text "☕" or "?" inside the chart.
+    expect(getBarHeight(container, '☕')).toBeNull();
+    expect(getBarHeight(container, '?')).toBeNull();
+    // The numeric "5" bar still renders.
+    expect(getBarHeight(container, '5')).toBeCloseTo(60, 1);
+  });
+
   it('normal mode: bar height reflects voter fraction, not local max', () => {
     // 4 players, split 3/1 → majority bar should be ~45px (60 * 3/4),
     // minority bar should be ~15px (60 * 1/4). Old code would have shown

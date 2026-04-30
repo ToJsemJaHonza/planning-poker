@@ -29,22 +29,38 @@ export function roundToCard(avg) {
   return best;
 }
 
+// Median of a numeric array. For odd length, the middle element. For even
+// length, the average of the two middle elements (the standard statistical
+// median — kept this way so the existing roundToCard tie-break still does
+// useful work when two voters disagree, e.g. [5,8] → 6.5 → 8). Returns null
+// for an empty input.
+//
+// We use the median (not the mean) on the recommendation of Mike Cohn —
+// see https://www.mountaingoatsoftware.com/blog/dont-average-during-planning-poker
+// The mean lets a single outlier (one person voting 21 against a cluster
+// of 5s) drag the team's committed estimate up; the median keeps the
+// estimate where the majority actually is. Spread/verdict still surface
+// the outlier so the discussion isn't suppressed.
+export function computeMedian(nums) {
+  if (!nums || nums.length === 0) return null;
+  const sorted = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
+}
+
 export function computeStats(voteList) {
   const numeric = voteList.filter(v => !isNaN(Number(v.vote))).map(v => Number(v.vote));
   const special = voteList.filter(v => isNaN(Number(v.vote)));
 
-  const avg = numeric.length > 0
-    ? (numeric.reduce((a, b) => a + b, 0) / numeric.length).toFixed(1)
-    : '-';
-
-  // The rounded result is what the room actually commits to after the
-  // discussion — the nearest card in DECK, with ties rounding UP. We show
-  // only this in the modal (the raw fractional average tends to invite
-  // bikeshedding about whether "4.3" means 3 or 5, which is the opposite
-  // of what planning-poker's deck gaps are designed to force a decision on).
-  const result = numeric.length > 0 ? String(roundToCard(
-    numeric.reduce((a, b) => a + b, 0) / numeric.length,
-  )) : '-';
+  // `median` is the raw statistical median displayed as a 1-decimal string
+  // (or '-' when there are no numeric votes). The field name is `median`
+  // — not `avg` — because that is what it actually is, per the rationale
+  // above. `result` is the median snapped to the nearest deck card.
+  const rawMedian = computeMedian(numeric);
+  const median = rawMedian == null ? '-' : rawMedian.toFixed(1);
+  const result = rawMedian == null ? '-' : String(roundToCard(rawMedian));
 
   const spread = numeric.length > 0
     ? Math.max(...numeric) - Math.min(...numeric)
@@ -63,16 +79,16 @@ export function computeStats(voteList) {
     emoji = '🔥'; verdict = 'Big spread!'; color = '#e53935';
   }
 
+  // Histogram and bar-height denominator must reflect only real estimates.
+  // ? and ☕ are abstain cards (per planning-poker convention: "need info"
+  // / "need a break") — they shouldn't shrink the numeric bars or appear
+  // as gray bars duplicating what's already in the `specials` row below.
+  // Without this filter, 3-of-3 consensus + 1× ☕ rendered as a 75%-height
+  // bar, breaking the "full bar = 100% agreement" invariant.
   const distribution = {};
-  voteList.forEach(v => { distribution[v.vote] = (distribution[v.vote] || 0) + 1; });
+  numeric.forEach(n => { const k = String(n); distribution[k] = (distribution[k] || 0) + 1; });
   const maxCount = Math.max(...Object.values(distribution), 1);
-  // totalVotes is the reference jmenovatel for bar heights in split mode:
-  // scaling by local maxCount makes a single-vote bar look identical to a
-  // full-consensus bar, which is misleading when the Frontend section
-  // reached consensus but Backend didn't (or vice versa). Scaling by the
-  // number of voters means a full bar = 100% agreement, 1/2 bar = half the
-  // team picked this card, etc. — directly comparable across FE/BE.
-  const totalVotes = voteList.length;
+  const totalVotes = numeric.length;
 
-  return { avg, result, spread, emoji, verdict, color, distribution, maxCount, totalVotes, special };
+  return { median, result, spread, emoji, verdict, color, distribution, maxCount, totalVotes, special };
 }

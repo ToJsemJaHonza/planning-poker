@@ -79,6 +79,37 @@ describe('RevealBackground — card rounding (reveal screenshot bug)', () => {
     expect(new Set(read(container))).toEqual(new Set(['3']));
   });
 
+  // Regression: getDisplayCard used Number(p?.[field]) and filtered with
+  // Number.isNaN — but Number(null) === 0 (not NaN), so a player who
+  // joined the round but hasn't voted yet was counted as a literal 0,
+  // dragging the displayed background card toward zero. ResultModal
+  // didn't have this bug because it pre-filters `p.vote != null` before
+  // calling computeStats, so the modal showed one number while the
+  // background showed a different (lower) one.
+  it('normal: ignores players who have not voted (vote: null)', () => {
+    const players = {
+      Alice: { name: 'Alice', vote: '13', voteFe: null, voteBe: null, joinedAt: 1, role: 'player', isLeader: false },
+      Bob:   { name: 'Bob',   vote: null, voteFe: null, voteBe: null, joinedAt: 2, role: 'player', isLeader: false },
+    };
+    const { container } = render(<RevealBackground players={players} splitMode={false} />);
+    // Only Alice voted — background must show 13. Without the fix,
+    // Number(null)=0 turned the average into (13+0)/2 = 6.5 → tie 5↔8
+    // → "8", which mismatched the ResultModal's "Result: 13".
+    expect(new Set(read(container))).toEqual(new Set(['13']));
+  });
+
+  it('split: ignores players who have not voted FE/BE (null)', () => {
+    const players = {
+      Alice: { name: 'Alice', vote: null, voteFe: '8', voteBe: '13', joinedAt: 1, role: 'player', isLeader: false },
+      Bob:   { name: 'Bob',   vote: null, voteFe: null, voteBe: null, joinedAt: 2, role: 'player', isLeader: false },
+    };
+    const { container } = render(<RevealBackground players={players} splitMode={true} />);
+    const set = new Set(read(container));
+    // FE: only Alice voted 8 → background FE = 8
+    // BE: only Alice voted 13 → background BE = 13
+    expect(set).toEqual(new Set(['8', '13']));
+  });
+
   it('normal: renders nothing when no numeric votes', () => {
     const players = {
       A: { name: 'A', vote: '☕', voteFe: null, voteBe: null, joinedAt: 1, role: 'player', isLeader: false },

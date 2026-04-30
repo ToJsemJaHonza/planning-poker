@@ -8,7 +8,7 @@ import {
   RICHARD_HUNGER_THRESHOLD_MS,
   shouldRichardSpeakHunger,
 } from '../components/playerList.utils';
-import { computeStats, roundToCard, DECK } from '../components/resultModal.utils';
+import { computeStats, computeMedian, roundToCard, DECK } from '../components/resultModal.utils';
 
 // We have to mock firebase before any module that imports it (useRoom does).
 vi.mock('../firebase.js', () => import('./firebase-mock.js'));
@@ -92,7 +92,7 @@ describe('computeStats', () => {
   it('returns "No votes" for empty list', () => {
     const s = computeStats([]);
     expect(s.verdict).toBe('No votes');
-    expect(s.avg).toBe('-');
+    expect(s.median).toBe('-');
     expect(s.spread).toBe(0);
   });
 
@@ -101,7 +101,7 @@ describe('computeStats', () => {
       { name: 'A', vote: '3' }, { name: 'B', vote: '3' }, { name: 'C', vote: '3' },
     ]);
     expect(s.verdict).toBe('Perfect match!');
-    expect(s.avg).toBe('3.0');
+    expect(s.median).toBe('3.0');
     expect(s.spread).toBe(0);
   });
 
@@ -136,17 +136,18 @@ describe('computeStats', () => {
       { name: 'C', vote: '?' },
     ]);
     expect(s.special).toHaveLength(2);
-    expect(s.avg).toBe('5.0');
+    expect(s.median).toBe('5.0');
   });
 
-  it('computes correct average for Fibonacci votes', () => {
+  it('computes correct median for Fibonacci votes', () => {
     const s = computeStats([
       { name: 'A', vote: '1' },
       { name: 'B', vote: '3' },
       { name: 'C', vote: '5' },
       { name: 'D', vote: '8' },
     ]);
-    expect(s.avg).toBe('4.3'); // (1+3+5+8)/4 = 4.25 → "4.3" rounded
+    // sorted [1,3,5,8] → median = (3+5)/2 = 4.0
+    expect(s.median).toBe('4.0');
   });
 
   // The modal no longer shows the raw fractional average; it shows the
@@ -193,6 +194,160 @@ describe('computeStats', () => {
     expect(s.distribution['3']).toBe(2);
     expect(s.distribution['5']).toBe(1);
     expect(s.maxCount).toBe(2);
+  });
+
+  // Regression: ? and ☕ are abstain cards (per planning-poker convention)
+  // and must not pollute the histogram OR shrink the bar-height denominator.
+  // Without these guards, 3-of-3 numeric consensus + 1× ☕ rendered as a
+  // 75%-height bar, breaking "full bar = 100% agreement".
+  describe('special votes do not influence histogram or totalVotes', () => {
+    it('excludes ? and ☕ from the distribution', () => {
+      const s = computeStats([
+        { name: 'A', vote: '5' },
+        { name: 'B', vote: '5' },
+        { name: 'C', vote: '☕' },
+        { name: 'D', vote: '?' },
+      ]);
+      expect(s.distribution['5']).toBe(2);
+      expect(s.distribution['☕']).toBeUndefined();
+      expect(s.distribution['?']).toBeUndefined();
+    });
+
+    it('totalVotes counts only numeric voters (denominator for bar height)', () => {
+      const s = computeStats([
+        { name: 'A', vote: '5' }, { name: 'B', vote: '5' }, { name: 'C', vote: '5' },
+        { name: 'D', vote: '☕' },
+      ]);
+      // 3 of 3 numeric voters agreed → denom must be 3, not 4, so the bar
+      // renders at full height (100% agreement among real voters).
+      expect(s.totalVotes).toBe(3);
+      expect(s.distribution['5']).toBe(3);
+    });
+
+    it('maxCount ignores special votes', () => {
+      // Without the fix, 3× ☕ would set maxCount=3 even though no numeric
+      // bar reaches that count.
+      const s = computeStats([
+        { name: 'A', vote: '5' }, { name: 'B', vote: '8' },
+        { name: 'C', vote: '☕' }, { name: 'D', vote: '☕' }, { name: 'E', vote: '☕' },
+      ]);
+      expect(s.maxCount).toBe(1);
+    });
+  });
+});
+
+describe('computeMedian', () => {
+  it('returns null for empty/null/undefined', () => {
+    expect(computeMedian([])).toBeNull();
+    expect(computeMedian(null)).toBeNull();
+    expect(computeMedian(undefined)).toBeNull();
+  });
+
+  it('odd length: returns the middle element of the sorted array', () => {
+    expect(computeMedian([5])).toBe(5);
+    expect(computeMedian([3, 5, 8])).toBe(5);
+    // Already-sorted vs out-of-order must yield the same result.
+    expect(computeMedian([8, 3, 5])).toBe(5);
+    expect(computeMedian([1, 3, 5, 8, 13])).toBe(5);
+  });
+
+  it('even length: returns the mean of the two middle elements', () => {
+    expect(computeMedian([3, 5])).toBe(4);
+    expect(computeMedian([5, 8])).toBe(6.5);
+    expect(computeMedian([1, 3, 5, 8])).toBe(4);
+    expect(computeMedian([3, 5, 8, 13])).toBe(6.5);
+  });
+
+  it('does not mutate the input array', () => {
+    const input = [13, 3, 8, 5, 1];
+    const snapshot = [...input];
+    computeMedian(input);
+    expect(input).toEqual(snapshot);
+  });
+});
+
+// Median's whole reason for being chosen over mean: a single outlier
+// shouldn't drag the team's committed estimate. These tests pin the
+// behavior down so a future "let's go back to mean" can't sneak in
+// without breaking visible expectations.
+describe('computeStats — median outlier resistance (vs old mean)', () => {
+  it('one high outlier does not drag the result up', () => {
+    // [3,5,5,5,21] — sorted middle = 5. Mean would be 7.8 → 8.
+    const s = computeStats([
+      { name: 'A', vote: '3' },
+      { name: 'B', vote: '5' },
+      { name: 'C', vote: '5' },
+      { name: 'D', vote: '5' },
+      { name: 'E', vote: '21' },
+    ]);
+    expect(s.result).toBe('5');
+    expect(s.median).toBe('5.0');
+    // Spread still surfaces the disagreement so the team discusses it.
+    expect(s.spread).toBe(18);
+    expect(s.verdict).toBe('Big spread!');
+  });
+
+  it('one low outlier does not drag the result down', () => {
+    // [3,8,8,8] — sorted middle = (8+8)/2 = 8. Mean would be 6.75 → 8 too,
+    // but [3,5,8,8] picks the difference up: median = (5+8)/2 = 6.5 → 8,
+    // mean = 6 → 5. We assert the median path.
+    const s = computeStats([
+      { name: 'A', vote: '3' },
+      { name: 'B', vote: '5' },
+      { name: 'C', vote: '8' },
+      { name: 'D', vote: '8' },
+    ]);
+    expect(s.result).toBe('8');
+    expect(s.median).toBe('6.5');
+  });
+
+  it('majority cluster wins over a single high outlier (cohn scenario)', () => {
+    // [3,3,3,13] — median = (3+3)/2 = 3. Mean would be 5.5 → 5.
+    // The team voted 3 three times — the result must be 3.
+    const s = computeStats([
+      { name: 'A', vote: '3' },
+      { name: 'B', vote: '3' },
+      { name: 'C', vote: '3' },
+      { name: 'D', vote: '13' },
+    ]);
+    expect(s.result).toBe('3');
+    expect(s.median).toBe('3.0');
+  });
+
+  it('specials (?, ☕) are still excluded from the median', () => {
+    // The full scenario from the design discussion: kafe, kafe, ?, 13, 13,
+    // 21, 21, 21. Numeric = [13,13,21,21,21] (5 items, sorted middle = 21).
+    const s = computeStats([
+      { name: 'A', vote: '☕' },
+      { name: 'B', vote: '☕' },
+      { name: 'C', vote: '?' },
+      { name: 'D', vote: '13' },
+      { name: 'E', vote: '13' },
+      { name: 'F', vote: '21' },
+      { name: 'G', vote: '21' },
+      { name: 'H', vote: '21' },
+    ]);
+    expect(s.result).toBe('21');
+    expect(s.median).toBe('21.0');
+    expect(s.special).toHaveLength(3);
+    // Total numeric voters — denominator for histogram bars.
+    expect(s.totalVotes).toBe(5);
+  });
+
+  it('two-voter even split rounds via roundToCard tie-break', () => {
+    // [3,5] → median = 4 → tie 3↔5 → roundToCard rounds UP → 5.
+    const s = computeStats([
+      { name: 'A', vote: '3' }, { name: 'B', vote: '5' },
+    ]);
+    expect(s.result).toBe('5');
+    expect(s.median).toBe('4.0');
+
+    // [5,8] → median = 6.5 → tie 5↔8 → 8.
+    const s2 = computeStats([
+      { name: 'A', vote: '5' }, { name: 'B', vote: '8' },
+    ]);
+    expect(s2.result).toBe('8');
+    expect(s2.median).toBe('6.5');
   });
 });
 

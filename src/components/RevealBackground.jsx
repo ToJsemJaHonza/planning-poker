@@ -1,22 +1,27 @@
 import { useMemo } from 'react';
-import { roundToCard } from './resultModal.utils';
+import { roundToCard, computeMedian } from './resultModal.utils';
 import { pixel } from './room/styles';
 
-// Compute the card to display on the reveal background. This is NOT the
-// mode (most-common vote) — with 2 players voting differently every vote
-// appears once and the tie-break was arbitrary. Instead we take the
-// numeric average and round to the nearest card in the planning-poker
-// deck (1,2,3,5,8,13,21), with exact ties rounding UP pessimistically.
-// See https://www.mountaingoatsoftware.com/blog/dont-average-during-planning-poker
-// for why the deck intentionally has gaps; this rule is a pragmatic
-// display fallback, not a substitute for the discussion the modal drives.
+// Compute the card to display on the reveal background. We take the
+// median of the numeric votes (per Mike Cohn — see resultModal.utils.js
+// computeMedian for rationale) and round to the nearest card in the deck
+// (1,2,3,5,8,13,21), with exact ties rounding UP pessimistically. This
+// must stay in sync with computeStats so the modal and the background
+// agree on the displayed card.
 function getDisplayCard(players, field) {
+  // Filter out non-voters BEFORE Number() coercion. Number(null) === 0,
+  // not NaN — without the explicit `!= null` guard, a player who joined
+  // the round but hasn't voted yet was counted as a literal 0, pulling
+  // the displayed median toward zero (and disagreeing with ResultModal,
+  // which pre-filters null votes).
   const nums = Object.values(players)
-    .map(p => Number(p?.[field]))
+    .map(p => p?.[field])
+    .filter(v => v != null)
+    .map(v => Number(v))
     .filter(n => !Number.isNaN(n));
-  if (nums.length === 0) return null;
-  const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
-  const card = roundToCard(avg);
+  const m = computeMedian(nums);
+  if (m == null) return null;
+  const card = roundToCard(m);
   return card == null ? null : String(card);
 }
 

@@ -90,17 +90,17 @@ function computeTaskListUpdates({ taskList, players, splitMode, roomCode }) {
   if (splitMode) {
     const feStats = computeStats(voting.filter((p) => p.voteFe != null).map((p) => ({ vote: p.voteFe })));
     const beStats = computeStats(voting.filter((p) => p.voteBe != null).map((p) => ({ vote: p.voteBe })));
-    const scoreFe = roundToCard(feStats.avg);
-    const scoreBe = roundToCard(beStats.avg);
+    const scoreFe = roundToCard(feStats.median);
+    const scoreBe = roundToCard(beStats.median);
     updates[`rooms/${roomCode}/meta/taskList/items/${activeId}/scoreFe`] =
-      scoreFe == null ? (feStats.avg === '-' ? '-' : null) : String(scoreFe);
+      scoreFe == null ? (feStats.median === '-' ? '-' : null) : String(scoreFe);
     updates[`rooms/${roomCode}/meta/taskList/items/${activeId}/scoreBe`] =
-      scoreBe == null ? (beStats.avg === '-' ? '-' : null) : String(scoreBe);
+      scoreBe == null ? (beStats.median === '-' ? '-' : null) : String(scoreBe);
   } else {
     const stats = computeStats(voting.filter((p) => p.vote != null).map((p) => ({ vote: p.vote })));
-    const rounded = roundToCard(stats.avg);
+    const rounded = roundToCard(stats.median);
     updates[`rooms/${roomCode}/meta/taskList/items/${activeId}/score`] =
-      rounded == null ? (stats.avg === '-' ? '-' : null) : String(rounded);
+      rounded == null ? (stats.median === '-' ? '-' : null) : String(rounded);
   }
   updates[`rooms/${roomCode}/meta/taskList/items/${activeId}/scoredAt`] = Date.now();
 
