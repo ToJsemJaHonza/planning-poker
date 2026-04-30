@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { computePlayerGridPosition, computePmWalkPosition } from './gridPosition';
+import {
+  computePlayerGridPosition,
+  computePmWalkPosition,
+  DEFAULT_GRID_TOP,
+  FIGURE_OFFSET_FROM_TOP,
+} from './gridPosition';
 
 describe('computePlayerGridPosition', () => {
   it('single player is centered', () => {
@@ -28,6 +33,35 @@ describe('computePlayerGridPosition', () => {
       expect(pos.x).toBeGreaterThan(0);
       expect(pos.y).toBeGreaterThan(0);
     }
+  });
+
+  // Regression: figure y is anchored to the measured top of the player-grid
+  // container, not a hardcoded constant. Without this, the figure stays
+  // at ~358 (legacy GRID_TOP=220 + 138) regardless of how tall the
+  // header / TaskBar / PhaseBar grew, so it drifts away from its name tag
+  // in PM-only / leader / list-mode views.
+  it('honors the gridTop parameter for figure y', () => {
+    const pos = computePlayerGridPosition(0, 1, 1440, 400);
+    expect(pos.y).toBe(400 + FIGURE_OFFSET_FROM_TOP);
+  });
+
+  it('falls back to DEFAULT_GRID_TOP when gridTop is omitted', () => {
+    const pos = computePlayerGridPosition(0, 1, 1440);
+    expect(pos.y).toBe(DEFAULT_GRID_TOP + FIGURE_OFFSET_FROM_TOP);
+  });
+
+  it('treats null gridTop the same as omitted (live measurement not ready)', () => {
+    const omitted = computePlayerGridPosition(0, 1, 1440);
+    const nullish = computePlayerGridPosition(0, 1, 1440, null);
+    expect(nullish.y).toBe(omitted.y);
+  });
+
+  it('shifts every row when gridTop changes', () => {
+    const low = computePlayerGridPosition(0, 1, 1440, 120);
+    const high = computePlayerGridPosition(0, 1, 1440, 360);
+    // x stays the same — only y shifts by the gridTop delta.
+    expect(low.x).toBeCloseTo(high.x, 0);
+    expect(high.y - low.y).toBe(360 - 120);
   });
 });
 

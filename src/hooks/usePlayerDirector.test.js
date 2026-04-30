@@ -101,6 +101,51 @@ describe('usePlayerDirector — join / leave / reshuffle', () => {
     expect(alice.action?.type).toBe(ACTION_TYPES.WALK_TO);
     expect(alice.action.x).toBeCloseTo(duoCenter0.x, 0);
   });
+
+  // Regression: when the room's bars above the player grid grow (TaskBar
+  // toggles to list mode, PhaseBar gains buttons, etc.) the figure must
+  // track the new card flow. Before the gridTop refactor, figure y was
+  // pinned to a hardcoded 220 + 138 — so a tall list-mode TaskBar pushed
+  // the cards down but left the figure floating above them.
+  it('positions the join character at the y derived from the measured gridTop', () => {
+    // Unique roomCode per test prevents the sessionStorage walk-in flag
+    // from previous tests turning this fresh join into a "refresh" teleport.
+    const stage = createStageRuntime();
+    const p = players('Alice');
+    renderHook(({ players, gridTop }) =>
+      usePlayerDirector({ stage, players, gridTop, roomCode: 'gridTop-1' }),
+    { initialProps: { players: p, gridTop: 420 } });
+
+    const expected = computePlayerGridPosition(0, 1, window.innerWidth, 420);
+    const alice = stage.get('player-p0');
+    // Whether the join walk-ins or teleports, the character's stored y
+    // must match the measured-gridTop slot — that's what the
+    // CharacterStage paints.
+    expect(alice.position.y).toBeCloseTo(expected.y, 0);
+    // Verify it differs from the legacy default — without this assertion
+    // the test would pass even if gridTop were silently ignored.
+    const legacy = computePlayerGridPosition(0, 1, window.innerWidth);
+    expect(expected.y).not.toBeCloseTo(legacy.y, 0);
+  });
+
+  it('reshuffles every player to a new y when gridTop changes mid-session', () => {
+    const stage = createStageRuntime();
+    const p = players('Alice', 'Bob');
+    const { rerender } = renderHook(({ players, gridTop }) =>
+      usePlayerDirector({ stage, players, gridTop, roomCode: 'gridTop-2' }),
+    { initialProps: { players: p, gridTop: 220 } });
+
+    const alice = stage.get('player-p0');
+    stage.tick(0);
+    stage.tick(100000); // settle into the original slot
+
+    // Header bars grew — gridTop bumps up by 120 px.
+    rerender({ players: p, gridTop: 340 });
+    stage.tick(1);
+    const expected = computePlayerGridPosition(0, 2, window.innerWidth, 340);
+    expect(alice.action?.type).toBe(ACTION_TYPES.WALK_TO);
+    expect(alice.action.y).toBeCloseTo(expected.y, 0);
+  });
 });
 
 describe('usePlayerDirector — outgoing leader handoff (Phase 4)', () => {

@@ -39,7 +39,7 @@ const DRIFT_TOLERANCE_MS = 500;
  * @param {() => void} [opts.onCeremonyComplete] called when phase reaches done
  * @returns {object} phaseState
  */
-export function useSlotMachine(ceremony, { onLeaderPromote, onCeremonyComplete, ceremonyStartPos, players } = {}) {
+export function useSlotMachine(ceremony, { onLeaderPromote, onCeremonyComplete, ceremonyStartPos, players, gridTop } = {}) {
   const [phaseState, setPhaseState] = useState(IDLE_STATE);
   const onLeaderPromoteRef = useRef(onLeaderPromote);
   const onCeremonyCompleteRef = useRef(onCeremonyComplete);
@@ -98,6 +98,7 @@ export function useSlotMachine(ceremony, { onLeaderPromote, onCeremonyComplete, 
       viewportWidth,
       viewportHeight,
       ceremonyStartPos,
+      gridTop,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ceremony?.ceremonyId]);

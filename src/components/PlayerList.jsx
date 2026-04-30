@@ -20,6 +20,7 @@ export default function PlayerList({
   createdAt = 0, pmRoulette = null, phaseState = null,
   shameTimer = null, shameStage = 0,
   allVoted = false, stage = null, roomCode = null,
+  gridRef = null, gridTop,
 }) {
   const {
     activePlayers,
@@ -31,7 +32,7 @@ export default function PlayerList({
     players, currentPlayer, phase, splitMode,
     syncedEvent, fireSyncedEvent, isLeader, createdAt,
     pmRoulette, phaseState,
-    shameTimer, shameStage, allVoted, stage, roomCode,
+    shameTimer, shameStage, allVoted, stage, roomCode, gridTop,
   });
 
 
@@ -39,6 +40,7 @@ export default function PlayerList({
     stage,
     players,
     markArrived,
+    gridTop,
   });
 
   return (
@@ -49,7 +51,7 @@ export default function PlayerList({
         entranceDirector={entranceDirector}
       />
 
-      <div data-player-grid style={styles.grid}>
+      <div ref={gridRef} data-player-grid style={styles.grid}>
         {activePlayers.map((m) => (
           <PlayerCard key={m.id + m.keySuffix} model={m} />
         ))}

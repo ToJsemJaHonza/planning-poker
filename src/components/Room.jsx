@@ -7,6 +7,7 @@ import { useCrownOwnership } from '../hooks/useCrownOwnership';
 import { useCharacterStage } from '../hooks/useCharacterStage';
 import { usePmDirector } from '../hooks/usePmDirector';
 import { useOktaKeys } from '../hooks/useOktaKeys';
+import { useGridTop } from '../engine/useGridTop';
 import {
   isValidCeremonyPayload,
   isStalePayload,
@@ -56,6 +57,15 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
   const phaseStateRef = useRef(null);
   const roomStartStateRef = useRef(null);
 
+  // Live measurement of the player-grid container's viewport y. Threaded
+  // through every consumer of `computePlayerGridPosition` so the figure
+  // y tracks the card flow regardless of how tall the header / TaskBar /
+  // PhaseBar grew. Without this, a hardcoded GRID_TOP misaligns the
+  // figure and its name tag in PM-only / leader / plain-player views and
+  // again whenever the room toggles between empty task and grooming list.
+  const playerGridRef = useRef(null);
+  const gridTop = useGridTop(playerGridRef);
+
   const { ceremonyStartPos } = usePmDirector({
     stage,
     ceremonyActive,
@@ -72,6 +82,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
     players, roomStartCrowning, pmRoulette,
     ceremonyStartPos,
     roomStartCrowned,
+    gridTop,
   });
 
   // --- Slot machine ceremony validation ---
@@ -103,7 +114,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
 
   const slotMachinePhaseState = useSlotMachine(ceremonyForHook, {
     onLeaderPromote, onCeremonyComplete,
-    ceremonyStartPos, players,
+    ceremonyStartPos, players, gridTop,
   });
 
   const crownOwnership = useCrownOwnership({
@@ -333,6 +344,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
           shameTimer={shameTimer} shameStage={shame.stage}
           allVoted={allVotedClean} /* nod animation only for clean votes */
           stage={stage} roomCode={roomCode}
+          gridRef={playerGridRef} gridTop={gridTop}
         />
       </div>
 

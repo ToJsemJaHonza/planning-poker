@@ -6,7 +6,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { computeCrownRemoval, computeCrownDelivery } from './ceremonyPmWalk';
+import { computeCrownRemoval, computeCrownDelivery, resolveTargetPosition } from './ceremonyPmWalk';
+import { computePlayerGridPosition } from '../engine/gridPosition';
 import { FAREWELL_PHRASES, CROWNING_BUBBLES } from './slotMachine';
 
 // ---------------------------------------------------------------------------
@@ -197,5 +198,40 @@ describe('computeCrownDelivery — reduced motion', () => {
     const after = computeCrownDelivery(300, baseCeremony, ctx);
     expect(after.crownDeliveryState).toBe('complete');
     expect(after.crownCeremonyState.location).toBe('player-head');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveTargetPosition — gridTop threading
+// ---------------------------------------------------------------------------
+
+describe('resolveTargetPosition — measured gridTop', () => {
+  const liveSorted = [
+    ['oldLeader', { name: 'OldLeader', role: 'player', joinedAt: 1 }],
+    ['winner', { name: 'Winner', role: 'player', joinedAt: 2 }],
+  ];
+
+  // Regression: ceremonies must walk the PM to the same y the player
+  // figure is actually rendered at. Before the gridTop refactor, the
+  // ceremony anchored to a hardcoded GRID_TOP and the figure to whatever
+  // measurement happened to land — so the PM walked to empty air above
+  // (or below) the actual leader during a tall list-mode TaskBar.
+  it('passes gridTop through to computePlayerGridPosition', () => {
+    const measured = resolveTargetPosition(liveSorted, 2, 'winner', 1440, 900, 360);
+    const expected = computePlayerGridPosition(1, 2, 1440, 360);
+    expect(measured.x).toBeCloseTo(expected.x, 0);
+    expect(measured.y).toBeCloseTo(expected.y, 0);
+  });
+
+  it('falls back to the legacy default when gridTop is undefined', () => {
+    const omitted = resolveTargetPosition(liveSorted, 2, 'winner', 1440, 900);
+    const fallback = computePlayerGridPosition(1, 2, 1440);
+    expect(omitted.y).toBe(fallback.y);
+  });
+
+  it('still uses the viewport-center fallback when player is missing', () => {
+    const missing = resolveTargetPosition(liveSorted, 2, 'ghost', 1440, 900, 360);
+    expect(missing.x).toBeCloseTo(720, 0);
+    expect(missing.y).toBeCloseTo(360, 0); // 0.4 * 900
   });
 });

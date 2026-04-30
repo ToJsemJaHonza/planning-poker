@@ -52,12 +52,15 @@ export function buildLivePlayers(ceremony, context, { injectWinner = false } = {
 
 /**
  * Resolve a player's grid position from the live player list. Returns the
- * grid position if found, or a viewport-center fallback.
+ * grid position if found, or a viewport-center fallback. `gridTop` is the
+ * measured top of the player-grid container (snapshot from
+ * `useSlotMachine`'s context); when undefined, `computePlayerGridPosition`
+ * falls back to its built-in default.
  */
-export function resolveTargetPosition(liveSorted, playerCount, playerId, vw, vh) {
+export function resolveTargetPosition(liveSorted, playerCount, playerId, vw, vh, gridTop) {
   const idx = liveSorted.findIndex(([id]) => id === playerId);
   return idx >= 0
-    ? computePlayerGridPosition(idx, playerCount, vw)
+    ? computePlayerGridPosition(idx, playerCount, vw, gridTop)
     : { x: vw * 0.5, y: vh * 0.4 };
 }
 
@@ -71,7 +74,7 @@ export function computeCrownRemoval(phaseElapsed, ceremony, context) {
   const vh = context.viewportHeight || 900;
   const startPos = context.ceremonyStartPos || { x: vw / 2, y: vh - 140 };
   const { liveSorted, playerCount } = buildLivePlayers(ceremony, context);
-  const targetPos = resolveTargetPosition(liveSorted, playerCount, ceremony.outgoingLeaderId, vw, vh);
+  const targetPos = resolveTargetPosition(liveSorted, playerCount, ceremony.outgoingLeaderId, vw, vh, context.gridTop);
 
   // Reduced-motion path: instant crown transfer, no walk animation.
   const outId = ceremony.outgoingLeaderId || null;
@@ -172,8 +175,8 @@ export function computeCrownDelivery(phaseElapsed, ceremony, context) {
   const vw = context.viewportWidth || 1440;
   const vh = context.viewportHeight || 900;
   const { liveSorted, playerCount } = buildLivePlayers(ceremony, context, { injectWinner: true });
-  const winnerGridPos = resolveTargetPosition(liveSorted, playerCount, ceremony.winnerId, vw, vh);
-  const outgoingGridPos = resolveTargetPosition(liveSorted, playerCount, ceremony.outgoingLeaderId, vw, vh);
+  const winnerGridPos = resolveTargetPosition(liveSorted, playerCount, ceremony.winnerId, vw, vh, context.gridTop);
+  const outgoingGridPos = resolveTargetPosition(liveSorted, playerCount, ceremony.outgoingLeaderId, vw, vh, context.gridTop);
 
   // For compressed ceremonies, PM walks directly from old leader position
   // to new leader position without returning to bottom first (G37).

@@ -70,6 +70,7 @@ export function useRoomStartCrowning({
   pmRoulette,
   ceremonyStartPos,
   roomStartCrowned = false,
+  gridTop,
 }) {
   const [phaseState, setPhaseState] = useState(IDLE_STATE);
   const firedRef = useRef(false);
@@ -141,8 +142,11 @@ export function useRoomStartCrowning({
     const vh = typeof window !== 'undefined' ? window.innerHeight : 900;
     positionsRef.current = {
       start: ceremonyStartPos || { x: vw / 2, y: vh - 140 },
-      target: computePlayerGridPosition(0, 1, vw),
+      target: computePlayerGridPosition(0, 1, vw, gridTop),
     };
+    // gridTop is a snapshot taken at ceremony start — short ceremonies
+    // don't need to track header reflows mid-flight.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomStartCrowning?.ceremonyId]);
 
   // Phase machine tick — computes visual state from elapsed time

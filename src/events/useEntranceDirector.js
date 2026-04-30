@@ -44,11 +44,13 @@ function clampDuration(ms) {
  * @param {(id: string) => void} [opts.markArrived]  callback to un-hide the player in PlayerList
  * @returns {{ walkFromDoor: (params: { playerId: string, door: {x,y}, duration?: number, pose?: string }) => void }}
  */
-export function useEntranceDirector({ stage, players, markArrived }) {
+export function useEntranceDirector({ stage, players, markArrived, gridTop }) {
   const markArrivedRef = useRef(markArrived);
   markArrivedRef.current = markArrived;
   const playersRef = useRef(players);
   playersRef.current = players;
+  const gridTopRef = useRef(gridTop);
+  gridTopRef.current = gridTop;
 
   return useMemo(() => ({
     walkFromDoor({ playerId, door, duration, pose = 'walk' }) {
@@ -75,7 +77,7 @@ export function useEntranceDirector({ stage, players, markArrived }) {
           .sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0));
         const idx = sorted.findIndex(([id]) => id === playerId);
         const count = sorted.length || 1;
-        target = computePlayerGridPosition(idx >= 0 ? idx : 0, count, vw);
+        target = computePlayerGridPosition(idx >= 0 ? idx : 0, count, vw, gridTopRef.current);
       }
 
       // Distance-scaled duration mirrors the old useCinematicHandoff

@@ -47,6 +47,7 @@ export function usePlayerModels({
   allVoted = false,
   stage = null,
   roomCode = null,
+  gridTop,
 }) {
   // The visible roster used here MUST match the roster used by
   // `usePlayerDirector` on the stage — that's what keeps each name tag
@@ -80,6 +81,7 @@ export function usePlayerModels({
     fukEyesSet,
     hiddenPlayers,
     roomCode,
+    gridTop,
   });
 
   // ---- Per-player model factory -----------------------------------------

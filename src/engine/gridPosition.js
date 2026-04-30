@@ -37,20 +37,44 @@ export function computePmWalkPosition(progress, startX, startY, targetX, targetY
 // ---------------------------------------------------------------------------
 
 /**
+ * Fallback `gridTop` used when the live measurement isn't available yet
+ * (first paint, SSR, jsdom tests). Roughly matches the worst-case header
+ * sum (header + list-mode TaskBar + leader PhaseBar) so figures still
+ * land somewhere reasonable before `useGridTop` settles.
+ */
+export const DEFAULT_GRID_TOP = 220;
+
+/**
+ * Vertical offset of the figure center within a single card slot:
+ *   voting-card (80) + margin+gap (8) + spacer_half (50) = 138 px
+ * Sprite (70 px tall) spans 138 ± 35 = 103–173. Name tag follows at
+ * card-row offset 192. Exported so consumers (tests, layout helpers) can
+ * derive the card's true figure y from a measured grid top without
+ * duplicating the constant.
+ */
+export const FIGURE_OFFSET_FROM_TOP = 138;
+
+/**
  * Compute a player's center position in the flex-wrap grid without touching
  * the DOM. Mirrors the actual CSS grid layout in PlayerList.jsx:
  *   - gap: 16px 28px (row-gap x col-gap)
  *   - item width: 80px (fixed player slot width)
  *   - container padding: 16px on each side
- *   - grid top: 174px from viewport top (header + task bar + phase bar)
  *   - item height: 180px (card + figure + name tag)
+ *
+ * `gridTop` is the live viewport-y of the `data-player-grid` container,
+ * measured by `useGridTop` and threaded through Room.jsx. Pass it
+ * whenever you have it (production code) — the figure then tracks the
+ * card flow regardless of how tall the header / task bar / phase bar
+ * grew. When omitted (tests, fallback), `DEFAULT_GRID_TOP` is used.
  *
  * @param {number} index  0-based index in the sorted player list
  * @param {number} playerCount  total players in the grid
  * @param {number} viewportWidth  window.innerWidth
+ * @param {number} [gridTop] measured top of the player-grid container
  * @returns {{ x: number, y: number }}
  */
-export function computePlayerGridPosition(index, playerCount, viewportWidth) {
+export function computePlayerGridPosition(index, playerCount, viewportWidth, gridTop) {
   const ITEM_WIDTH = 80;
   const COL_GAP = 28;
   const ROW_GAP = 16;
@@ -60,13 +84,7 @@ export function computePlayerGridPosition(index, playerCount, viewportWidth) {
   // name tag visibly below the figure; 100 px keeps 15 px of clearance
   // on each side so the sprite still breathes.
   const ITEM_HEIGHT = 212;
-  // GRID_TOP = header (≈40) + TaskBar list-mode strip (≈105) + PhaseBar
-  // (≈76) worst-case. The TaskBar grew when the horizontal chip strip
-  // replaced the old one-line "Now grooming" display; before this bump
-  // the figures stayed at y=310 while the grid flow shifted down with
-  // the taller bar, which dropped the name tags visibly below their
-  // sprites.
-  const GRID_TOP = 220;
+  const GRID_TOP = gridTop == null ? DEFAULT_GRID_TOP : gridTop;
   const CONTAINER_PAD_X = 16;
 
   const availableWidth = viewportWidth - 2 * CONTAINER_PAD_X;
@@ -84,17 +102,12 @@ export function computePlayerGridPosition(index, playerCount, viewportWidth) {
   const rowLeft = (viewportWidth - rowWidth) / 2;
 
   const x = rowLeft + col * slotPitch + ITEM_WIDTH / 2;
-  // Figure-center y — center of the invisible 100-px spacer inside the
-  // PlayerCard flex column:
-  //   voting-card (80) + margin+gap (8) + spacer_half (50) = 138 px
-  //   from card top.
-  // Sprite spans 138 ± 35 = 103–173. Name tag follows at offset 192 →
-  // 19 px clearance below sprite bottom (down from the old 29 px, which
-  // visually stranded the name). The DevBubble in PlayerCard anchors to
-  // slot top (88) and is lifted another 14 px so it always floats
-  // above the sprite's top edge regardless of DOM-flow vs. math
-  // alignment drift.
-  const FIGURE_OFFSET_FROM_TOP = 138;
+  // Figure-center y — `GRID_TOP` is the measured (or default) viewport y
+  // of the player-grid container; `FIGURE_OFFSET_FROM_TOP` (138 px) lands
+  // the sprite center inside the invisible 100-px figure slot of each
+  // card. Name tag sits 19 px below sprite bottom; the DevBubble in
+  // PlayerCard anchors to slot top + 14 px so it floats above the sprite
+  // regardless of DOM-flow vs. math alignment drift.
   const y = GRID_TOP + row * (ITEM_HEIGHT + ROW_GAP) + FIGURE_OFFSET_FROM_TOP;
 
   return { x, y };

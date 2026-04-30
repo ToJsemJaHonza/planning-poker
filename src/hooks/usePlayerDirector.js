@@ -105,10 +105,13 @@ function offscreenX(dir, vw) {
 /**
  * Y coordinate of the figure within a card slot. The flex-column card is
  * (VotingCards, [figure 70px], NameTag); `computePlayerGridPosition`
- * returns the figure's center y, so we can use it directly.
+ * returns the figure's center y, so we can use it directly. `gridTop`
+ * is the live measurement of the player-grid container (see
+ * `engine/useGridTop`); when omitted, the helper falls back to its
+ * default constant.
  */
-function slotCenter(index, count, vw) {
-  return computePlayerGridPosition(index, count, vw);
+function slotCenter(index, count, vw, gridTop) {
+  return computePlayerGridPosition(index, count, vw, gridTop);
 }
 
 /**
@@ -139,6 +142,7 @@ export function usePlayerDirector({
   fukEyesSet = null,
   hiddenPlayers = null,
   roomCode = null,
+  gridTop,
 }) {
   // Canonical roster shared with `usePlayerModels` — same helper, same
   // rules. That guarantees a character's index on the stage matches the
@@ -193,7 +197,7 @@ export function usePlayerDirector({
         const displayName = data.name || id;
         const dir = safeHashDir(displayName).dir;
         const index = indexById.get(id) ?? 0;
-        const target = slotCenter(index, gridCount || 1, vw);
+        const target = slotCenter(index, gridCount || 1, vw, gridTop);
         const startHidden = hiddenPlayers?.has(id) || false;
         // Genuine fresh join (walk in from offscreen) vs. reconnect /
         // refresh / already-present player (place directly at slot).
@@ -255,10 +259,11 @@ export function usePlayerDirector({
       }
     }
 
-    // Reshuffle — grid width changed (new player, resize), active player
-    // slots moved. Walk at a constant ~100 px/s (same pace as the
-    // JOIN_WALK 14 s / ~1400 px screen) so tiny shifts are still brief
-    // but a wide resize reads as a real walk.
+    // Reshuffle — grid width or top changed (new player, resize, TaskBar
+    // toggling between empty and list mode), active player slots moved.
+    // Walk at a constant ~100 px/s (same pace as the JOIN_WALK 14 s /
+    // ~1400 px screen) so tiny shifts are still brief but a wide resize
+    // reads as a real walk.
     const SPEED_MS_PER_PX = 10;
     for (let i = 0; i < sortedPlayers.length; i++) {
       const [id] = sortedPlayers[i];
@@ -268,7 +273,7 @@ export function usePlayerDirector({
       // Skip characters still walking in from offscreen; they'll land on
       // their up-to-date slot via the join walkTo above.
       if (!knownIdsRef.current.has(id)) continue;
-      const target = slotCenter(i, sortedPlayers.length, vw);
+      const target = slotCenter(i, sortedPlayers.length, vw, gridTop);
       const dx = target.x - char.position.x;
       const dy = target.y - char.position.y;
       const distance = Math.hypot(dx, dy);
@@ -284,7 +289,7 @@ export function usePlayerDirector({
     }
 
     knownIdsRef.current = currentSet;
-  }, [liveIds, sortedPlayers, pmRoulette?.outgoingLeaderId, indexById, stage, hiddenPlayers, vw]);
+  }, [liveIds, sortedPlayers, pmRoulette?.outgoingLeaderId, indexById, stage, hiddenPlayers, vw, gridTop]);
 
   // ── Outgoing-leader walk-off (post-ceremony) ─────────────────────────────
   //
