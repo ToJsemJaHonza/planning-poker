@@ -182,8 +182,13 @@ Shared constants:
 ### 2.3 Per-player presence
 
 Each tab has a session ID in sessionStorage. `onDisconnect(playerRef).update({ disconnected: true })`
-preserves its votes, role, leadership and join order. Every `.info/connected = true`
-rearms that one-shot handler before restoring the player. `connected` becomes true
+preserves its votes, role, leadership and join order. On every `.info/connected = true`,
+setup first creates a complete player record with `disconnected: true` if needed,
+then arms the one-shot disconnect handler, then publishes `disconnected: false`.
+This order matters: Firebase validates the queued disconnect write at registration
+time, and the production player rule requires `name`. Registering the partial
+disconnect update before a new player's record exists fails with `PERMISSION_DENIED`.
+Existing player records are preserved. `connected` becomes true
 only after setup succeeds; failed setup exposes a retry action. Stale asynchronous
 setup is ignored after unmount or another connection generation. A reconnect does
 not recreate a room whose metadata was deleted after it had loaded.

@@ -176,7 +176,18 @@ export function onDisconnect(r) {
   return {
     remove: async () => { disconnectQueue.set(p, 'remove'); },
     set: async (v) => { disconnectQueue.set(p, { type: 'set', value: v }); },
-    update: async (v) => { disconnectQueue.set(p, { type: 'update', value: v }); },
+    update: async (v) => {
+      // Production validates queued onDisconnect writes immediately. The
+      // player rule requires a name even when the slot does not exist yet.
+      // This models that specific constraint, not the whole rules language.
+      if (/^\/rooms\/[^/]+\/players\/[^/]+$/.test(p)
+        && !Object.hasOwn({ ...(_getAt(p) || {}), ...v }, 'name')) {
+        const error = new Error('PERMISSION_DENIED: player must contain name');
+        error.code = 'PERMISSION_DENIED';
+        throw error;
+      }
+      disconnectQueue.set(p, { type: 'update', value: v });
+    },
     cancel: async () => { disconnectQueue.delete(p); },
   };
 }

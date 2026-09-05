@@ -230,21 +230,17 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
           // existing leader (e.g. after the previous one disconnected).
           isLeader: knownPlayers.length === 0 || (!hasLeader && role === 'pm'),
           role: role,
-          disconnected: false,
+          // A complete offline record must exist before onDisconnect is
+          // registered: production validates its merged payload immediately
+          // and rejects a new player containing only `disconnected`.
+          disconnected: true,
         });
-      } else {
-        // Reconnect after refresh / brief network flap. Our previous
-        // `onDisconnect` marked us `disconnected: true`; clear it so the
-        // filtered roster shows us again. vote / isLeader / voteFe /
-        // voteBe are preserved exactly because the record was never
-        // wiped — this is the whole point of preserving over removing.
-        await update(playerRef, { disconnected: false });
       }
     };
 
-    // onDisconnect is one-shot: rearm it on EVERY socket connection before
-    // publishing presence. A live socket alone does not mean the player is
-    // back in the roster. Preserve their cards, role and join order.
+    // Prepare a valid player, then rearm the one-shot disconnect handler on
+    // EVERY socket connection before publishing presence. Existing players'
+    // cards, role, leadership and join order remain untouched.
     const connectedRef = ref(db, '.info/connected');
     const unsubConnected = onValue(connectedRef, (snap) => {
       const generation = ++connectionGeneration;
@@ -253,10 +249,12 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
       if (!snap.val()) return;
       setConnectionError(null);
       (async () => {
+        const restored = await setupPlayer(isCurrent);
+        if (!isCurrent() || restored === false) return;
         await onDisconnect(playerRef).update({ disconnected: true });
         if (!isCurrent()) return;
-        const restored = await setupPlayer(isCurrent);
-        if (isCurrent() && restored !== false) setConnected(true);
+        await update(playerRef, { disconnected: false });
+        if (isCurrent()) setConnected(true);
       })().catch((err) => {
         if (!isCurrent()) return;
         console.error('[useRoom] connection setup failed', err);

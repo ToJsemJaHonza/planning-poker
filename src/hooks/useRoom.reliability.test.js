@@ -20,6 +20,14 @@ async function room(role = 'pm') {
 }
 
 describe('room reliability', () => {
+  it.each(['pm', 'player'])('joins as %s with the production player-name validation', async role => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const hook = renderHook(() => useRoom('ABCDEF', 'new-player', 'Alex', role));
+    await waitFor(() => expect(hook.result.current.connected).toBe(true));
+    expect(hook.result.current.connectionError).toBeNull();
+    expect(hook.result.current.players['new-player']).toMatchObject({ name: 'Alex', role, disconnected: false });
+  });
+
   it('completes a first join interrupted after arming onDisconnect', async () => {
     __mock.setStore({ '.info': { connected: true }, rooms: { REVIEW: {
       players: { me: { disconnected: true } },
@@ -37,15 +45,15 @@ describe('room reliability', () => {
     expect(result.current.players).toEqual({});
   });
 
-  it('does not publish a player before the disconnect handler is acknowledged', async () => {
+  it('keeps a new player offline until the disconnect handler is acknowledged', async () => {
     let acknowledge;
     vi.spyOn(firebase, 'onDisconnect').mockReturnValueOnce({
       update: () => new Promise(resolve => { acknowledge = resolve; }),
     });
     const { result } = renderHook(() => useRoom('REVIEW', 'me', 'Alex'));
-    await act(async () => {});
+    await waitFor(() => expect(acknowledge).toBeTypeOf('function'));
     expect(result.current.connected).toBe(false);
-    expect(result.current.players).toEqual({});
+    expect(result.current.players.me).toMatchObject({ name: 'Alex', disconnected: true });
     await act(async () => acknowledge());
     await waitFor(() => expect(result.current.connected).toBe(true));
     expect(result.current.players.me.name).toBe('Alex');
@@ -57,9 +65,10 @@ describe('room reliability', () => {
       update: () => new Promise(resolve => { acknowledge = resolve; }),
     });
     const { unmount } = renderHook(() => useRoom('REVIEW', 'me', 'Alex'));
+    await waitFor(() => expect(acknowledge).toBeTypeOf('function'));
     unmount();
     await act(async () => acknowledge());
-    expect(__mock.getStore().rooms?.REVIEW).toBeUndefined();
+    expect(__mock.getStore().rooms.REVIEW.players.me.disconnected).toBe(true);
   });
 
   it('does not recreate an ended room on reconnect', async () => {

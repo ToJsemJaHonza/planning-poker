@@ -64,6 +64,25 @@ there and all 30 tests in those files passed with the fixes restored.
 
 ## Scope and limitations
 
+### Opt-in live connection check
+
+`node qa/live-connection-smoke.mjs` runs the actual `useRoom` hook against the
+database configured by the `VITE_FIREBASE_*` environment variables. On Node 22+
+you can also use `node --env-file=.env qa/live-connection-smoke.mjs`.
+This is separate from CI and the local mock fixture: it makes real database writes.
+It atomically claims two new rooms using the app's real code generator, verifies
+that an unnamed disconnect payload is rejected by the production `name` rule,
+then checks Manager and Player joins, a server-observed vote, and two real
+disconnect/reconnect cycles. Cleanup is restricted to rooms with the original
+diagnostic marker and only the expected diagnostic players.
+
+The supplied production rules accept only `[A-HJ-NP-Z2-9]{6}` room codes. Do not
+use random base-36 codes for access diagnostics: forbidden characters cause a
+read denial unrelated to presence setup. No rules deployment is needed for the
+connection-order fix.
+
+### Local fixture limitations
+
 The QA fixture does **not** connect to a production room or test live Firebase
 security rules/network delivery, and separate QA tabs have separate databases.
 The existing hook integration suite tests database operations using the same
