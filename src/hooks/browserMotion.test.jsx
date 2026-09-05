@@ -15,6 +15,23 @@ afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); setMotionMode('full'
 const roster = () => ({ alice: { name: 'Alice', joinedAt: Date.now() - 60000, role: 'player' } });
 
 describe('browser motion regressions', () => {
+  it.each(['full', 'none'])('walks fresh players to their seat 50 percent faster in %s mode', mode => {
+    setMotionMode(mode);
+    const stage = createStageRuntime();
+    const target = { x: 200, y: 250 };
+    stage.updateLayout(new Map([['alice', target]]), 500);
+    const players = { alice: { name: 'Alice', joinedAt: Date.now(), role: 'player' } };
+    renderHook(() => usePlayerDirector({ stage, players }));
+    const alice = stage.get('player-alice');
+    stage.tick(0);
+    expect(alice.action.duration).toBe(Math.round(14000 / 1.5));
+    stage.tick(9000);
+    expect(alice.position.x).not.toBe(target.x);
+    stage.tick(9334);
+    expect(alice.position).toEqual(target);
+    expect(alice.action).toBeNull();
+  });
+
   it('uses real layout coordinates and reacts to a changed layout without a roster change', () => {
     const stage = createStageRuntime();
     stage.updateLayout(new Map([['alice', { x: 123, y: 234 }]]), 600);

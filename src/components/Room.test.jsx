@@ -42,6 +42,7 @@ function baseReturn() {
     isLeader: roomState.isLeader ?? false,
     connected: roomState.connected ?? true,
     connectionError: roomState.connectionError ?? null,
+    sessionEnded: roomState.sessionEnded ?? false,
     leaderChangedAt: 0,
     createdAt: 0,
     castVote: vi.fn(),
@@ -74,6 +75,14 @@ function resetState() {
 describe('Room — rendering & controls', () => {
   beforeEach(() => {
     resetState();
+  });
+
+  it('explains session takeover and vote transfer in English', () => {
+    setState({ sessionEnded: true });
+    render(<Room roomCode="TESTRM" playerId="me" playerName="Alex" />);
+    expect(screen.getByText('The PM bonked you out of the room.')).toBeInTheDocument();
+    expect(screen.getByText('You joined in another tab. Your votes and selected cards moved with you.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to lobby' })).toBeInTheDocument();
   });
 
   it('restores the Manager view from the room roster after a refresh', () => {

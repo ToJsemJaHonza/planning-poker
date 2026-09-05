@@ -10,11 +10,12 @@ import {
 import { computeStats, roundToCard } from '../components/resultModal.utils';
 import { normalizeUrl } from '../components/urls.utils';
 import { connectionErrorMessage } from '../engine/connectionError';
+import { claimSession, EVICTION_QUOTES, pendingEvictions } from '../events/sessionEviction';
 
 // Important events are mutually exclusive cinematics — once one is playing
 // in a room, nothing (not even another important event) can overwrite it
 // until its TTL expires.
-const IMPORTANT_EVENTS = ['train', 'chicken', 'dbbPipeline'];
+const IMPORTANT_EVENTS = ['train', 'chicken', 'dbbPipeline', 'specialRound'];
 
 // Grace window before the crown-handover ceremony fires for a disconnected
 // leader. Must comfortably exceed a page refresh round-trip (auth +
@@ -127,7 +128,12 @@ function computeTaskListUpdates({ taskList, players, splitMode, roomCode }) {
   return updates;
 }
 
-export function useRoom(roomCode, playerId, playerName, role = 'player', initialTasks = []) {
+export function useRoom(roomCode, playerId, playerName, role = 'player', initialTasks = [], sessionIdentity = {}) {
+  const [sessionEvictions, setSessionEvictions] = useState(null);
+  const [sessionReplaced, setSessionReplaced] = useState(false);
+  const [sessionEnded, setSessionEnded] = useState(false);
+  const revokedRef = useRef(false);
+  const [electionRetry, setElectionRetry] = useState(0);
   const [players, setPlayers] = useState({});
   const [phase, setPhase] = useState('voting');
   const [task, setTask] = useState('');
@@ -171,17 +177,42 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
       console.error('[useRoom] refusing to mount: room code contains unsafe characters');
       return;
     }
+    // StrictMode can clean up an immediate revoked-reload timer before it
+    // fires. A retired document must stay terminal on the second setup too.
+    if (revokedRef.current) {
+      setSessionEnded(true);
+      setConnected(false);
+      return;
+    }
 
-    // Players are keyed by a per-tab session ID (not the display name) so
-    // two browsers showing the same name coexist as two separate entries
-    // and their votes / disconnects never clobber each other.
+    let disposed = false;
+    let socketConnected = false;
+    let endTimer;
+    const endSession = (endsAt = Date.now()) => {
+      try { sessionStorage.setItem(`poker-replaced:${roomCode}`, '1'); } catch { /* optional storage */ }
+      revokedRef.current = true;
+      setSessionReplaced(true);
+      setIsLeader(false);
+      clearTimeout(endTimer);
+      endTimer = setTimeout(() => {
+        setSessionEnded(true);
+        setConnected(false);
+        unsubscribesRef.current.forEach(unsub => unsub());
+      }, Math.max(0, endsAt - Date.now()));
+    };
+    // Each document has its own DB slot; old disconnect handlers are harmless.
     const playerRef = ref(db, `rooms/${roomCode}/players/${playerId}`);
     const metaRef = ref(db, `rooms/${roomCode}/meta`);
     const playersRef = ref(db, `rooms/${roomCode}/players`);
 
-    let disposed = false;
     let connectionGeneration = 0;
     const setupPlayer = async (isCurrent) => {
+      try {
+        if (sessionIdentity.previousPlayerId && sessionStorage.getItem(`poker-replaced:${roomCode}`)) {
+          endSession();
+          return false;
+        }
+      } catch { /* optional storage */ }
       // Bootstrap metadata separately from player entries so a join cannot
       // overwrite the roster. Simultaneous creation is still not atomic.
       const metaSnap = await get(metaRef);
@@ -208,33 +239,20 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
         if (!isCurrent()) return;
       }
 
-      // Determine leadership based on current player map (post-meta-write)
-      const playersSnap = await get(playersRef);
-      if (!isCurrent()) return;
-      const existingPlayers = playersSnap.val() || {};
-      const alreadyInRoom = !!existingPlayers[playerId]?.name;
-      // An initial connection can drop after onDisconnect was armed but
-      // before its player record was written, leaving just the offline flag.
-      const knownPlayers = Object.values(existingPlayers).filter(p => p?.name);
-      const hasLeader = knownPlayers.some(p => p.isLeader);
-
-      if (!alreadyInRoom) {
-        await set(playerRef, {
-          name: playerName,
-          joinedAt: Date.now(),
-          vote: null,
-          voteFe: null,
-          voteBe: null,
-          // First arrival in an empty room becomes leader regardless of role.
-          // Otherwise, PM joiners can promote themselves only if there's no
-          // existing leader (e.g. after the previous one disconnected).
-          isLeader: knownPlayers.length === 0 || (!hasLeader && role === 'pm'),
-          role: role,
-          // A complete offline record must exist before onDisconnect is
-          // registered: production validates its merged payload immediately
-          // and rejects a new player containing only `disconnected`.
-          disconnected: true,
-        });
+      const now = Date.now();
+      const quote = EVICTION_QUOTES[Math.floor(Math.random() * EVICTION_QUOTES.length)];
+      const { committed } = await runTransaction(ref(db, `rooms/${roomCode}`), current => {
+        if (!isCurrent()) return;
+        const claimed = claimSession(current, { playerId, playerName, role, now, quote,
+          deviceId: sessionIdentity.deviceId || null,
+          previousPlayerId: sessionIdentity.previousPlayerId || null });
+        if (claimed?.players?.[playerId]) claimed.players[playerId] = { ...claimed.players[playerId], disconnected: true };
+        return claimed;
+      }, { applyLocally: false });
+      if (!isCurrent()) return false;
+      if (!committed) {
+        endSession();
+        return false;
       }
     };
 
@@ -243,8 +261,12 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
     // cards, role, leadership and join order remain untouched.
     const connectedRef = ref(db, '.info/connected');
     const unsubConnected = onValue(connectedRef, (snap) => {
+      if (revokedRef.current) return;
+      const online = !!snap.val();
+      if (online && socketConnected) return;
+      socketConnected = online;
       const generation = ++connectionGeneration;
-      const isCurrent = () => !disposed && generation === connectionGeneration;
+      const isCurrent = () => !disposed && !revokedRef.current && generation === connectionGeneration;
       setConnected(false);
       if (!snap.val()) return;
       setConnectionError(null);
@@ -253,8 +275,11 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
         if (!isCurrent() || restored === false) return;
         await onDisconnect(playerRef).update({ disconnected: true });
         if (!isCurrent()) return;
-        await update(playerRef, { disconnected: false });
-        if (isCurrent()) setConnected(true);
+        const { committed } = await runTransaction(playerRef, current => {
+          if (!isCurrent() || !current || current.replacedBy) return;
+          return { ...current, disconnected: false };
+        }, { applyLocally: false });
+        if (isCurrent() && committed) setConnected(true);
       })().catch((err) => {
         if (!isCurrent()) return;
         console.error('[useRoom] connection setup failed', err);
@@ -264,9 +289,12 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
 
     const unsubPlayers = onValue(playersRef, (snap) => {
       const data = snap.val() || {};
-      setPlayers(data);
+      setPlayers(Object.fromEntries(Object.entries(data).filter(([, p]) => !p.replacedBy)));
+      if (data[playerId]?.replacedBy) {
+        endSession(data[playerId].evictedAt);
+      }
       if (data[playerId]) {
-        setIsLeader(data[playerId].isLeader === true);
+        setIsLeader(!revokedRef.current && data[playerId].isLeader === true);
       }
       const leaderEntry = Object.entries(data).find(([, p]) => p && p.isLeader);
       if (leaderEntry) {
@@ -284,6 +312,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
         setSplitMode(data.splitMode || false);
         setPmQuote(data.pmQuote || '');
         setSyncedEvent(data.syncedEvent || null);
+        setSessionEvictions(data.sessionEvictions || null);
         setLeaderChangedAt(data.leaderChangedAt || 0);
         setCreatedAt(typeof data.createdAt === 'number' ? data.createdAt : Date.now());
         // Only expose a pmRoulette payload that passes schema+TTL
@@ -316,6 +345,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
 
     return () => {
       disposed = true;
+      clearTimeout(endTimer);
       connectionGeneration++;
       unsubscribesRef.current.forEach(unsub => unsub());
     };
@@ -347,7 +377,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
   //   (a) `setupPlayer` above for first-joiner into a fresh room, and
   //   (b) `resolvePmRoulettePromotion` below, fired during crownDelivery.
   useEffect(() => {
-    if (!roomCode || !playerId || Object.keys(players).length === 0) return undefined;
+    if (!roomCode || !playerId || revokedRef.current || Object.keys(players).length === 0) return undefined;
 
     // A leader who is marked `disconnected: true` (onDisconnect fired)
     // is treated as absent for the ceremony-trigger purpose. Combined
@@ -379,10 +409,11 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
 
     // CEREMONY_GRACE_MS is module-scoped (exported) so tests can reuse it
     // in their `waitFor` timeouts instead of hardcoding a magic number.
+    let retryTimer;
     const graceTimer = setTimeout(async () => {
       // Double-check conditions at fire time — the DB may have changed
       // while we were waiting for the grace window.
-      if (firingRef.current) return;
+      if (firingRef.current || revokedRef.current) return;
       firingRef.current = true;
 
       try {
@@ -406,9 +437,17 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
 
         // Re-read the live syncedEvent; if an important cinematic is
         // currently playing, yield — one scheduled retry at its expiry.
-        const seSnap = await get(ref(db, `rooms/${roomCode}/meta/syncedEvent`));
-        const live = seSnap.val();
+        const metaSnap = await get(ref(db, `rooms/${roomCode}/meta`));
+        const liveMeta = metaSnap.val();
+        const live = liveMeta?.syncedEvent;
         const nowLocal = Date.now();
+        const evictions = pendingEvictions(liveMeta?.sessionEvictions, nowLocal);
+        if (evictions.length) {
+          firingRef.current = false;
+          retryTimer = setTimeout(() => setElectionRetry(n => n + 1),
+            Math.max(...evictions.map(e => e.expiresAt)) - nowLocal + 50);
+          return;
+        }
         const blockedByEvent = live
           && IMPORTANT_EVENTS.includes(live.type)
           && (live.expiresAt || 0) > nowLocal;
@@ -462,8 +501,8 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
       }
     }, CEREMONY_GRACE_MS);
 
-    return () => clearTimeout(graceTimer);
-  }, [players, roomCode, playerId, pmRoulette]);
+    return () => { clearTimeout(graceTimer); clearTimeout(retryTimer); };
+  }, [players, roomCode, playerId, pmRoulette, electionRetry]);
 
   // Reset the firing guard when a ceremony clears AND the leader has been
   // promoted. Without the hasLeader check, the guard resets too early:
@@ -503,27 +542,30 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
   }, [playerCount, roomCode]);
 
   const castVote = useCallback((value) => {
-    if (!roomCode || !playerId || phase !== 'voting') return;
-    safeWrite(set(ref(db, `rooms/${roomCode}/players/${playerId}/vote`), value));
+    if (!roomCode || !playerId || phase !== 'voting' || revokedRef.current) return;
+    safeWrite(runTransaction(ref(db, `rooms/${roomCode}/players/${playerId}`), p =>
+      p && !p.replacedBy ? { ...p, vote: value } : undefined));
   }, [roomCode, playerId, phase]);
 
   const castVoteFe = useCallback((value) => {
-    if (!roomCode || !playerId || phase !== 'voting') return;
-    safeWrite(set(ref(db, `rooms/${roomCode}/players/${playerId}/voteFe`), value));
+    if (!roomCode || !playerId || phase !== 'voting' || revokedRef.current) return;
+    safeWrite(runTransaction(ref(db, `rooms/${roomCode}/players/${playerId}`), p =>
+      p && !p.replacedBy ? { ...p, voteFe: value } : undefined));
   }, [roomCode, playerId, phase]);
 
   const castVoteBe = useCallback((value) => {
-    if (!roomCode || !playerId || phase !== 'voting') return;
-    safeWrite(set(ref(db, `rooms/${roomCode}/players/${playerId}/voteBe`), value));
+    if (!roomCode || !playerId || phase !== 'voting' || revokedRef.current) return;
+    safeWrite(runTransaction(ref(db, `rooms/${roomCode}/players/${playerId}`), p =>
+      p && !p.replacedBy ? { ...p, voteBe: value } : undefined));
   }, [roomCode, playerId, phase]);
 
   const revealCards = useCallback(async () => {
-    if (!roomCode || !isLeader) return;
+    if (!roomCode || !isLeader || revokedRef.current) return;
     await set(ref(db, `rooms/${roomCode}/meta/phase`), 'revealed');
   }, [roomCode, isLeader]);
 
   const newRound = useCallback(async () => {
-    if (!roomCode || !isLeader) return;
+    if (!roomCode || !isLeader || revokedRef.current) return;
     // Before we blow away the votes, read the live score-relevant state
     // (taskList + players + splitMode + phase) from Firebase. Reading live
     // instead of React-closure state guarantees we score whatever was
@@ -562,16 +604,16 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
       });
       Object.assign(updates, taskUpdates);
     }
-    await update(ref(db), updates);
+    if (!revokedRef.current) await update(ref(db), updates);
   }, [roomCode, isLeader]);
 
   const updateTask = useCallback((newTask) => {
-    if (!roomCode || !isLeader) return;
+    if (!roomCode || !isLeader || revokedRef.current) return;
     safeWrite(set(ref(db, `rooms/${roomCode}/meta/task`), newTask));
   }, [roomCode, isLeader]);
 
   const setPmQuoteFirebase = useCallback((q) => {
-    if (!roomCode) return;
+    if (!roomCode || revokedRef.current) return;
     safeWrite(set(ref(db, `rooms/${roomCode}/meta/pmQuote`), q));
   }, [roomCode]);
 
@@ -590,7 +632,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
   // version captured stale state between rapid calls and could let a second
   // important event slip through within a single render.
   const fireSyncedEvent = useCallback(async (eventData, durationMs = 4000) => {
-    if (!roomCode) return false;
+    if (!roomCode || revokedRef.current) return false;
     const now = Date.now();
     // Refuse if a PM Crowning Machine ceremony is currently active.
     try {
@@ -607,13 +649,15 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
     }
     const payload = { ...eventData, startedAt: now, expiresAt: now + durationMs };
     const { committed } = await runTransaction(
-      ref(db, `rooms/${roomCode}/meta/syncedEvent`),
-      (current) => {
+      ref(db, `rooms/${roomCode}/meta`),
+      (meta) => {
+        if (revokedRef.current || pendingEvictions(meta?.sessionEvictions, now).length) return;
+        const current = meta?.syncedEvent;
         // Block if an important event is still actively playing.
         if (current && IMPORTANT_EVENTS.includes(current.type) && (current.expiresAt || 0) > now) {
           return; // abort transaction → committed === false
         }
-        return payload;
+        return { ...meta, syncedEvent: payload };
       }
     );
     if (!committed) return false;
@@ -638,26 +682,27 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
   // any stuck PM quote. This is the ONLY code path outside the first-joiner
   // case that writes `isLeader = true`.
   const resolvePmRoulettePromotion = useCallback(async (ceremony) => {
-    if (!roomCode || !ceremony || !ceremony.winnerId) return { status: 'bad-args' };
+    if (!roomCode || revokedRef.current || !ceremony || !ceremony.winnerId) return { status: 'bad-args' };
     try {
-      // Verify the winner still exists. If not, the ceremony completes
-      // visually and a second ceremony will fire when the payload is nulled.
-      const winnerSnap = await get(ref(db, `rooms/${roomCode}/players/${ceremony.winnerId}`));
-      const winnerData = winnerSnap.val();
-      if (!winnerData) return { status: 'winner-gone' };
-
-      // Pull the live players map so the update paths cover every slot.
-      const playersSnap = await get(ref(db, `rooms/${roomCode}/players`));
-      const livePlayers = playersSnap.val() || {};
-
-      const updates = {};
-      for (const id of Object.keys(livePlayers)) {
-        updates[`rooms/${roomCode}/players/${id}/isLeader`] = (id === ceremony.winnerId);
-      }
-      updates[`rooms/${roomCode}/meta/leaderChangedAt`] = Date.now();
-      updates[`rooms/${roomCode}/meta/pmQuote`] = '';
-      await update(ref(db), updates);
-      return { status: 'ok' };
+      const { committed } = await runTransaction(ref(db, `rooms/${roomCode}`), current => {
+        if (!current || revokedRef.current) return;
+        const livePlayers = current.players || {};
+        let winnerId = ceremony.winnerId;
+        const seen = new Set();
+        // A timer can still hold the pre-takeover winner ID. Follow its
+        // tombstone so a late coronation cannot promote a retired connection.
+        while (livePlayers[winnerId]?.replacedBy && !seen.has(winnerId)) {
+          seen.add(winnerId);
+          winnerId = livePlayers[winnerId].replacedBy;
+        }
+        if (!livePlayers[winnerId] || seen.has(winnerId)) return;
+        return { ...current,
+          players: Object.fromEntries(Object.entries(livePlayers).map(([id, p]) =>
+            [id, { ...p, isLeader: id === winnerId }])),
+          meta: { ...current.meta, leaderChangedAt: Date.now(), pmQuote: '' },
+        };
+      }, { applyLocally: false });
+      return { status: committed ? 'ok' : 'winner-gone' };
     } catch (err) {
       console.error('[useRoom] resolvePmRoulettePromotion failed', err);
       return { status: 'error', error: err };
@@ -667,7 +712,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
   // Null the ceremony payload if the ceremonyId still matches.
   // Never stomps a newer ceremony.
   const clearPmRoulette = useCallback(async (ceremony) => {
-    if (!roomCode) return;
+    if (!roomCode || revokedRef.current) return;
     try {
       const snap = await get(ref(db, `rooms/${roomCode}/meta/pmRoulette`));
       const current = snap.val();
@@ -716,7 +761,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
   }, [roomCode, ceremonyId, ceremonyStartedAt]);
 
   const setShameTimerFirebase = useCallback((value) => {
-    if (!roomCode) return;
+    if (!roomCode || revokedRef.current) return;
     safeWrite(set(ref(db, `rooms/${roomCode}/meta/shameTimer`), value));
   }, [roomCode]);
 
@@ -740,7 +785,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
   // short-lived toast so players aren't left wondering why their vote
   // context silently changed under them.
   const setActiveTask = useCallback(async (id) => {
-    if (!roomCode || !isLeader || !id) return;
+    if (!roomCode || !isLeader || !id || revokedRef.current) return;
     // Read list + players in parallel. We need the list for the target
     // item + switch-notice decision, and the player map to zero every
     // player's vote columns when the active task actually changes.
@@ -809,7 +854,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
       }, 4500);
     }
 
-    await update(ref(db), updates);
+    if (!revokedRef.current) await update(ref(db), updates);
   }, [roomCode, isLeader]);
 
   // Replace the whole items map with a new set of rows. Each incoming row
@@ -818,7 +863,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
   // the new list, otherwise it falls to the first pending item (or null
   // if everything is already scored).
   const upsertTasks = useCallback(async (rows) => {
-    if (!roomCode || !isLeader || !Array.isArray(rows)) return;
+    if (!roomCode || !isLeader || !Array.isArray(rows) || revokedRef.current) return;
     const existingSnap = await get(ref(db, `rooms/${roomCode}/meta/taskList`));
     const existing = existingSnap.val();
     const existingItems = existing?.items || {};
@@ -895,13 +940,13 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
       updates[`rooms/${roomCode}/meta/shameTimer`] = null;
       updates[`rooms/${roomCode}/meta/taskSwitchNotice`] = null;
     }
-    await update(ref(db), updates);
+    if (!revokedRef.current) await update(ref(db), updates);
   }, [roomCode, isLeader]);
 
   // Toggle the FE/BE split. When turning ON we also fire the
   // SPECIAL ROUND splash via syncedEvent so every client sees it.
   const toggleSplit = useCallback(() => {
-    if (!roomCode || !isLeader) return;
+    if (!roomCode || !isLeader || revokedRef.current) return;
     const newSplit = !splitMode;
     safeWrite(set(ref(db, `rooms/${roomCode}/meta/splitMode`), newSplit));
     if (newSplit) {
@@ -910,7 +955,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
   }, [roomCode, isLeader, splitMode, fireSyncedEvent]);
 
   return {
-    connectionError,
+    sessionEvictions, sessionReplaced, sessionEnded, connectionError,
     players,
     phase,
     task,

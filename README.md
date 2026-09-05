@@ -49,6 +49,7 @@ It's also **completely free and self-hostable** — no vendor lock-in, no per-se
 | **Celebration** | When everyone votes with real estimates, the status bar glows, sparkles burst, and the reveal button pulses. |
 | **Shame Timer** | Last voter gets progressively pressured — trembling avatar, sweat drops, stress meter, and floating text escalating over 5 stages. |
 | **Room sharing** | Create a room, get a 6-character code, share the link. `?room=CODE` in the URL for instant join. |
+| **Duplicate-tab eviction** | Rejoining a room in the same browser profile transfers your cards and role. The PM walks over, delivers a line and knocks the old avatar out with a giant pixel hammer; the old tab disconnects. Refresh preserves cards without the scene. |
 
 ### Pixel Art & Personality
 

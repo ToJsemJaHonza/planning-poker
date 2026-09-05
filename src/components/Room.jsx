@@ -7,6 +7,8 @@ import { useCrownOwnership } from '../hooks/useCrownOwnership';
 import { useCharacterStage } from '../hooks/useCharacterStage';
 import { usePmDirector } from '../hooks/usePmDirector';
 import { useOktaKeys } from '../hooks/useOktaKeys';
+import { useEvictionClock, useSessionEviction } from '../hooks/useSessionEviction';
+import { pendingEvictions, EVICTION_HIT } from '../events/sessionEviction';
 import {
   isValidCeremonyPayload,
   isStalePayload,
@@ -32,7 +34,7 @@ import { pixel, computeRoomPaddingBottom } from './room/styles';
 import { useMotionMode } from '../engine/useMotionMode';
 import { resultDelay } from '../engine/cardReveal';
 
-export default function Room({ roomCode, playerId, playerName, role = 'player', initialTasks = [] }) {
+export default function Room({ roomCode, playerId, playerName, role = 'player', initialTasks = [], sessionIdentity = {} }) {
   const {
     players, phase, task, taskList, taskSwitchNotice, setActiveTask, upsertTasks, splitMode,
     pmQuote, setPmQuote,
@@ -42,8 +44,9 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
     roomStartCrowning, roomStartCrowned, shameTimer, setShameTimer, roomDeleted,
     isLeader, connected, connectionError, leaderChangedAt, createdAt,
     castVote, castVoteFe, castVoteBe,
+    sessionEvictions, sessionReplaced, sessionEnded,
     toggleSplit, revealCards, newRound, updateTask,
-  } = useRoom(roomCode, playerId, playerName, role, initialTasks);
+  } = useRoom(roomCode, playerId, playerName, role, initialTasks, sessionIdentity);
   const effectiveRole = players[playerId]?.role || role;
 
   // --- Unified character stage ---
@@ -51,7 +54,9 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
   // on a single long-running stage whose characters persist across every
   // mode. No mount/unmount at ceremony boundaries — so no handoff jump.
   const stage = useCharacterStage();
-  const ceremonyActive = !!(pmRoulette || roomStartCrowning);
+  const now = useEvictionClock(sessionEvictions);
+  const evictionActive = pendingEvictions(sessionEvictions, now).some(e => e.startedAt <= now);
+  const ceremonyActive = !!(pmRoulette || roomStartCrowning || evictionActive);
 
   // Downstream hooks need `ceremonyStartPos` from the director, and the
   // director's ceremony mirror needs their output. Refs break the cycle:
@@ -69,11 +74,12 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
     externalQuote: !isLeader ? pmQuote : '',
     onQuote: isLeader ? setPmQuote : null,
   });
+  const activeEviction = useSessionEviction({ stage, events: sessionEvictions, players, now });
 
   // --- Room-start mini-ceremony ---
   const roomStartState = useRoomStartCrowning({
     stage,
-    roomCode, playerId, role: effectiveRole, connected, isLeader,
+    roomCode, playerId, role: effectiveRole, connected: connected && !pendingEvictions(sessionEvictions, now).length, isLeader,
     players, roomStartCrowning, pmRoulette,
     ceremonyStartPos,
     roomStartCrowned,
@@ -124,7 +130,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
 
   // --- Derived state ---
   const isPM = effectiveRole === 'pm';
-  const canControl = isLeader;
+  const canControl = isLeader && !sessionReplaced;
   const me = players[playerId];
   const myVote = me?.vote || null;
   const myVoteFe = me?.voteFe || null;
@@ -263,6 +269,21 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
   }, [connected]);
 
   // --- Terminal states ---
+  if (sessionEnded) {
+    return <div style={styles.loading} role="status" data-session-ended>
+      <p style={{ color: '#5a1f1f', fontSize: '0.8rem' }}>The PM bonked you out of the room.</p>
+      <p style={{ fontSize: '0.6rem', maxWidth: 560, lineHeight: 2, textAlign: 'center', padding: 20 }}>
+        You joined in another tab. Your votes and selected cards moved with you.
+      </p>
+      <button style={styles.backBtn} onClick={() => {
+        try {
+          sessionStorage.removeItem('poker-player-id');
+          sessionStorage.removeItem(`poker-replaced:${roomCode}`);
+        } catch { /* optional storage */ }
+        window.location.href = window.location.pathname;
+      }}>Back to lobby</button>
+    </div>;
+  }
   if (roomDeleted) {
     return (
       <div style={styles.loading}>
@@ -312,6 +333,16 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
           in later phases) lives on one persistent stage. No mount/unmount
           at phase boundaries, so no teleport between idle and ceremony. */}
       <CharacterStage stage={stage} />
+      {activeEviction && <div role="status" data-session-eviction style={{
+        position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)',
+        zIndex: 230, background: '#263444', color: '#ffe19a', border: '4px solid #d4a853',
+        padding: '14px 20px', fontSize: '0.65rem', lineHeight: 1.8, textAlign: 'center',
+        maxWidth: '85vw', pointerEvents: 'none',
+      }}>
+        {now - activeEviction.startedAt >= EVICTION_HIT ? 'BONK! Your clone has been fired.'
+          : now - activeEviction.startedAt >= 1600 ? activeEviction.quote
+            : `${activeEviction.playerName}: one person, one chair!`}
+      </div>}
 
       {/* Single crown renderer. Every place that used to paint its own
           crown (PlayerFigure's head crown, PmSprite's ceremony block,
@@ -367,13 +398,13 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
 
       {/* Card picker — players only */}
       {!isPM && phase === 'voting' && !splitMode && (
-        <CardPicker selectedVote={myVote} onVote={castVote} disabled={false} bottomOffset={canControl ? 40 : 0} />
+        <CardPicker selectedVote={myVote} onVote={castVote} disabled={sessionReplaced} bottomOffset={canControl ? 40 : 0} />
       )}
       {!isPM && phase === 'voting' && splitMode && (
         <SplitCardPicker
           voteFe={myVoteFe} voteBe={myVoteBe}
           onVoteFe={castVoteFe} onVoteBe={castVoteBe}
-          disabled={false} bottomOffset={canControl ? 40 : 0}
+          disabled={sessionReplaced} bottomOffset={canControl ? 40 : 0}
         />
       )}
 

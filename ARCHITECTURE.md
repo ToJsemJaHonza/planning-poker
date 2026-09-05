@@ -181,7 +181,7 @@ Shared constants:
 
 ### 2.3 Per-player presence
 
-Each tab has a session ID in sessionStorage. `onDisconnect(playerRef).update({ disconnected: true })`
+Each document owns a separate connection ID. `onDisconnect(playerRef).update({ disconnected: true })`
 preserves its votes, role, leadership and join order. On every `.info/connected = true`,
 setup first creates a complete player record with `disconnected: true` if needed,
 then arms the one-shot disconnect handler, then publishes `disconnected: false`.
@@ -194,7 +194,7 @@ setup is ignored after unmount or another connection generation. A reconnect doe
 not recreate a room whose metadata was deleted after it had loaded.
 
 Invitations join as players regardless of the role used in another room. Reloads
-restore the role from the session's existing roster entry, including the Manager UI.
+restore the role from the preceding connection's roster entry, including the Manager UI.
 Presence follows the Firebase connection timeout; there is no additional heartbeat.
 
 ### 2.4 Task voting context
@@ -204,6 +204,33 @@ revealed phase in the same update as the task change. This also applies when the
 backlog editor deletes the active task or first adds tasks to a free voting round.
 Edits that keep the active task preserve votes. Finalizing a new score clears the
 previous scoring mode's fields so the task strip and text export use the latest result.
+
+### 2.5 Duplicate-session takeover
+
+Each document uses a unique `players/{connectionId}` slot. `onDisconnect`
+marks that slot disconnected; reconnect rearms the handler and restores presence
+only if the connection still owns its slot. Votes survive network interruptions.
+
+`sessionIdentity.js` stores a browser-profile ID in localStorage and remembers
+the preceding connection in sessionStorage for reloads. `claimSession` atomically
+transfers all three vote fields, role, leadership and join order in a room
+transaction. The former slot becomes a disconnected `replacedBy` tombstone,
+excluded from the public roster. Late disconnects and vote writes cannot affect
+the new connection. Reloading an evicted tab does not reclaim the room.
+
+Additional-tab takeovers enqueue timestamped `meta/sessionEvictions` entries.
+The queue waits for existing cinematics and blocks new synced events. The shared
+character stage drives the PM, hammer and old avatar; reduced motion omits the
+flight, and JS still animates when CSS animations are disabled. The former tab
+unsubscribes when its event expires. Reloads transfer state without this scene.
+Expired event payloads are discarded on the next takeover; tombstones remain
+until room deletion to keep retired clients fenced out.
+
+The identity is scoped to an origin and browser profile, not physical hardware.
+Different browsers, private sessions and storage-disabled clients cannot be
+reliably identified as one computer without an account or a pairing mechanism.
+Same-name users in different profiles remain independent. See
+[the local QA fixture](qa/SESSION_EVICTION.md) for reproducible cross-tab checks.
 
 ---
 
@@ -301,7 +328,7 @@ callbacks every 1 s and asserts `onPlayerExit` fires exactly once.
 5. ~~**No reconnect UI.** `useRoom` tracks a `connected` boolean from initial setup, but it never flips back to `false` if Firebase drops. Adding reconnection awareness via Firebase's `.info/connected` reference is future work.~~ **Resolved.** `useRoom` now subscribes to `.info/connected` so `connected` tracks the live socket. `Room.jsx` keeps the room rendered after a mid-session drop and overlays a "Reconnecting…" banner (sticky `wasEverConnectedRef`).
 6. **Inline styles everywhere.** This is a deliberate choice for this app size, but if the repo grows, extracting a shared style object or moving to CSS modules is the natural next step.
 7. **Fast Refresh demands single-component exports.** `PlayerList.jsx`, `ResultModal.jsx` etc. export *only* their default component. Pure helper functions live in `<name>.utils.js` siblings. This keeps HMR surgical — editing `PlayerList.jsx` won't trigger a full-page reload.
-8. **No auth.** `players/{name}` is keyed by the typed name. Two people typing the same name fight over the same node. The name sanitizer in `NamePrompt.jsx` is strictly for Firebase key-safety (strips `.`, `$`, `#`, `[`, `]`, `/`), not for identity.
+8. **No auth.** Connection IDs and browser-profile IDs prevent accidental session collisions, but are not authentication or an authorization boundary. Names are display labels, not identity.
 9. ~~**CSS animations throttle under `prefers-reduced-motion`**. We don't currently respect this media query. A11y improvement opportunity.~~ **Resolved.** `src/styles/responsive.css` carries an extensive `@media (prefers-reduced-motion: reduce)` block that disables idle/walk/celebrate/shame animations, and additionally collapses entrance-event keyframes (chicken, sheep, train) and class-based DBB pipeline animations to no-op final frames. Guarded by `src/styles/reducedMotion.test.js`.
 
 ---
