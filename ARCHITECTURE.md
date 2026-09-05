@@ -181,7 +181,24 @@ Shared constants:
 
 ### 2.3 Per-player presence
 
-`onDisconnect(playerRef).remove()` is what cleans up a player node when their tab closes. This is the only mechanism — there's no heartbeat. Firebase will honor it as soon as the connection times out (seconds, not milliseconds).
+Each tab has a session ID in sessionStorage. `onDisconnect(playerRef).update({ disconnected: true })`
+preserves its votes, role, leadership and join order. Every `.info/connected = true`
+rearms that one-shot handler before restoring the player. `connected` becomes true
+only after setup succeeds; failed setup exposes a retry action. Stale asynchronous
+setup is ignored after unmount or another connection generation. A reconnect does
+not recreate a room whose metadata was deleted after it had loaded.
+
+Invitations join as players regardless of the role used in another room. Reloads
+restore the role from the session's existing roster entry, including the Manager UI.
+Presence follows the Firebase connection timeout; there is no additional heartbeat.
+
+### 2.4 Task voting context
+
+Changing the active task clears all three vote fields, the shame timer and the
+revealed phase in the same update as the task change. This also applies when the
+backlog editor deletes the active task or first adds tasks to a free voting round.
+Edits that keep the active task preserve votes. Finalizing a new score clears the
+previous scoring mode's fields so the task strip and text export use the latest result.
 
 ---
 

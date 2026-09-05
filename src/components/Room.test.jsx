@@ -41,6 +41,7 @@ function baseReturn() {
     roomDeleted: roomState.roomDeleted ?? false,
     isLeader: roomState.isLeader ?? false,
     connected: roomState.connected ?? true,
+    connectionError: roomState.connectionError ?? null,
     leaderChangedAt: 0,
     createdAt: 0,
     castVote: vi.fn(),
@@ -73,6 +74,19 @@ function resetState() {
 describe('Room — rendering & controls', () => {
   beforeEach(() => {
     resetState();
+  });
+
+  it('restores the Manager view from the room roster after a refresh', () => {
+    setState({ players: { me: makePlayer('Alex', { role: 'pm', isLeader: true }) }, isLeader: true });
+    render(<Room roomCode="TESTRM" playerId="me" playerName="Alex" role="player" />);
+    expect(screen.queryByRole('button', { name: '5', exact: true })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reveal Cards' })).toBeInTheDocument();
+  });
+
+  it('uses the saved player role even when a stale caller supplies Manager', () => {
+    setState({ players: { me: makePlayer('Alex') } });
+    render(<Room roomCode="TESTRM" playerId="me" playerName="Alex" role="pm" />);
+    expect(screen.getByRole('button', { name: '5', exact: true })).toBeInTheDocument();
   });
 
   it('PM view hides the CardPicker', () => {
@@ -285,6 +299,14 @@ describe('Room — rendering & controls', () => {
   // screen and visually wiped the room any time the WebSocket dropped.
   // After: the room keeps rendering and a fixed banner overlays it.
   describe('reconnect banner (mid-session disconnect)', () => {
+    it('shows a retry action when initial room setup fails', () => {
+      setState({ connected: false, connectionError: 'Could not connect to this room.' });
+      render(<Room roomCode="TESTRM" playerName="Alice" />);
+      expect(screen.getByRole('alert')).toHaveTextContent('Could not connect');
+      expect(screen.getByRole('button', { name: 'Retry connection' })).toBeInTheDocument();
+      expect(screen.queryByText(/Connecting to room/)).not.toBeInTheDocument();
+    });
+
     it('renders the "Connecting…" screen while connected has never been true', () => {
       setState({
         players: { Alice: makePlayer('Alice', { joinedAt: 1, isLeader: true }) },

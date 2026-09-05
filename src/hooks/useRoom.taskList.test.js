@@ -341,7 +341,8 @@ describe('useRoom — grooming backlog', () => {
       await waitFor(() => {
         expect(pm.result.current.taskList.items.t1.scoreFe).toBe('3');
         expect(pm.result.current.taskList.items.t1.scoreBe).toBe('13');
-        expect(pm.result.current.taskList.items.t1.score).toBeNull();
+        // Firebase removes keys written as null.
+        expect(pm.result.current.taskList.items.t1.score ?? null).toBeNull();
         expect(pm.result.current.taskList.activeId).toBe('t2');
       });
     });

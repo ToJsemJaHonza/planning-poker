@@ -85,7 +85,12 @@ function computeTaskListUpdates({ taskList, players, splitMode, roomCode }) {
   const voting = Object.values(players || {}).filter(
     (p) => p && p.role !== 'pm' && !p.disconnected,
   );
-  const updates = {};
+  // Re-estimation replaces the old outcome, including its scoring mode.
+  const updates = {
+    [`rooms/${roomCode}/meta/taskList/items/${activeId}/score`]: null,
+    [`rooms/${roomCode}/meta/taskList/items/${activeId}/scoreFe`]: null,
+    [`rooms/${roomCode}/meta/taskList/items/${activeId}/scoreBe`]: null,
+  };
 
   if (splitMode) {
     const feStats = computeStats(voting.filter((p) => p.voteFe != null).map((p) => ({ vote: p.voteFe })));
@@ -137,6 +142,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
   const [pmRoulette, setPmRoulette] = useState(null);
   const [isLeader, setIsLeader] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [connectionError, setConnectionError] = useState(null);
   const [leaderChangedAt, setLeaderChangedAt] = useState(0);
   const [roomStartCrowning, setRoomStartCrowning] = useState(null);
   // Sticky "the one-time first-leader coronation already ran" flag.
@@ -172,15 +178,18 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
     const metaRef = ref(db, `rooms/${roomCode}/meta`);
     const playersRef = ref(db, `rooms/${roomCode}/players`);
 
-    const setupPlayer = async () => {
-      // Race-safe room bootstrap: write meta/createdAt with our timestamp, then
-      // re-read it. If another client got there first, our timestamp will be
-      // overwritten on read by the earlier one and we gracefully become a joiner
-      // instead of a second "creator". We also only write `players/me` — not the
-      // whole room — to avoid two concurrent creators clobbering each other's
-      // player maps.
+    let disposed = false;
+    let connectionGeneration = 0;
+    const setupPlayer = async (isCurrent) => {
+      // Bootstrap metadata separately from player entries so a join cannot
+      // overwrite the roster. Simultaneous creation is still not atomic.
       const metaSnap = await get(metaRef);
+      if (!isCurrent()) return;
       const existingMeta = metaSnap.val();
+      if (!existingMeta && roomLoadedRef.current) {
+        setRoomDeleted(true);
+        return false;
+      }
 
       if (!existingMeta) {
         // Establish meta separately so concurrent joiners can't wipe each
@@ -195,13 +204,18 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
         };
         if (seededList) metaPayload.taskList = seededList;
         await set(metaRef, metaPayload);
+        if (!isCurrent()) return;
       }
 
       // Determine leadership based on current player map (post-meta-write)
       const playersSnap = await get(playersRef);
+      if (!isCurrent()) return;
       const existingPlayers = playersSnap.val() || {};
-      const alreadyInRoom = !!existingPlayers[playerId];
-      const hasLeader = Object.values(existingPlayers).some(p => p.isLeader);
+      const alreadyInRoom = !!existingPlayers[playerId]?.name;
+      // An initial connection can drop after onDisconnect was armed but
+      // before its player record was written, leaving just the offline flag.
+      const knownPlayers = Object.values(existingPlayers).filter(p => p?.name);
+      const hasLeader = knownPlayers.some(p => p.isLeader);
 
       if (!alreadyInRoom) {
         await set(playerRef, {
@@ -213,7 +227,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
           // First arrival in an empty room becomes leader regardless of role.
           // Otherwise, PM joiners can promote themselves only if there's no
           // existing leader (e.g. after the previous one disconnected).
-          isLeader: Object.keys(existingPlayers).length === 0 || (!hasLeader && role === 'pm'),
+          isLeader: knownPlayers.length === 0 || (!hasLeader && role === 'pm'),
           role: role,
           disconnected: false,
         });
@@ -225,29 +239,28 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
         // wiped — this is the whole point of preserving over removing.
         await update(playerRef, { disconnected: false });
       }
-
-      // Mark disconnection instead of removing the record — preserves
-      // vote, voteFe, voteBe, isLeader, and joinedAt through a refresh.
-      // setupPlayer above clears the flag on reconnect. Consumers filter
-      // disconnected entries out of the visible grid / vote count, but
-      // the ceremony-trigger effect intentionally keeps them in scope so
-      // a leader's brief disconnect doesn't trigger a new coronation.
-      onDisconnect(playerRef).update({ disconnected: true });
-      // Connectivity is now driven by the `.info/connected` subscription
-      // below, not by a one-shot setConnected(true) at bootstrap. That way
-      // a mid-session WebSocket drop actually flips connected back to false
-      // and the UI can render a reconnect banner instead of stale state.
     };
 
-    setupPlayer();
-
-    // Firebase exposes `.info/connected` as a system path that mirrors the
-    // realtime client's WebSocket state. Subscribing here means every
-    // disconnect/reconnect during the session is reflected in `connected`,
-    // not just the initial bootstrap.
+    // onDisconnect is one-shot: rearm it on EVERY socket connection before
+    // publishing presence. A live socket alone does not mean the player is
+    // back in the roster. Preserve their cards, role and join order.
     const connectedRef = ref(db, '.info/connected');
     const unsubConnected = onValue(connectedRef, (snap) => {
-      setConnected(!!snap.val());
+      const generation = ++connectionGeneration;
+      const isCurrent = () => !disposed && generation === connectionGeneration;
+      setConnected(false);
+      if (!snap.val()) return;
+      setConnectionError(null);
+      (async () => {
+        await onDisconnect(playerRef).update({ disconnected: true });
+        if (!isCurrent()) return;
+        const restored = await setupPlayer(isCurrent);
+        if (isCurrent() && restored !== false) setConnected(true);
+      })().catch((err) => {
+        if (!isCurrent()) return;
+        console.error('[useRoom] connection setup failed', err);
+        setConnectionError('Could not connect to this room. Check your connection and try again.');
+      });
     });
 
     const unsubPlayers = onValue(playersRef, (snap) => {
@@ -303,6 +316,8 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
     unsubscribesRef.current = [unsubPlayers, unsubMeta, unsubConnected];
 
     return () => {
+      disposed = true;
+      connectionGeneration++;
       unsubscribesRef.current.forEach(unsub => unsub());
     };
     // `role` and `initialTasks` are intentionally read from closure on the
@@ -746,7 +761,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
       || currentItem.scoreFe != null
       || currentItem.scoreBe != null
     );
-    const isDifferent = currentActiveId && currentActiveId !== id;
+    const isDifferent = currentActiveId !== id;
 
     const updates = {
       [`rooms/${roomCode}/meta/taskList/activeId`]: id,
@@ -868,6 +883,19 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
     } else {
       updates[`rooms/${roomCode}/meta/task`] = '';
     }
+    // Deleting the active item or adding a backlog during a free round
+    // changes what we are estimating just as much as selecting a task.
+    if (nextActiveId !== currentActiveId) {
+      const playersSnap = await get(ref(db, `rooms/${roomCode}/players`));
+      for (const pid of Object.keys(playersSnap.val() || {})) {
+        for (const field of ['vote', 'voteFe', 'voteBe']) {
+          updates[`rooms/${roomCode}/players/${pid}/${field}`] = null;
+        }
+      }
+      updates[`rooms/${roomCode}/meta/phase`] = 'voting';
+      updates[`rooms/${roomCode}/meta/shameTimer`] = null;
+      updates[`rooms/${roomCode}/meta/taskSwitchNotice`] = null;
+    }
     await update(ref(db), updates);
   }, [roomCode, isLeader]);
 
@@ -883,6 +911,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
   }, [roomCode, isLeader, splitMode, fireSyncedEvent]);
 
   return {
+    connectionError,
     players,
     phase,
     task,
