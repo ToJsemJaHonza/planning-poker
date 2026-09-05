@@ -14,6 +14,8 @@ Useful query parameters:
 - `?motion=none&count=6`: CSS animation/transition disabled, JS motion retained.
 - `?motion=reduced`: quiet visual effects. Automated tests also emulate the OS preference.
 - `?app`: real name prompt/lobby, for startup and blocked-storage tests.
+- `?app&gallery`: detailed character gallery with the unchanged PM as reference;
+  compare idle, both walk frames, hands on hips, card holding, peeking and stress.
 
 **Leader leaves** changes the database presence flag; the production election
 hook waits its normal 10-second reconnect grace before starting the ceremony.
@@ -65,6 +67,10 @@ GitHub CI runs all three browser engines and publishes the report artifacts.
   smooth travel with small stepped poses, pixel sparks and hard contact shadows.
   Animal gait and dust share their existing timeline; task effects use square
   grains and stepped portal corners. Text translates without stretching/spinning.
+- Generated players retain the 12×14 grid and 60×70 layout footprint. Material
+  highlights, collars, seams and shoes do not move their head/ground anchors.
+  The name hash is deterministic; the zero-shift hair-color selection now uses
+  the hash instead of cancelling it out. Other trait selections are preserved.
 - Shared `MotionRuntime` remains the only animation-frame scheduler.
 - Grid anchors are measured after layout/fonts/resize and compensated for scroll;
   decorative nod/tremble translations never become walking targets.

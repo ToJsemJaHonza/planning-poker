@@ -28,6 +28,26 @@ test('local pixel font actually loads', async ({ page }) => {
   })).toBe(true);
 });
 
+test('detailed figure gallery preserves footprint in every pose alongside PM', async ({ page }, info) => {
+  await page.goto('./?app&gallery');
+  const figures = page.locator('[data-gallery-figure] > div');
+  await expect(figures).toHaveCount(25);
+  expect(await figures.evaluateAll(elements => elements.every(el => getComputedStyle(el.firstElementChild).boxShadow !== 'none'))).toBe(true);
+  const sizes = () => figures.evaluateAll(elements => elements.map(el => { const r = el.getBoundingClientRect(); return [r.width, r.height]; }));
+  expect(await sizes()).toEqual(Array.from({ length: 25 }, () => [60, 70]));
+  await page.screenshot({ path: info.outputPath('detailed-characters.png'), fullPage: true });
+  const idle = await figures.first().locator('div').first().getAttribute('style');
+  for (const state of ['Step 1', 'Step 2', 'Hands on hips', 'Holding card', 'Peeking', 'Stress']) {
+    await page.getByRole('button', { name: state, exact: true }).click();
+    expect(await sizes()).toEqual(Array.from({ length: 25 }, () => [60, 70]));
+    await expect(page.locator('[data-cm-pm-ceremony]')).toBeVisible();
+  }
+  await page.getByRole('button', { name: 'Idle', exact: true }).click();
+  expect(await figures.first().locator('div').first().getAttribute('style')).toBe(idle);
+  await page.setViewportSize({ width: 320, height: 640 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
 test('pixel events: mobile special round fits and animals keep stepping with CSS disabled', async ({ page }, info) => {
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto('./?motion=none&count=6');

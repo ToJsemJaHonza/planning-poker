@@ -1,6 +1,47 @@
 import { describe, it, expect } from 'vitest';
 import { computePlayerShadow, hashName } from './PlayerFigure';
 
+const pixels = shadow => shadow.split(',').map(part => {
+  const [, x, y, color] = part.match(/^(\d+)px (\d+)px 0 \d+px (#[\da-f]+)$/i) || [];
+  return { x: Number(x), y: Number(y), color };
+});
+
+describe('detailed pixel characters', () => {
+  const names = ['Jan', 'Petra', 'Tomáš', 'Lucie', 'Martin', 'Alice', 'Bob', 'Fanda', 'René', '李雷', '😀', ...Array.from({ length: 250 }, (_, i) => `Player ${i}`)];
+  it('never drops opaque torso pixels when the hash has its sign bit set', () => {
+    for (const name of names) {
+      const sprite = pixels(computePlayerShadow(name, { pose: 'neutral' }));
+      for (const x of [20, 25, 30, 35]) {
+        expect(sprite.find(p => p.x === x && p.y === 45)?.color, name).toMatch(/^#[\da-f]{3,6}$/i);
+      }
+    }
+  });
+  it('actually varies hair color instead of XORing a hash with itself', () => {
+    const hairColors = new Set(names.map(name => pixels(computePlayerShadow(name, { fukEyes: true })).find(p => p.x === 20 && p.y === 45)?.color));
+    expect(hairColors.size).toBeGreaterThan(8);
+  });
+  it('adds a restrained palette of material highlights and shadows', () => {
+    for (const name of names.slice(0, 10)) {
+      const colors = new Set(pixels(computePlayerShadow(name)).map(p => p.color));
+      expect(colors.size, name).toBeGreaterThanOrEqual(9);
+      expect(colors.size, name).toBeLessThanOrEqual(24);
+    }
+  });
+  it('keeps every pose inside the same 12 by 14 pixel grid', () => {
+    for (const name of names) for (const opts of [{}, { walkFrame: 0 }, { walkFrame: 1 }, { pose: 'hips' }, { holdingCard: true }, { fukEyes: true }, { stressStage: 5 }]) {
+      const sprite = pixels(computePlayerShadow(name, opts));
+      expect(sprite.every(p => p.color && p.x >= 0 && p.x <= 55 && p.y >= 0 && p.y <= 65 && p.x % 5 === 0 && p.y % 5 === 0), name).toBe(true);
+      expect(sprite.some(p => p.y === 65), name).toBe(true);
+    }
+  });
+  it('keeps the detailed head and torso identical throughout the walk cycle', () => {
+    for (const name of names.slice(0, 20)) {
+      const upper = frame => pixels(computePlayerShadow(name, { walkFrame: frame })).filter(p => p.y < 55);
+      expect(upper(0), name).toEqual(upper(1));
+    }
+  });
+});
+
 // We test the pure sprite-string builder directly rather than going through
 // React render + DOM introspection — jsdom silently discards very long
 // box-shadow values when read back via CSSStyleDeclaration, which made
