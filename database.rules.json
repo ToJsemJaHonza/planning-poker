@@ -1,0 +1,232 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$roomCode": {
+        ".read": "$roomCode.matches(/^[A-HJ-NP-Z2-9]{6}$/)",
+        ".write": "$roomCode.matches(/^[A-HJ-NP-Z2-9]{6}$/)",
+        "players": {
+          "$playerId": {
+            ".validate": "newData.hasChildren(['name'])",
+            "name": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 30"
+            },
+            "role": {
+              ".validate": "newData.isString() && newData.val().length <= 16"
+            },
+            "isLeader": {
+              ".validate": "newData.isBoolean()"
+            },
+            "disconnected": {
+              ".validate": "newData.isBoolean()"
+            },
+            "joinedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "vote": {
+              ".validate": "newData.isString() && newData.val().length <= 4"
+            },
+            "voteFe": {
+              ".validate": "newData.isString() && newData.val().length <= 4"
+            },
+            "voteBe": {
+              ".validate": "newData.isString() && newData.val().length <= 4"
+            },
+            "deviceId": {
+              ".validate": "newData.isString() && newData.val().length <= 64"
+            },
+            "replacedBy": {
+              ".validate": "newData.isString() && newData.val().length <= 64"
+            },
+            "evictedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "meta": {
+          "task": {
+            ".validate": "newData.isString() && newData.val().length <= 2000"
+          },
+          "phase": {
+            ".validate": "newData.isString() && (newData.val() == 'voting' || newData.val() == 'revealed')"
+          },
+          "splitMode": {
+            ".validate": "newData.isBoolean()"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "pmQuote": {
+            ".validate": "newData.isString() && newData.val().length <= 500"
+          },
+          "leaderChangedAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "roomStartCrowned": {
+            ".validate": "newData.isBoolean()"
+          },
+          "syncedEvent": {
+            ".validate": "newData.hasChild('type')",
+            "type": {
+              ".validate": "newData.isString() && newData.val().length <= 32"
+            },
+            "startedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "expiresAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": true
+            }
+          },
+          "pmRoulette": {
+            ".validate": "newData.hasChild('schemaVersion')",
+            "schemaVersion": {
+              ".validate": "newData.isNumber()"
+            },
+            "ceremonyId": {
+              ".validate": "newData.isString() && newData.val().length <= 64"
+            },
+            "startedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "expiresAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "winnerId": {
+              ".validate": "newData.isString() && newData.val().length <= 64"
+            },
+            "$other": {
+              ".validate": true
+            }
+          },
+          "roomStartCrowning": {
+            ".validate": "newData.hasChild('schemaVersion')",
+            "schemaVersion": {
+              ".validate": "newData.isNumber()"
+            },
+            "ceremonyId": {
+              ".validate": "newData.isString() && newData.val().length <= 64"
+            },
+            "startedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "winnerId": {
+              ".validate": "newData.isString() && newData.val().length <= 64"
+            },
+            "$other": {
+              ".validate": true
+            }
+          },
+          "taskSwitchNotice": {
+            "prevTitle": {
+              ".validate": "newData.isString() && newData.val().length <= 2000"
+            },
+            "nextTitle": {
+              ".validate": "newData.isString() && newData.val().length <= 2000"
+            },
+            "startedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "expiresAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": true
+            }
+          },
+          "shameTimer": {
+            "holdoutName": {
+              ".validate": "newData.isString() && newData.val().length <= 30"
+            },
+            "holdoutId": {
+              ".validate": "newData.isString() && newData.val().length <= 64"
+            },
+            "startedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": true
+            }
+          },
+          "taskList": {
+            "activeId": {
+              ".validate": "newData.isString() && newData.val().length <= 32"
+            },
+            "items": {
+              "$itemId": {
+                "title": {
+                  ".validate": "newData.isString() && newData.val().length <= 2000"
+                },
+                "url": {
+                  ".validate": "newData.isString() && newData.val().length <= 2000"
+                },
+                "order": {
+                  ".validate": "newData.isNumber()"
+                },
+                "score": {
+                  ".validate": "newData.isString() && newData.val().length <= 8"
+                },
+                "scoreFe": {
+                  ".validate": "newData.isString() && newData.val().length <= 8"
+                },
+                "scoreBe": {
+                  ".validate": "newData.isString() && newData.val().length <= 8"
+                },
+                "scoredAt": {
+                  ".validate": "newData.isNumber()"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            }
+          },
+          "sessionEvictions": {
+            "$oldPlayerId": {
+              ".validate": "newData.hasChildren(['oldId', 'newId', 'playerName', 'startedAt', 'expiresAt'])",
+              "oldId": {
+                ".validate": "newData.isString() && newData.val().length <= 64"
+              },
+              "newId": {
+                ".validate": "newData.isString() && newData.val().length <= 64"
+              },
+              "playerName": {
+                ".validate": "newData.isString() && newData.val().length <= 30"
+              },
+              "role": {
+                ".validate": "newData.isString() && newData.val().length <= 16"
+              },
+              "joinedAt": {
+                ".validate": "newData.isNumber()"
+              },
+              "startedAt": {
+                ".validate": "newData.isNumber()"
+              },
+              "expiresAt": {
+                ".validate": "newData.isNumber()"
+              },
+              "quote": {
+                ".validate": "newData.isString() && newData.val().length <= 500"
+              },
+              "$other": {
+                ".validate": false
+              }
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    }
+  }
+}

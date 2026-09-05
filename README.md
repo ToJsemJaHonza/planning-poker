@@ -109,6 +109,14 @@ npm run dev
 
 > **Note:** Firebase config values are client-side identifiers, not secrets. Security depends on your [Firebase Realtime Database security rules](https://firebase.google.com/docs/database/security), which you configure in the Firebase Console.
 
+Copy the complete contents of [`database.rules.json`](database.rules.json) into
+**Firebase Console > Realtime Database > Rules** and click **Publish**.
+These rules include the duplicate-session fields (`deviceId`, `replacedBy`,
+`evictedAt`, and `meta/sessionEvictions`). Older rules that reject unknown fields
+will reject room joins from the current app. Publish the matching rules when
+upgrading the app; pushing to GitHub or deploying GitHub Pages does not publish
+Firebase rules.
+
 > **Note:** The app requires **Node.js >= 22**. CI runs on Node 22.
 
 ---
