@@ -49,6 +49,9 @@ export function createStageRuntime() {
     characters,
     subscribe,
     getVersion,
+    // Directors can finish a layout-effect write after this frame's tick.
+    // Publish that committed pose without advancing any character action.
+    publish: notify,
     slots,
     groundY: null,
     getSlot(id) { return slots.get(id); },

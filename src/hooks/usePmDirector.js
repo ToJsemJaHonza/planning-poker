@@ -259,6 +259,7 @@ export function usePmDirector({
       pmChar.facingLeft = false;
       pmChar.bubble = null;
       pmChar.zIndex = 55;
+      stage.publish();
       return;
     }
 
@@ -279,6 +280,10 @@ export function usePmDirector({
       // Ceremony PM renders above SlotMachineStage backdrop (z 205) and its
       // procession spotlight (z 212). Match old SlotMachineStage value.
       pmChar.zIndex = 213;
+      // CharacterStage/CrownStage rendered before this parent layout effect.
+      // Wake their external-store subscriptions now, before paint, instead
+      // of leaving both sprites one RAF behind the ceremony phase.
+      stage.publish();
     }
   });
 

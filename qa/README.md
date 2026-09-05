@@ -60,6 +60,9 @@ they do not promise a fixed frame rate on every device.
 
 QA files are excluded from the production Vite entry point and Vitest discovery.
 GitHub CI runs all three browser engines and publishes the report artifacts.
+Succession reports also attach the complete PM position samples and show both
+sides of any detected jump. Set `QA_PORT` (for example `5174`) to run this suite
+against an isolated worktree without reusing another branch's local server.
 
 ## Motion implementation notes
 

@@ -150,10 +150,11 @@ for (const role of ['pm', 'player']) {
       }
       requestAnimationFrame(sample);
     }));
+    await info.attach(`pm-motion-${role}`, { body: JSON.stringify(samples), contentType: 'application/json' });
     expect(new Set(samples.map(s => s.phase))).toContain('crownDelivery');
     expect(Math.max(...samples.map(s => s.crowns))).toBeLessThanOrEqual(1);
     const jumps = samples.slice(1).filter((s, i) => s.at - samples[i].at < 80 && Math.hypot(s.x - samples[i].x, s.y - samples[i].y) > 65);
-    expect(jumps, 'No frame-to-frame PM teleports at ceremony handoffs').toEqual([]);
+    expect(jumps.map(s => ({ before: samples[samples.indexOf(s) - 1], after: s })), 'No frame-to-frame PM teleports at ceremony handoffs').toEqual([]);
     await expect(stage).toHaveCount(0);
     await aligned(page);
     await expect(page.locator('[data-cm-crown]')).toHaveCount(1);
