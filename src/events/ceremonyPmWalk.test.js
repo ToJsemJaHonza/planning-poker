@@ -179,6 +179,13 @@ describe('computeCrownDelivery — walk phases', () => {
 });
 
 describe('computeCrownDelivery — PM-creator case (no crown)', () => {
+  it('moves the newly materialized crown from hand to head instead of teleporting', () => {
+    const ceremony = { ...baseCeremony, outgoingLeaderHadCrown: false };
+    const start = computeCrownDelivery(2700, ceremony, baseContext());
+    const end = computeCrownDelivery(2999, ceremony, baseContext());
+    expect(start.crownCeremonyState).toMatchObject({ location: 'arcing-to-player', playerId: 'winner', progress: 0 });
+    expect(end.crownCeremonyState.progress).toBeGreaterThan(0.99);
+  });
   it('materializes crown during delivery phase', () => {
     const noCrown = { ...baseCeremony, outgoingLeaderHadCrown: false };
     const at2600 = computeCrownDelivery(2600, noCrown, baseContext());

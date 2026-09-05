@@ -71,10 +71,18 @@ export function computeCrownRemoval(phaseElapsed, ceremony, context) {
   const vh = context.viewportHeight || 900;
   const startPos = context.ceremonyStartPos || { x: vw / 2, y: vh - 140 };
   const { liveSorted, playerCount } = buildLivePlayers(ceremony, context);
-  const targetPos = resolveTargetPosition(liveSorted, playerCount, ceremony.outgoingLeaderId, vw, vh);
+  const targetPos = context.playerPositions?.get(ceremony.outgoingLeaderId) || resolveTargetPosition(liveSorted, playerCount, ceremony.outgoingLeaderId, vw, vh);
 
   // Reduced-motion path: instant crown transfer, no walk animation.
   const outId = ceremony.outgoingLeaderId || null;
+
+  // A manager has no voting figure/head to visit. Keep the host in place
+  // until the election instead of walking toward a nonexistent grid slot.
+  if (!hadCrown) return {
+    crownRemovalState: 'silenceGap', pmCeremonyPosition: startPos,
+    pmCeremonyPose: 'think', pmCeremonyFacing: 'right', pmCeremonyBubble: null,
+    crownCeremonyState: null, leaderWalkOffTriggered: false,
+  };
 
   if (context.reducedMotion) {
     const before200 = phaseElapsed < 200;
@@ -172,15 +180,13 @@ export function computeCrownDelivery(phaseElapsed, ceremony, context) {
   const vw = context.viewportWidth || 1440;
   const vh = context.viewportHeight || 900;
   const { liveSorted, playerCount } = buildLivePlayers(ceremony, context, { injectWinner: true });
-  const winnerGridPos = resolveTargetPosition(liveSorted, playerCount, ceremony.winnerId, vw, vh);
-  const outgoingGridPos = resolveTargetPosition(liveSorted, playerCount, ceremony.outgoingLeaderId, vw, vh);
+  const winnerGridPos = context.playerPositions?.get(ceremony.winnerId) || resolveTargetPosition(liveSorted, playerCount, ceremony.winnerId, vw, vh);
 
   // For compressed ceremonies, PM walks directly from old leader position
   // to new leader position without returning to bottom first (G37).
   const defaultStart = context.ceremonyStartPos || { x: vw / 2, y: vh - 140 };
-  const startPos = ceremony.wasCompressed
-    ? outgoingGridPos
-    : defaultStart;
+  // Crown removal ends back at defaultStart in both phase tables.
+  const startPos = defaultStart;
   const targetPos = winnerGridPos;
 
   const winId = ceremony.winnerId || null;
@@ -246,10 +252,10 @@ export function computeCrownDelivery(phaseElapsed, ceremony, context) {
         : { location: 'arcing-to-player', playerId: winId, progress: placeProgress, glowing: true };
     } else {
       // PM-creator case: materialize crown during delivery
-      const matProgress = Math.min(1, (phaseElapsed - 2500) / 500);
-      crownCeremonyState = matProgress >= 1
-        ? settled
-        : { location: 'materializing', playerId: null, progress: matProgress, glowing: true };
+      const matProgress = Math.min(1, (phaseElapsed - 2500) / 200);
+      crownCeremonyState = matProgress < 1
+        ? { location: 'materializing', playerId: null, progress: matProgress, glowing: true }
+        : { location: 'arcing-to-player', playerId: winId, progress: (phaseElapsed - 2700) / 300, glowing: true };
     }
   } else if (phaseElapsed < 4600) {
     // Walking back down

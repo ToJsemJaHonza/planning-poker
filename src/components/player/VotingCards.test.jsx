@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, act } from '@testing-library/react';
 import { SingleCard, SplitCards } from './VotingCards';
+import { setMotionMode } from '../../engine/motionProbe';
+
+beforeEach(() => setMotionMode('full'));
 
 describe('SingleCard — flip animation', () => {
   beforeEach(() => { vi.useFakeTimers(); });

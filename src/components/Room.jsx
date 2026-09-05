@@ -22,12 +22,15 @@ import SlotMachineStage from './SlotMachineStage';
 import RoomHeader from './room/RoomHeader';
 import TaskBar from './room/TaskBar';
 import TaskListPanel from './room/TaskListPanel';
+import TaskMagic from './room/TaskMagic';
 import TaskSwitchToast from './room/TaskSwitchToast';
 import PhaseBar from './room/PhaseBar';
 import StatusBar from './room/StatusBar';
 import LeaderBanner from './room/LeaderBanner';
 import OverlayStage from '../events/OverlayStage';
 import { pixel, computeRoomPaddingBottom } from './room/styles';
+import { useMotionMode } from '../engine/useMotionMode';
+import { resultDelay } from '../engine/cardReveal';
 
 export default function Room({ roomCode, playerId, playerName, role = 'player', initialTasks = [] }) {
   const {
@@ -68,6 +71,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
 
   // --- Room-start mini-ceremony ---
   const roomStartState = useRoomStartCrowning({
+    stage,
     roomCode, playerId, role, connected, isLeader,
     players, roomStartCrowning, pmRoulette,
     ceremonyStartPos,
@@ -102,6 +106,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
   }, [pmRoulette, clearPmRoulette]);
 
   const slotMachinePhaseState = useSlotMachine(ceremonyForHook, {
+    stage,
     onLeaderPromote, onCeremonyComplete,
     ceremonyStartPos, players,
   });
@@ -217,14 +222,23 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
 
   // --- Local UI state ---
   const [showResult, setShowResult] = useState(false);
+  const motionMode = useMotionMode();
+  const revealDelayRef = useRef(0);
+  revealDelayRef.current = resultDelay(playerCount, splitMode, motionMode);
+
+  useEffect(() => {
+    setShowResult(false);
+    if (phase !== 'revealed') return;
+    const timer = setTimeout(() => setShowResult(true), revealDelayRef.current);
+    return () => clearTimeout(timer);
+  }, [phase, taskList?.activeId, roomCode]);
+  const closeResult = useCallback(() => setShowResult(false), []);
 
   const handleReveal = async () => {
     await revealCards();
     if (Math.random() < 0.01) {
       fireSyncedEvent({ type: 'chicken' }, 3500);
     }
-    // Delay increased to let staggered card flip animation finish before modal
-    setTimeout(() => setShowResult(true), 900);
   };
 
   const handleNewRound = () => {
@@ -281,7 +295,8 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
   const paddingBottom = computeRoomPaddingBottom({ hasEntrance, isPM, canControl, splitMode });
 
   return (
-    <div style={{ ...styles.container, paddingBottom, transition: 'padding-bottom 0.3s ease' }}>
+    <TaskMagic taskList={taskList}>
+    <div data-room style={{ ...styles.container, paddingBottom }}>
       {!connected && (
         <div role="status" style={styles.reconnectBanner} data-reconnect-banner>
           Reconnecting to Firebase…
@@ -322,6 +337,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
         canControl={canControl} allVotedClean={allVotedClean}
         onToggleSplit={toggleSplit} onReveal={handleReveal} onNewRound={handleNewRound}
       />
+      {phase === 'revealed' && !showResult && <button className="results-open" onClick={() => setShowResult(true)}>Show results</button>}
 
       <div className={shame.isHoldout && shame.stage >= 4 ? 'screen-shake' : ''}>
         <PlayerList
@@ -383,6 +399,8 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
         const active = taskList?.activeId ? taskList.items?.[taskList.activeId] : null;
         return (
           <ResultModal
+            canControl={canControl}
+            onClose={closeResult}
             players={players}
             splitMode={splitMode}
             onNewRound={handleNewRound}
@@ -392,14 +410,14 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
         );
       })()}
     </div>
+    </TaskMagic>
   );
 }
 
 const styles = {
   container: {
     minHeight: '100dvh',
-    maxHeight: '100dvh',
-    overflow: 'hidden',
+    overflowX: 'clip',
     background: '#e8dcc8',
     fontFamily: pixel,
   },

@@ -19,6 +19,7 @@ export default function EntranceStage({ activeEntrance, onPlayerExit, entranceDi
   if (!Component) return null;
   return (
     <Component
+      key={`${event.type}:${payload.timestamp ?? ''}:${payload.playerId ?? ''}`}
       {...payload}
       onPlayerExit={onPlayerExit}
       entranceDirector={entranceDirector}

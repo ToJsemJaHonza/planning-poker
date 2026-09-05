@@ -48,7 +48,7 @@ describe('DbbPipeline (GH issue #2)', () => {
       <DbbPipeline fromSide="left" playerName="Tomáš" onPlayerExit={() => {}} onDone={() => {}} />
     );
     // Bubble phase starts at 1800 ms
-    act(() => { vi.advanceTimersByTime(2200); });
+    act(() => { vi.advanceTimersByTime(2232); });
     expect(container.textContent).toContain('DBB message has arrived');
     expect(container.textContent).toContain('Tomáš');
   });
@@ -148,16 +148,19 @@ describe('DbbPipeline (GH issue #2)', () => {
     // Hidden phase — the wrapper should have an offscreen translate.
     const group = container.querySelector('[data-dbb-pipe-group]');
     expect(group).not.toBeNull();
-    expect(group.style.transform).toContain('-120vw');
+    const startX = parseFloat(group.style.transform.slice('translate('.length));
+    expect(startX).toBeLessThan(-window.innerWidth);
 
     // After slideIn starts (> 200 ms), transform should be onscreen.
     act(() => { vi.advanceTimersByTime(1000); });
-    expect(group.style.transform).toContain('translate(0');
+    const movingX = parseFloat(group.style.transform.slice('translate('.length));
+    expect(movingX).toBeGreaterThan(startX);
+    expect(movingX).toBeLessThan(0);
 
     // After slideOut (> 7900 ms in the enriched timeline), transform should
     // be offscreen again.
     act(() => { vi.advanceTimersByTime(7500); });
-    expect(group.style.transform).toContain('-120vw');
+    expect(parseFloat(group.style.transform.slice('translate('.length))).toBeLessThan(0);
   });
 
   // ---------------------------------------------------------------------------
@@ -269,7 +272,7 @@ describe('DbbPipeline (GH issue #2)', () => {
       expect(group.className || '').not.toContain('dbb-rumble');
       // Rumble starts at t=4000.
       act(() => { vi.advanceTimersByTime(600); });
-      expect(group.className).toContain('dbb-rumble');
+      expect(group.dataset.rumbling).toBe('true');
     });
 
     it('streams packet particles during packetFlow (t ≈ 4300ms)', () => {

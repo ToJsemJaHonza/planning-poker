@@ -15,6 +15,7 @@ function getDisplayCard(players, field) {
   // the displayed median toward zero (and disagreeing with ResultModal,
   // which pre-filters null votes).
   const nums = Object.values(players)
+    .filter(p => p?.role !== 'pm' && !p?.disconnected)
     .map(p => p?.[field])
     .filter(v => v != null)
     .map(v => Number(v))

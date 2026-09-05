@@ -9,6 +9,8 @@
 
 # Planning Poker
 
+Local, watchable cross-browser animation checks: see [Browser QA](qa/README.md).
+
 **Retro pixel-art estimation for agile teams. No accounts. No install. Just vibes and Fibonacci.**
 
 [![CI / CD](https://github.com/ToJsemJaHonza/planning-poker/actions/workflows/ci.yml/badge.svg)](https://github.com/ToJsemJaHonza/planning-poker/actions/workflows/ci.yml)

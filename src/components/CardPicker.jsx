@@ -15,6 +15,7 @@ export default function CardPicker({ selectedVote, onVote, disabled, label, acce
           <button
             key={value}
             data-card
+            aria-pressed={selectedVote === value}
             className={`poker-card${selectedVote === value ? ' poker-card--selected' : ''}`}
             onClick={() => onVote(value)}
             disabled={disabled}
@@ -43,6 +44,7 @@ export function SplitCardPicker({ voteFe, voteBe, onVoteFe, onVoteBe, disabled, 
               key={value}
               data-split-card
               className={`poker-card poker-card--split${voteFe === value ? ' poker-card--selected' : ''}`}
+              aria-pressed={voteFe === value}
               onClick={() => onVoteFe(value)}
               disabled={disabled}
               style={{
@@ -63,6 +65,7 @@ export function SplitCardPicker({ voteFe, voteBe, onVoteFe, onVoteBe, disabled, 
               key={value}
               data-split-card
               className={`poker-card poker-card--split${voteBe === value ? ' poker-card--selected' : ''}`}
+              aria-pressed={voteBe === value}
               onClick={() => onVoteBe(value)}
               disabled={disabled}
               style={{

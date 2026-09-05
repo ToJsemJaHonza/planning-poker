@@ -21,6 +21,8 @@ import { computePlayerGridPosition } from '../engine/gridPosition';
 import { easeInOutCubic, CEREMONY_WALK_FRAME_MS } from '../engine/animation';
 import { useAnimationLoop } from '../engine/useAnimationLoop';
 import { currentPhaseRow } from '../events/slotMachine';
+import { useFrameTicker } from '../engine/useFrameTicker';
+import { useMotionMode } from '../engine/useMotionMode';
 
 // Slowed to ~3.5s so each phase is visually appreciable (was 1.7s — too fast
 // to distinguish walk-in, cast, crown-place, walk-out as separate steps).
@@ -70,7 +72,9 @@ export function useRoomStartCrowning({
   pmRoulette,
   ceremonyStartPos,
   roomStartCrowned = false,
+  stage = null,
 }) {
+  const motionMode = useMotionMode();
   const [phaseState, setPhaseState] = useState(IDLE_STATE);
   const firedRef = useRef(false);
   // Walk-in delay: wait 3s after connection so the player figure's walk-in
@@ -85,10 +89,17 @@ export function useRoomStartCrowning({
 
   // Timer: set walkInReady=true 3s after first connection
   useEffect(() => {
-    if (!connected) return;
+    if (!connected || stage) return;
     const t = setTimeout(() => setWalkInReady(true), 3000);
     return () => clearTimeout(t);
-  }, [connected]);
+  }, [connected, stage]);
+
+  // The walk currently lasts 14 seconds. A fixed 3s delay used to crown
+  // empty air while the first player was still crossing the screen.
+  useFrameTicker(100, () => {
+    const char = stage?.get(`player-${playerId}`);
+    if (char && !char.hidden && !char.action && char.queue.length === 0) setWalkInReady(true);
+  }, !!stage && connected && !walkInReady);
 
   // Trigger detection: fire the mini-ceremony when conditions are met
   useEffect(() => {
@@ -141,7 +152,7 @@ export function useRoomStartCrowning({
     const vh = typeof window !== 'undefined' ? window.innerHeight : 900;
     positionsRef.current = {
       start: ceremonyStartPos || { x: vw / 2, y: vh - 140 },
-      target: computePlayerGridPosition(0, 1, vw),
+      target: stage?.getSlot(roomStartCrowning.winnerId) || computePlayerGridPosition(0, 1, vw),
     };
   }, [roomStartCrowning?.ceremonyId]);
 
@@ -172,6 +183,10 @@ export function useRoomStartCrowning({
       pmPose = Math.floor(elapsed / CEREMONY_WALK_FRAME_MS) % 2 === 0 ? 'walk1' : 'walk2';
     }
 
+    if (motionMode === 'reduced' && row.phase !== 'done') {
+      pmPosition = targetPos;
+      pmPose = 'cast';
+    }
     setPhaseState({
       active: row.phase !== 'done',
       phase: row.phase,
@@ -184,7 +199,7 @@ export function useRoomStartCrowning({
     if (row.phase === 'done') {
       cleanupPayload(roomCode, roomStartCrowning.ceremonyId);
     }
-  }, [roomStartCrowning?.ceremonyId, roomCode]);
+  }, [roomStartCrowning?.ceremonyId, roomCode, motionMode]);
 
   // Stale payload check — must run before the animation loop
   useEffect(() => {

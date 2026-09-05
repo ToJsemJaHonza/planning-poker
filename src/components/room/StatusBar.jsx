@@ -22,6 +22,7 @@ export default function StatusBar({ phase, votedCount, playerCount, allVotedClea
 
   return (
     <div
+      data-status-bar
       className={celebrating ? 'status-bar--celebrate' : ''}
       style={styles.pmBar}
     >

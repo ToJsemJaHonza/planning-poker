@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { pixel } from './room/styles';
+import { savePreference } from '../engine/storage';
 
 export default function NamePrompt({ onSubmit }) {
   const [name, setName] = useState('');
@@ -9,7 +10,7 @@ export default function NamePrompt({ onSubmit }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!sanitized) return;
-    localStorage.setItem('poker-player-name', sanitized);
+    savePreference('poker-player-name', sanitized);
     onSubmit(sanitized);
   };
 

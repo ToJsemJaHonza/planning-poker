@@ -1,5 +1,6 @@
-import { useRef } from 'react';
+import { useRef, useLayoutEffect } from 'react';
 import { pixel } from './styles';
+import { useTaskMagic } from './taskMagicContext';
 
 /**
  * Controlled row-based editor for grooming tasks. Each row is a
@@ -13,6 +14,19 @@ import { pixel } from './styles';
  */
 export default function TaskRowsEditor({ rows, onChange, autoFocusFirst = false }) {
   const firstInputRef = useRef(null);
+  const wrapperRef = useRef(null);
+  const serial = useRef(rows.length);
+  const keys = useRef(rows.map((_, i) => i));
+  const added = useRef(false);
+  const { burst } = useTaskMagic();
+  while (keys.current.length < rows.length) keys.current.push(serial.current++);
+  useLayoutEffect(() => {
+    if (!added.current) return;
+    added.current = false;
+    const row = wrapperRef.current?.querySelector('[data-task-row]:last-of-type');
+    row?.querySelector('input')?.focus();
+    burst('add', row?.getBoundingClientRect(), 'New task');
+  }, [rows.length, burst]);
 
   const updateRow = (i, patch) => {
     const next = rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r));
@@ -20,10 +34,15 @@ export default function TaskRowsEditor({ rows, onChange, autoFocusFirst = false 
   };
 
   const addRow = () => {
+    keys.current.push(serial.current++);
+    added.current = true;
     onChange([...rows, { title: '', url: '' }]);
   };
 
   const removeRow = (i) => {
+    const row = wrapperRef.current?.querySelectorAll('[data-task-row]')[i];
+    burst('remove', row?.getBoundingClientRect(), rows[i].title);
+    keys.current.splice(i, 1);
     if (rows.length === 1) {
       onChange([{ title: '', url: '' }]);
       return;
@@ -39,9 +58,9 @@ export default function TaskRowsEditor({ rows, onChange, autoFocusFirst = false 
   };
 
   return (
-    <div data-task-rows-editor style={styles.wrapper}>
+    <div ref={wrapperRef} data-task-rows-editor style={styles.wrapper}>
       {rows.map((row, i) => (
-        <div key={i} style={styles.row} data-task-row>
+        <div key={keys.current[i]} style={styles.row} data-task-row className="task-row-enter">
           <input
             ref={i === 0 && autoFocusFirst ? firstInputRef : null}
             autoFocus={i === 0 && autoFocusFirst}

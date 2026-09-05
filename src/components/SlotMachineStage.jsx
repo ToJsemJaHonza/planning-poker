@@ -26,7 +26,7 @@ export default function SlotMachineStage({
     && phaseState.cabinetTransform !== 'offscreen';
 
   return (
-    <div style={styles.stage} data-cm-stage>
+    <div style={styles.stage} data-cm-stage data-cm-phase={phaseState.phase} data-cm-winner={pmRoulette.winnerId}>
       {/* Backdrop dim layer */}
       <div
         style={{

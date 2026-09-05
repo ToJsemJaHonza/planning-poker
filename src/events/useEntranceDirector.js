@@ -26,7 +26,9 @@
 
 import { useMemo, useRef } from 'react';
 import { computePlayerGridPosition } from '../engine/gridPosition';
-import { getGroundY } from '../engine/characterLayout';
+import { getGroundY, SPRITE_H } from '../engine/characterLayout';
+import { getMotionMode } from '../engine/motionProbe';
+import { easeInOutCubic } from '../engine/animation';
 
 // Cinematic-entrance walk duration (train door → grid, pipe mouth → grid).
 // 5× the old `useCinematicHandoff` pace so Richard / Tomáš stroll in
@@ -51,7 +53,7 @@ export function useEntranceDirector({ stage, players, markArrived }) {
   playersRef.current = players;
 
   return useMemo(() => ({
-    walkFromDoor({ playerId, door, duration, pose = 'walk' }) {
+    walkFromDoor({ playerId, door, duration, pose = 'walk', elapsed = 0 }) {
       if (!stage || !playerId || !door) return;
       const charId = `player-${playerId}`;
       const char = stage.get(charId);
@@ -62,10 +64,10 @@ export function useEntranceDirector({ stage, players, markArrived }) {
       // (set by usePlayerDirector's join walk-in), reuse it — that's the
       // slot computed from the live roster at the right moment. If not,
       // derive it from the current player roster.
-      let target = null;
-      if (char.action?.type === 'walkTo') {
+      let target = stage.getSlot(playerId) || null;
+      if (!target && char.action?.type === 'walkTo') {
         target = { x: char.action.x, y: char.action.y };
-      } else if (char.queue?.length) {
+      } else if (!target && char.queue?.length) {
         const next = char.queue.find((a) => a.type === 'walkTo');
         if (next) target = { x: next.x, y: next.y };
       }
@@ -86,15 +88,24 @@ export function useEntranceDirector({ stage, players, markArrived }) {
       const computedDuration = duration ?? (clampDuration(Math.round(distance * 6)) || DEFAULT_WALK_MS);
 
       char.interrupt();
-      char.teleport({ x: door.x, y: door.y });
+      if (getMotionMode() === 'reduced' || elapsed >= computedDuration) {
+        char.teleport(target);
+        char.hidden = false;
+        markArrivedRef.current?.(playerId);
+        return;
+      }
+      const progress = easeInOutCubic(Math.min(1, elapsed / computedDuration));
+      char.teleport({ x: door.x + dx * progress, y: door.y + dy * progress });
       char.hidden = false;
+      char.entranceWalking = true;
       // Facing: auto-flip on walkTo handles direction from dx.
       char.walkTo({
         x: target.x,
         y: target.y,
-        duration: computedDuration,
+        duration: Math.max(0, computedDuration - elapsed),
         pose,
         onDone: () => {
+          char.entranceWalking = false;
           markArrivedRef.current?.(playerId);
         },
       });
@@ -121,10 +132,9 @@ export function trainDoorPosition() {
   // figure anchors at bottom (210 + CAR_H + 16) with marginLeft -30 to
   // center 60px-wide container. After SPRITE_W redesign (50px) figure
   // width is 50 — keep center x at vw/2.
-  void vh;
   return {
     x: vw / 2,
-    y: getGroundY(),
+    y: vh - 210 - 16 - CAR_H / 2 - SPRITE_H / 2,
   };
 }
 

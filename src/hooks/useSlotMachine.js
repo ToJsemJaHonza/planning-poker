@@ -39,7 +39,7 @@ const DRIFT_TOLERANCE_MS = 500;
  * @param {() => void} [opts.onCeremonyComplete] called when phase reaches done
  * @returns {object} phaseState
  */
-export function useSlotMachine(ceremony, { onLeaderPromote, onCeremonyComplete, ceremonyStartPos, players } = {}) {
+export function useSlotMachine(ceremony, { onLeaderPromote, onCeremonyComplete, ceremonyStartPos, players, stage } = {}) {
   const [phaseState, setPhaseState] = useState(IDLE_STATE);
   const onLeaderPromoteRef = useRef(onLeaderPromote);
   const onCeremonyCompleteRef = useRef(onCeremonyComplete);
@@ -161,6 +161,11 @@ export function useSlotMachine(ceremony, { onLeaderPromote, onCeremonyComplete, 
     // Inject live players on each tick so crown removal/delivery resolve
     // positions from the current grid, not the frozen ceremony snapshot.
     ctx.players = playersRef.current;
+    ctx.playerPositions = stage?.slots;
+    if (typeof window !== 'undefined') {
+      ctx.viewportWidth = window.innerWidth;
+      ctx.viewportHeight = window.innerHeight;
+    }
 
     const nextState = computePhaseState(elapsed, ceremony, ctx);
     setPhaseState((prev) => (shallowEqual(prev, nextState) ? prev : nextState));

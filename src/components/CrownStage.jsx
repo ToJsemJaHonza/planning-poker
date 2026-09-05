@@ -95,32 +95,26 @@ export default function CrownStage({ stage, crownOwnership }) {
     );
   }
 
-  if (location === 'lifting') {
+  if (location === 'lifting' || location === 'arcing-to-player') {
+    const player = stage.get(`player-${playerId}`);
+    if (!player) return null;
+    const head = {
+      left: player.position.x - SPRITE_W / 2 + HEAD_OFFSET.left,
+      top: player.position.y - SPRITE_H / 2 + HEAD_OFFSET.top,
+    };
+    const hand = { left, top };
+    const from = location === 'lifting' ? head : hand;
+    const to = location === 'lifting' ? hand : head;
+    const t = Math.max(0, Math.min(1, progress || 0));
+    // The shared clock already interpolates each frame. A CSS transition
+    // here continually restarts, trails behind, then jumps at ownership swap.
     return (
       <Crown
         glowing={!!glowing}
         style={{
           position: 'fixed',
-          left,
-          top,
-          transform: `translate(0px, ${progress * -50}px)`,
-          transition: 'transform 300ms steps(12, end)',
-          zIndex: pmZ,
-        }}
-      />
-    );
-  }
-
-  if (location === 'arcing-to-player') {
-    return (
-      <Crown
-        glowing={!!glowing}
-        style={{
-          position: 'fixed',
-          left,
-          top,
-          transform: `translate(0px, ${progress * 45}px)`,
-          transition: 'transform 300ms steps(12, end)',
+          left: from.left + (to.left - from.left) * t,
+          top: from.top + (to.top - from.top) * t - Math.sin(Math.PI * t) * 24,
           zIndex: pmZ,
         }}
       />

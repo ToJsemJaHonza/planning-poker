@@ -1,8 +1,15 @@
 import { pixel } from './styles';
+import { useEventTimeline } from '../../engine/useEventTimeline';
+import { useMotionMode } from '../../engine/useMotionMode';
 
-export default function SpecialRoundOverlay() {
+export default function SpecialRoundOverlay({ timestamp }) {
+  const mode = useMotionMode();
+  const duration = mode === 'reduced' ? 600 : 2200;
+  const elapsed = useEventTimeline(timestamp, duration);
+  if (elapsed >= duration) return null;
+  const opacity = mode === 'reduced' ? 1 : Math.min(1, elapsed / 180, (duration - elapsed) / 300);
   return (
-    <div style={styles.specialOverlay}>
+    <div style={{ ...styles.specialOverlay, opacity }}>
       <div style={styles.specialContent}>
         <div style={styles.specialStars}>✦ ✦ ✦</div>
         <div style={styles.specialText}>SPECIAL</div>
@@ -23,7 +30,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 200,
-    animation: 'specialFade 2.2s ease-in-out forwards',
+    pointerEvents: 'none',
   },
   specialContent: {
     textAlign: 'center',
@@ -37,14 +44,14 @@ const styles = {
     animation: 'specialPulse 0.8s ease-in-out infinite',
   },
   specialText: {
-    fontSize: '2.5rem',
+    fontSize: 'clamp(1.4rem, 7vw, 2.5rem)',
     fontFamily: pixel,
     color: '#f5c542',
     textShadow: '4px 4px 0 #b8922e, -2px -2px 0 #fff3',
     letterSpacing: '6px',
   },
   specialText2: {
-    fontSize: '2.5rem',
+    fontSize: 'clamp(1.4rem, 7vw, 2.5rem)',
     fontFamily: pixel,
     color: '#fff',
     textShadow: '4px 4px 0 #333, -2px -2px 0 #fff3',

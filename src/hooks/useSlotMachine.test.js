@@ -412,7 +412,7 @@ describe('computePhaseState — compressed ceremony', () => {
 describe('computePhaseState — crown removal (Act 1)', () => {
   it('pmMode=ceremony during crownRemoval', () => {
     const ctx = buildContext();
-    const state = computePhaseState(500, mockCeremony, ctx);
+    const state = computePhaseState(500, { ...mockCeremony, outgoingLeaderHadCrown: true }, ctx);
     expect(state.pmMode).toBe('ceremony');
     expect(state.pmCeremonyBubble).not.toBeNull();
     expect(state.pmCeremonyPosition).not.toBeNull();
@@ -427,15 +427,16 @@ describe('computePhaseState — crown removal (Act 1)', () => {
 
   it('PM position moves during crown removal', () => {
     const ctx = buildContext();
-    const state0 = computePhaseState(0, mockCeremony, ctx);
-    const state500 = computePhaseState(500, mockCeremony, ctx);
+    const ceremony = { ...mockCeremony, outgoingLeaderHadCrown: true };
+    const state0 = computePhaseState(0, ceremony, ctx);
+    const state500 = computePhaseState(500, ceremony, ctx);
     // Position should have moved (y coordinate changes during vertical walk)
     expect(state500.pmCeremonyPosition.y).not.toBe(state0.pmCeremonyPosition.y);
   });
 
   it('leaderWalkOffTriggered is true at t=3000ms', () => {
     const ctx = buildContext();
-    const state = computePhaseState(3000, mockCeremony, ctx);
+    const state = computePhaseState(3000, { ...mockCeremony, outgoingLeaderHadCrown: true }, ctx);
     expect(state.leaderWalkOffTriggered).toBe(true);
   });
 
@@ -841,17 +842,18 @@ describe('computePhaseState — walk speed (Fix #5 regression)', () => {
 
   it('pmCeremonyPose alternates at 400ms intervals during crownRemoval walk', () => {
     const ctx = buildContext();
+    const ceremony = { ...mockCeremony, outgoingLeaderHadCrown: true };
     // During crownRemoval walk (0-2000ms), pose = floor(elapsed / 400) % 2
     // At elapsed=0:   floor(0/400)=0, 0%2=0 => walk1
     // At elapsed=399: floor(399/400)=0, 0%2=0 => walk1
     // At elapsed=400: floor(400/400)=1, 1%2=1 => walk2
     // At elapsed=799: floor(799/400)=1, 1%2=1 => walk2
     // At elapsed=800: floor(800/400)=2, 2%2=0 => walk1
-    const state0 = computePhaseState(0, mockCeremony, ctx);
-    const state399 = computePhaseState(399, mockCeremony, ctx);
-    const state400 = computePhaseState(400, mockCeremony, ctx);
-    const state799 = computePhaseState(799, mockCeremony, ctx);
-    const state800 = computePhaseState(800, mockCeremony, ctx);
+    const state0 = computePhaseState(0, ceremony, ctx);
+    const state399 = computePhaseState(399, ceremony, ctx);
+    const state400 = computePhaseState(400, ceremony, ctx);
+    const state799 = computePhaseState(799, ceremony, ctx);
+    const state800 = computePhaseState(800, ceremony, ctx);
 
     expect(state0.pmCeremonyPose).toBe('walk1');
     expect(state399.pmCeremonyPose).toBe('walk1');
@@ -862,12 +864,13 @@ describe('computePhaseState — walk speed (Fix #5 regression)', () => {
 
   it('walk frame period is NOT 280ms (pre-fix value would give different toggle points)', () => {
     const ctx = buildContext();
+    const ceremony = { ...mockCeremony, outgoingLeaderHadCrown: true };
     // If CEREMONY_WALK_FRAME_MS were 280 (the old value), elapsed=280 would toggle.
     // With 400ms, elapsed=280 is still in the first frame (walk1).
-    const state280 = computePhaseState(280, mockCeremony, ctx);
+    const state280 = computePhaseState(280, ceremony, ctx);
     expect(state280.pmCeremonyPose).toBe('walk1');
     // And at 400 it toggles (which it would NOT at exactly 400 if frame was 280)
-    const state400 = computePhaseState(400, mockCeremony, ctx);
+    const state400 = computePhaseState(400, ceremony, ctx);
     expect(state400.pmCeremonyPose).toBe('walk2');
   });
 });
@@ -1185,9 +1188,7 @@ describe('computePhaseState — disconnected outgoing leader (v7 injection)', ()
     expect(state.pmCeremonyPosition.y).toBeCloseTo(expectedWinnerPos.y, 0);
   });
 
-  it('crownDelivery compressed: start position uses outgoing leader grid slot (not center)', () => {
-    // In compressed ceremonies, PM walks directly from old leader to winner.
-    // If old leader disconnected, start position should still be their grid slot.
+  it('crownDelivery compressed: starts exactly where crown removal finished', () => {
     const compressedCeremony = {
       ...disconnectedCeremony,
       wasCompressed: true,
@@ -1209,15 +1210,12 @@ describe('computePhaseState — disconnected outgoing leader (v7 injection)', ()
       },
     });
     // crownDelivery in compressed starts at 5000.
-    // At phaseElapsed=0, PM should be at old-leader's grid position (start).
+    // No teleport from the completed return walk to the old leader's slot.
     const state = computePhaseState(5000, compressedCeremony, ctx);
     expect(state.phase).toBe('crownDelivery');
 
-    // Outgoing leader sorted index 0 in 4 players
-    const outgoingGridPos = computePlayerGridPosition(0, 4, 1440);
-    // At phaseElapsed=0 (start of walk), PM should be at start position
-    expect(state.pmCeremonyPosition.x).toBeCloseTo(outgoingGridPos.x, 0);
-    expect(state.pmCeremonyPosition.y).toBeCloseTo(outgoingGridPos.y, 0);
+    const previous = computePhaseState(4999, compressedCeremony, ctx);
+    expect(state.pmCeremonyPosition).toEqual(previous.pmCeremonyPosition);
   });
 
   it('injection does NOT duplicate when outgoing leader is still connected', () => {

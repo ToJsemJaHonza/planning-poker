@@ -90,6 +90,18 @@ describe('TaskListPanel — rendering', () => {
 });
 
 describe('TaskListPanel — leader interactions', () => {
+  it('keeps the draft and reports a failed save, then allows retry', async () => {
+    const onEdit = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce();
+    const { container, getByRole } = render(<TaskListPanel taskList={sampleList} isLeader onEdit={onEdit} />);
+    fireEvent.click(container.querySelector('[data-task-panel-edit-btn]'));
+    fireEvent.change(container.querySelector('[data-task-title-input]'), { target: { value: 'Preserve my draft' } });
+    fireEvent.click(container.querySelector('[data-task-panel-save]'));
+    await waitFor(() => expect(getByRole('alert').textContent).toContain('Your draft is kept'));
+    expect(container.querySelector('[data-task-title-input]').value).toBe('Preserve my draft');
+    fireEvent.click(container.querySelector('[data-task-panel-save]'));
+    await waitFor(() => expect(container.querySelector('[data-task-panel-edit]')).toBeNull());
+    expect(onEdit).toHaveBeenCalledTimes(2);
+  });
   it('leader clicking a pending item calls onSetActive with its id', () => {
     const onSetActive = vi.fn();
     const { container } = render(

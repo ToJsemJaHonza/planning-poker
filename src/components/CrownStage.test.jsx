@@ -85,53 +85,23 @@ describe('CrownStage', () => {
     expect(el.style.left).toBe(`${expected}px`);
   });
 
-  it('lifting: applies negative-y transform scaled by progress', () => {
-    // REGRESSION: before CrownStage existed, the crown rendered in two
-    // places — a player-head painter (which cleared itself the instant
-    // the outgoing-leader director saw the ceremony start) and the
-    // PM-ceremony painter (which only started showing the crown once
-    // lifting had already begun). There was a gap — sometimes a whole
-    // frame — where the crown vanished mid-ceremony. With a single
-    // CrownStage driven by the canonical crownOwnership, `lifting` is
-    // ALWAYS anchored to the PM's hand and moves smoothly upward from
-    // there. The y-offset must be strictly negative for progress > 0.
-    stage.add({
-      id: 'pm',
-      sprite: 'pm',
-      position: { x: 200, y: 800 },
-      facingLeft: false,
-    });
-    const { container } = render(
-      <CrownStage
-        stage={stage}
-        crownOwnership={{ location: 'lifting', playerId: null, progress: 0.5, glowing: true }}
-      />
-    );
-    const el = crownEl(container);
-    expect(el).not.toBeNull();
-    // transform lifts by progress * 50 = 25px upward.
-    expect(el.style.transform).toBe('translate(0px, -25px)');
-    // The anchor stays the PM hand (absolute left/top) even mid-lift —
-    // that's the invariant that prevents the mid-air disappearance.
-    expect(el.style.left).toBe('215px');
-    expect(el.style.top).toBe('785px');
-  });
-
-  it('arcing-to-player: transform y is positive (crown descends toward target head)', () => {
-    stage.add({
-      id: 'pm',
-      sprite: 'pm',
-      position: { x: 200, y: 800 },
-      facingLeft: false,
-    });
-    const { container } = render(
-      <CrownStage
-        stage={stage}
-        crownOwnership={{ location: 'arcing-to-player', playerId: 'p0', progress: 0.4, glowing: true }}
-      />
-    );
-    const el = crownEl(container);
-    expect(el.style.transform).toBe('translate(0px, 18px)');
+  it.each(['lifting', 'arcing-to-player'])('%s follows a continuous head-to-hand arc without a trailing transition', location => {
+    stage.add({ id: 'pm', sprite: 'pm', position: { x: 200, y: 800 } });
+    stage.add({ id: 'player-p0', sprite: 'player', position: { x: 400, y: 300 } });
+    const head = { left: 392, top: 243 };
+    const hand = { left: 215, top: 785 };
+    const from = location === 'lifting' ? head : hand;
+    const to = location === 'lifting' ? hand : head;
+    const { container, rerender } = render(<CrownStage stage={stage} crownOwnership={{ location, playerId: 'p0', progress: 0 }} />);
+    expect(crownEl(container).style.left).toBe(from.left + 'px');
+    expect(crownEl(container).style.top).toBe(from.top + 'px');
+    rerender(<CrownStage stage={stage} crownOwnership={{ location, playerId: 'p0', progress: 0.5 }} />);
+    expect(parseFloat(crownEl(container).style.left)).toBe((from.left + to.left) / 2);
+    expect(parseFloat(crownEl(container).style.top)).toBe((from.top + to.top) / 2 - 24);
+    expect(crownEl(container).style.transition).toBe('');
+    rerender(<CrownStage stage={stage} crownOwnership={{ location, playerId: 'p0', progress: 1 }} />);
+    expect(parseFloat(crownEl(container).style.left)).toBeCloseTo(to.left);
+    expect(parseFloat(crownEl(container).style.top)).toBeCloseTo(to.top);
   });
 
   it('materializing: applies the materialize CSS class', () => {

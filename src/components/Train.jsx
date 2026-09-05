@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { pixel } from './room/styles';
 import {
   NOSE, MID, TREE,
@@ -7,11 +7,11 @@ import {
   spriteToShadows, flipGrid,
 } from '../sprites/trainSprites';
 import { trainDoorPosition } from '../events/useEntranceDirector';
+import { useEventTimeline, timelinePhase } from '../engine/useEventTimeline';
+import { getMotionMode } from '../engine/motionProbe';
 
-export default function Train({ fromRight, playerId, playerName, onPlayerExit, onDone, entranceDirector }) {
-  const [phase, setPhase] = useState('rails');
-  const [showDust, setShowDust] = useState(false);
-  const [signalRed, setSignalRed] = useState(false);
+export default function Train({ fromRight, playerId, playerName, onPlayerExit, onDone, entranceDirector, timestamp }) {
+  const fired = useRef(new Set());
   const trainRef = useRef(null);
 
   // Keep latest callbacks in refs so the animation effect doesn't restart on re-render.
@@ -50,64 +50,45 @@ export default function Train({ fromRight, playerId, playerName, onPlayerExit, o
   const signalRedShadow = useMemo(() => spriteToShadows(SIGNAL_LAMP_RED, 3).join(','), []);
   const pantographShadow = useMemo(() => spriteToShadows(PANTOGRAPH, 3).join(','), []);
 
-  useEffect(() => {
-    const timers = [
-      // t=400: station sign slides into view; signal lamp starts blinking
-      setTimeout(() => setPhase('approach'), 400),
-      // t=1200: horn beat (600 ms) — train not yet in frame, but we hear it arriving
-      setTimeout(() => setPhase('horn'), 1200),
-      // t=1800: train slides in (3 s arrival animation)
-      setTimeout(() => setPhase('arrive'), 1800),
-      // t=4800: fully stopped
-      setTimeout(() => setPhase('stopped'), 4800),
-      // t=5100: doors open — 300 ms white flash at door line
-      setTimeout(() => setPhase('doorsOpen'), 5100),
-      // t=5400: speech bubble above train
-      setTimeout(() => setPhase('bubble'), 5400),
-      // t=7000: Richard steps out — the entrance director teleports his persistent
-      // character to the train door and starts its walk to the grid slot.
-      setTimeout(() => {
-        setPhase('exit');
-        const door = trainDoorPosition();
-        directorRef.current?.walkFromDoor({
-          playerId: richardId,
-          door,
-          onArrived: () => onPlayerExitRef.current?.(),
-        });
-      }, 7000),
-      // t=9000: wave beat — Richard gives the train a goodbye wave
-      setTimeout(() => setPhase('wave'), 9000),
-      // t=10000: train departs (2.5 s depart animation)
-      setTimeout(() => setPhase('depart'), 10000),
-      // t=10200: dust puff kicks up ~400 ms before arrival fires
-      setTimeout(() => setShowDust(true), 10200),
-      // t=10600: arrival — the director's walkTo onDone also calls markArrived,
-      // but we fire onPlayerExit here too (idempotent) so unit tests without a
-      // stage still observe the call.
-      setTimeout(() => {
-        setShowDust(false);
-        onPlayerExitRef.current?.();
-      }, 10600),
-      // t=12500: rails fade
-      setTimeout(() => setPhase('fadeRails'), 12500),
-      // t=13500: full cleanup — tell parent to unmount
-      setTimeout(() => { setPhase('done'); onDoneRef.current?.(); }, 13500),
-    ];
-    // Signal lamp blink: alternate every 400 ms from approach until depart
-    const blinkInterval = setInterval(() => setSignalRed((r) => !r), 400);
-    return () => {
-      timers.forEach(clearTimeout);
-      clearInterval(blinkInterval);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const elapsed = useEventTimeline(timestamp, 13500, time => {
+    if (time >= 7000 && !fired.current.has('exit')) {
+      fired.current.add('exit');
+      directorRef.current?.walkFromDoor({
+        playerId: richardId, door: trainDoorPosition(),
+        elapsed: Math.max(0, time - 7000),
+      });
+    }
+    if (time >= 10600 && !fired.current.has('arrived')) {
+      fired.current.add('arrived');
+      if (!directorRef.current) onPlayerExitRef.current?.();
+    }
+    if (time >= 13500 && !fired.current.has('done')) {
+      fired.current.add('done');
+      onDoneRef.current?.();
+    }
+  });
+  const phase = timelinePhase(elapsed, [
+    [0, 'rails'], [400, 'approach'], [1200, 'horn'], [1800, 'arrive'],
+    [4800, 'stopped'], [5100, 'doorsOpen'], [5400, 'bubble'], [7000, 'exit'],
+    [9000, 'wave'], [10000, 'depart'], [12500, 'fadeRails'], [13500, 'done'],
+  ]);
+  const showDust = elapsed >= 10200 && elapsed < 10600;
+  const signalRed = Math.floor(elapsed / 400) % 2 === 1;
+  const vw = typeof window === 'undefined' ? 1440 : window.innerWidth;
+  const stopLeft = (vw - TOTAL_W) / 2;
+  const arrival = Math.max(0, Math.min(1, (elapsed - 1800) / 3000));
+  const departure = Math.max(0, Math.min(1, (elapsed - 10000) / 2500));
+  const offLeft = fromRight ? vw + TOTAL_W : -TOTAL_W;
+  const exitLeft = fromRight ? -TOTAL_W : vw + TOTAL_W;
+  const trainX = elapsed < 4800
+    ? offLeft + (stopLeft - offLeft) * (1 - (1 - arrival) ** 3)
+    : stopLeft + (exitLeft - stopLeft) * departure ** 3;
 
   if (phase === 'done') return null;
 
   const beforeArrive = ['rails', 'approach', 'horn'].includes(phase);
   const showTrain = !['rails', 'fadeRails', 'done'].includes(phase) && !beforeArrive;
   const railsFading = phase === 'fadeRails';
-  const stopX = `calc(50% - ${TOTAL_W / 2}px)`;
   const trees = [40, 140, 280, 420, 560, 700];
 
   // Station sign + signal lamp are visible from `approach` until `depart` begins.
@@ -260,14 +241,13 @@ export default function Train({ fromRight, playerId, playerName, onPlayerExit, o
         {showTrain && (
           <div
             ref={trainRef}
+            data-train-motion
             style={{
               ...styles.train, width: TOTAL_W,
-              transform: fromRight ? 'scaleX(-1)' : 'scaleX(1)',
-              ...(phase === 'arrive' ? {
-                animation: `trainArrive${fromRight ? 'Right' : 'Left'} 3s ease-out forwards`,
-              } : phase === 'depart' ? {
-                animation: `trainDepart${fromRight ? 'Right' : 'Left'} 2.5s ease-in forwards`,
-              } : { left: stopX }),
+              left: 0,
+              transform: `translateX(${trainX}px) scaleX(${fromRight ? -1 : 1})`,
+              visibility: getMotionMode() === 'reduced' ? 'hidden' : 'visible',
+
             }}
           >
             <div style={{ width: 1, height: 1, boxShadow: trainShadow, position: 'absolute', top: 0, left: 0 }} />

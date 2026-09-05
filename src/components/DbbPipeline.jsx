@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { pixel } from './room/styles';
+import { useEventTimeline, timelinePhase } from '../engine/useEventTimeline';
+import { getMotionMode } from '../engine/motionProbe';
 import {
   DBB, THICKNESS,
   horizontalSegmentStyle, verticalSegmentStyle,
@@ -99,9 +101,8 @@ export function buildPipePath(fromSide, viewport) {
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export default function DbbPipeline({ fromSide = 'top', playerId, playerName, onPlayerExit, onDone, entranceDirector }) {
-  const [phase, setPhase] = useState('hidden');
-  const [showArrivalBubble, setShowArrivalBubble] = useState(false);
+export default function DbbPipeline({ fromSide = 'top', playerId, playerName, onPlayerExit, onDone, entranceDirector, timestamp }) {
+  const fired = useRef(new Set());
   const pipeGroupRef = useRef(null);
 
   const onPlayerExitRef = useRef(onPlayerExit);
@@ -129,66 +130,43 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
   pipePathRef.current = pipePath;
   const targetKey = playerId || playerName;
 
-  useEffect(() => {
-    const timers = [];
-    // t=200: pipe starts sliding in
-    timers.push(setTimeout(() => setPhase('slideIn'), 200));
-    // t=1600: bolt bands fade in (decorative; pipe now looks bolted-down)
-    timers.push(setTimeout(() => setPhase('bolt'), 1600));
-    // t=2200: bubble appears (alone, no plate yet)
-    timers.push(setTimeout(() => setPhase('bubble'), 2200));
-    // t=3600: bubble starts fading out
-    timers.push(setTimeout(() => setPhase('bubbleOut'), 3600));
-    // t=4000: pipe rumbles — screen-local shake on the pipe group before emerge
-    timers.push(setTimeout(() => setPhase('rumble'), 4000));
-    // t=4300: packets stream through the pipe (build-up to emerge)
-    timers.push(setTimeout(() => setPhase('packetFlow'), 4300));
-    // t=4800: plate appears, emerge visual plays (character handled below)
-    timers.push(setTimeout(() => { setPhase('emerge'); }, 4800));
-    // t=5600: Tomáš steps out of the pipe — director teleports the
-    // persistent character to the pipe mouth and walks it to its grid slot.
-    timers.push(setTimeout(() => {
-      setPhase('walk');
+  const elapsed = useEventTimeline(timestamp, 10700, time => {
+    if (time >= 5600 && !fired.current.has('exit')) {
+      fired.current.add('exit');
       const mouth = pipePathRef.current?.mouth;
-      if (mouth && directorRef.current) {
-        directorRef.current.walkFromDoor({
-          playerId: targetKey,
-          door: { x: mouth.x, y: mouth.y },
-        });
-      }
-    }, 5600));
-    // t=7900: pipe starts retracting.
-    timers.push(setTimeout(() => setPhase('slideOut'), 7900));
-    // t=8100: arrival bubble + onPlayerExit fallback. In production the
-    // director's walkTo onDone has already fired markArrived; the manual
-    // call here is idempotent and keeps unit tests without a stage
-    // working.
-    timers.push(setTimeout(() => {
-      setShowArrivalBubble(true);
-      setTimeout(() => setShowArrivalBubble(false), 1600);
-      onPlayerExitRef.current?.();
-    }, 8100));
-    // t=10700: done
-    timers.push(setTimeout(() => { setPhase('done'); onDoneRef.current?.(); }, 10700));
-    return () => timers.forEach(clearTimeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      if (mouth) directorRef.current?.walkFromDoor({
+        playerId: targetKey, door: { x: mouth.x, y: mouth.y },
+        elapsed: Math.max(0, time - 5600),
+      });
+    }
+    if (time >= 8100 && !fired.current.has('arrived')) {
+      fired.current.add('arrived');
+      if (!directorRef.current) onPlayerExitRef.current?.();
+    }
+    if (time >= 10700 && !fired.current.has('done')) {
+      fired.current.add('done');
+      onDoneRef.current?.();
+    }
+  });
+  const phase = timelinePhase(elapsed, [
+    [0, 'hidden'], [200, 'slideIn'], [1600, 'bolt'], [2200, 'bubble'],
+    [3600, 'bubbleOut'], [4000, 'rumble'], [4300, 'packetFlow'],
+    [4800, 'emerge'], [5600, 'walk'], [7900, 'slideOut'], [10700, 'done'],
+  ]);
+  const showArrivalBubble = elapsed >= 8100 && elapsed < 9700;
 
   if (phase === 'done') return null;
 
   const { segments, mouth, middleSegment } = pipePath;
   const lastIdx = segments.length - 1;
 
-  const edgeOffscreen = {
-    top:    'translate(0, -120vh)',
-    bottom: 'translate(0,  120vh)',
-    left:   'translate(-120vw, 0)',
-    right:  'translate( 120vw, 0)',
-  }[fromSide];
-
-  const groupTransform = (phase === 'hidden' || phase === 'slideOut')
-    ? edgeOffscreen
-    : 'translate(0, 0)';
+  const entryProgress = Math.max(0, Math.min(1, (elapsed - 200) / 1400));
+  const exitProgress = Math.max(0, Math.min(1, (elapsed - 7900) / 1400));
+  const offset = elapsed < 7900 ? (1 - entryProgress) ** 3 : exitProgress ** 3;
+  const dx = fromSide === 'left' ? -viewport.w * 1.2 : fromSide === 'right' ? viewport.w * 1.2 : 0;
+  const dy = fromSide === 'top' ? -viewport.h * 1.2 : fromSide === 'bottom' ? viewport.h * 1.2 : 0;
+  const rumble = elapsed >= 4000 && elapsed < 4800 ? Math.sin(elapsed / 25) * 2 : 0;
+  const groupTransform = `translate(${dx * offset + rumble}px, ${dy * offset}px)`;
 
   // Decorators become visible once the pipe has landed.
   const showDecorators = !['hidden', 'slideIn', 'slideOut'].includes(phase);
@@ -284,12 +262,12 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
       <div
         ref={pipeGroupRef}
         data-dbb-pipe-group
-        className={isRumbling ? 'dbb-rumble' : undefined}
+        data-rumbling={isRumbling || undefined}
         style={{
           position: 'absolute',
           inset: 0,
           transform: groupTransform,
-          transition: 'transform 1.4s cubic-bezier(.2, .8, .2, 1)',
+          visibility: getMotionMode() === 'reduced' ? 'hidden' : 'visible',
           pointerEvents: 'none',
         }}
       >

@@ -851,8 +851,16 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
       nextActiveId = firstPending ? firstPending.id : null;
     }
 
+    const removed = Object.entries(existingItems).filter(([id]) => !nextItems[id]).map(([id, item]) => ({ id, title: item.title }));
+    const addedIds = Object.keys(nextItems).filter(id => !existingItems[id]);
+    const startedAt = Date.now();
     const updates = {
-      [`rooms/${roomCode}/meta/taskList`]: { activeId: nextActiveId, items: nextItems },
+      [`rooms/${roomCode}/meta/taskList`]: {
+        activeId: nextActiveId, items: nextItems,
+        effect: removed.length || addedIds.length
+          ? { id: `tasks-${startedAt}-${Math.random().toString(36).slice(2, 8)}`, startedAt, removed, addedIds }
+          : null,
+      },
     };
     // Keep meta/task mirrored to the active item's title (or empty).
     if (nextActiveId && nextItems[nextActiveId]) {

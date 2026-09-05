@@ -24,7 +24,8 @@
  * useLayoutEffect that mirrors the current view-model.
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useMotionMode } from '../engine/useMotionMode';
 import { computePlayerGridPosition } from '../engine/gridPosition';
 import { SPRITE_W } from '../engine/characterLayout';
 import { hashDir } from '../components/playerList.utils';
@@ -46,6 +47,8 @@ const LEADER_WALK_OFF_MS = 12500;   // outgoing leader walking off after coronat
 // figure left by the server). Wide enough to absorb slow Firebase cold
 // boots; narrower than any realistic "just joined" case.
 const JOIN_WINDOW_MS = 5000;
+const noSubscribe = () => () => {};
+const zeroVersion = () => 0;
 
 // sessionStorage key — marks a character as "already walked in during this
 // tab session". Survives a hard refresh (same tab, same sessionStorage) but
@@ -140,6 +143,8 @@ export function usePlayerDirector({
   hiddenPlayers = null,
   roomCode = null,
 }) {
+  const motionMode = useMotionMode();
+  const layoutVersion = useSyncExternalStore(stage?.subscribeLayout || noSubscribe, stage?.getLayoutVersion || zeroVersion, zeroVersion);
   // Canonical roster shared with `usePlayerModels` — same helper, same
   // rules. That guarantees a character's index on the stage matches the
   // index of its card in the grid, so every name tag sits directly
@@ -193,7 +198,7 @@ export function usePlayerDirector({
         const displayName = data.name || id;
         const dir = safeHashDir(displayName).dir;
         const index = indexById.get(id) ?? 0;
-        const target = slotCenter(index, gridCount || 1, vw);
+        const target = stage.getSlot(id) || slotCenter(index, gridCount || 1, vw);
         const startHidden = hiddenPlayers?.has(id) || false;
         // Genuine fresh join (walk in from offscreen) vs. reconnect /
         // refresh / already-present player (place directly at slot).
@@ -210,7 +215,7 @@ export function usePlayerDirector({
         const alreadyWalkedIn = hasWalkedInThisSession(roomCode, charId);
         const joinedAt = typeof data.joinedAt === 'number' ? data.joinedAt : 0;
         const age = Date.now() - joinedAt;
-        const isFreshJoin = !alreadyWalkedIn && joinedAt > 0 && age <= JOIN_WINDOW_MS;
+        const isFreshJoin = motionMode !== 'reduced' && !alreadyWalkedIn && joinedAt > 0 && age >= 0 && age <= JOIN_WINDOW_MS;
         const startX = isFreshJoin ? offscreenX(dir, vw) : target.x;
         stage.add({
           id: charId,
@@ -240,6 +245,7 @@ export function usePlayerDirector({
         const charId = `player-${id}`;
         const char = stage.get(charId);
         if (!char) continue;
+        if (motionMode === 'reduced') { stage.remove(charId); continue; }
         const data = lastDataRef.current[id] || { name: id };
         // Outgoing leader → their walk-off is driven by the ceremony
         // branch below, not by the normal leave handler.
@@ -247,6 +253,7 @@ export function usePlayerDirector({
         const enterDir = safeHashDir(data.name || id).dir;
         const exitDir = enterDir === 'left' ? 'right' : 'left';
         const exitX = offscreenX(exitDir, vw);
+        char.leaving = true;
         char.interrupt();
         char.walkTo({
           x: exitX, y: char.position.y, duration: LEAVE_WALK_MS,
@@ -267,14 +274,23 @@ export function usePlayerDirector({
       if (!char) continue;
       // Skip characters still walking in from offscreen; they'll land on
       // their up-to-date slot via the join walkTo above.
+      const target = stage.getSlot(id) || slotCenter(i, sortedPlayers.length, vw);
+      if (motionMode === 'reduced') { char.teleport(target); continue; }
+      if (char.entranceWalking) continue;
+      // Returning during walk-out must cancel the stale remove callback.
+      if (char.leaving) {
+        char.leaving = false;
+        char.interrupt();
+        char.walkTo({ ...target, duration: RESHUFFLE_MS });
+        continue;
+      }
       if (!knownIdsRef.current.has(id)) continue;
-      const target = slotCenter(i, sortedPlayers.length, vw);
       const dx = target.x - char.position.x;
       const dy = target.y - char.position.y;
       const distance = Math.hypot(dx, dy);
-      if (distance > 2) {
-        const action = char.action;
-        const aiming = action?.type === 'walkTo' && Math.abs(action.x - target.x) < 1 && Math.abs(action.y - target.y) < 1;
+      if (distance > 0.1) {
+        const action = char.action || char.queue.find(a => a.type === 'walkTo');
+        const aiming = action?.type === 'walkTo' && Math.abs(action.x - target.x) < 0.1 && Math.abs(action.y - target.y) < 0.1;
         if (!aiming) {
           const duration = Math.max(RESHUFFLE_MS, Math.min(3000, Math.round(distance * SPEED_MS_PER_PX)));
           char.interrupt();
@@ -284,7 +300,7 @@ export function usePlayerDirector({
     }
 
     knownIdsRef.current = currentSet;
-  }, [liveIds, sortedPlayers, pmRoulette?.outgoingLeaderId, indexById, stage, hiddenPlayers, vw]);
+  }, [liveIds, sortedPlayers, pmRoulette?.outgoingLeaderId, indexById, stage, hiddenPlayers, vw, layoutVersion, motionMode, roomCode]);
 
   // ── Outgoing-leader walk-off (post-ceremony) ─────────────────────────────
   //
@@ -314,13 +330,14 @@ export function usePlayerDirector({
         const id = char.id.replace(/^player-/, '');
         if (currentSet.has(id)) continue;
         const charId = char.id;
-        if (id === outgoingId) {
+        if (id === outgoingId && motionMode !== 'reduced') {
           // Outgoing leader: walk them off ceremoniously now that the
           // new leader has been crowned.
           const data = lastDataRef.current[id] || { name: id };
           const enterDir = safeHashDir(data.name || id).dir;
           const exitDir = enterDir === 'left' ? 'right' : 'left';
           const exitX = offscreenX(exitDir, getViewportWidth());
+          char.leaving = true;
           char.interrupt();
           char.walkTo({
             x: exitX, y: char.position.y, duration: LEADER_WALK_OFF_MS,
@@ -336,7 +353,7 @@ export function usePlayerDirector({
       lastOutgoingLeaderIdRef.current = null;
     }
     hadCeremonyRef.current = hasCeremony;
-  }, [pmRoulette, sortedPlayers, stage]);
+  }, [pmRoulette, sortedPlayers, stage, motionMode]);
 
   // ── Slow-state mirror: shame tremble, nod, fukEyes, stress ─────────────
   // Crown state is intentionally NOT mirrored here. CrownStage is the sole
@@ -371,7 +388,7 @@ export function usePlayerDirector({
         ? 'player-nod'
         : '';
       char.className = [trembleClass, nodClass].filter(Boolean).join(' ');
-      if (hiddenPlayers && hiddenPlayers.has(id)) char.hidden = true;
+      if (hiddenPlayers && hiddenPlayers.has(id) && !char.entranceWalking) char.hidden = true;
       else if (char.hidden && (!hiddenPlayers || !hiddenPlayers.has(id))) char.hidden = false;
     }
 

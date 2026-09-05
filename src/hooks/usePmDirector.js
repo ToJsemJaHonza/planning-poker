@@ -188,19 +188,24 @@ export function usePmDirector({
     if (motionMode === 'reduced') {
       const vw = typeof window !== 'undefined' ? window.innerWidth : 1440;
       const { minX } = getIdleWalkBounds(vw);
-      pmChar.teleport({ x: minX, y: getGroundY() });
+      pmChar.teleport({ x: minX, y: stage.groundY ?? getGroundY() });
       return undefined;
     }
 
-    return subscribeMotion(() => {
+    let lastFrame = null;
+    return subscribeMotion((now) => {
       if (!pmChar) return;
       const vw = typeof window !== 'undefined' ? window.innerWidth : 1440;
       const cycleTime = Date.now() - cycleOriginRef.current;
       const { x, facingLeft } = computeIdleCenter(cycleTime, vw);
-      pmChar.position = { x, y: getGroundY() };
+      const ground = stage.groundY ?? getGroundY();
+      const delta = lastFrame == null ? 16 : Math.min(64, now - lastFrame);
+      lastFrame = now;
+      const y = pmChar.position.y + (ground - pmChar.position.y) * (1 - Math.exp(-delta / 90));
+      pmChar.position = { x, y: Math.abs(y - ground) < 0.1 ? ground : y };
       pmChar.facingLeft = facingLeft;
     });
-  }, [pmChar, ceremonyActive, motionMode]);
+  }, [pmChar, ceremonyActive, motionMode, stage]);
 
   // Resize handling: during ceremony, keep the y anchored to the ground
   // (ceremony x/y is computed elsewhere; we trust it). During idle the rAF
@@ -209,12 +214,14 @@ export function usePmDirector({
     if (!pmChar) return undefined;
     const onResize = () => {
       if (!pmChar) return;
-      if (!ceremonyActive) return;
-      pmChar.position = { x: pmChar.position.x, y: getGroundY() };
+      if (ceremonyActive) return;
+      // Preserve the current x when the walk range changes on resize.
+      cycleOriginRef.current = Date.now() - cycleTimeFromPosition(pmChar.position.x, pmChar.facingLeft, window.innerWidth);
+      pmChar.position = { x: pmChar.position.x, y: stage.groundY ?? getGroundY() };
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [pmChar, ceremonyActive]);
+  }, [pmChar, ceremonyActive, stage]);
 
   // ── Ceremony mirror ──────────────────────────────────────────────────────
   // On every render that a ceremony is active, copy the computed
@@ -230,6 +237,8 @@ export function usePmDirector({
 
     // Idle: write thinking-loop outputs into the character.
     if (!ceremonyActive) {
+      pmChar.zIndex = 35;
+      if (motionMode === 'reduced') pmChar.position.y = stage.groundY ?? getGroundY();
       pmChar.pose = pmModel.pose === 'think' ? 'think' : 'walk';
       pmChar.walkFrame = pmModel.walkFrame;
       pmChar.bubble = pmModel.showBubble && pmModel.bubble

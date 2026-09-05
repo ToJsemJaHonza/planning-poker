@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { spriteToBoxShadow } from '../engine/sprite';
 import { pixel } from './room/styles';
+import { useEventTimeline } from '../engine/useEventTimeline';
+import { useMotionMode } from '../engine/useMotionMode';
 
 const _ = null;
 const W = '#f0f0f0'; // wool white
@@ -23,17 +25,22 @@ const SHEEP = [
 
 const PX = 5;
 
-export default function Sheep() {
+export default function Sheep({ timestamp }) {
+  const mode = useMotionMode();
+  const elapsed = useEventTimeline(timestamp, 4000);
   const shadow = useMemo(() => spriteToBoxShadow(SHEEP, PX), []);
+  if (mode === 'reduced' || elapsed >= 4000) return null;
+  const progress = elapsed / 4000;
+  const vw = typeof window === 'undefined' ? 1440 : window.innerWidth;
 
   return (
     <div style={styles.container}>
       {/* The text */}
-      <div className="sheep-text" style={styles.text}>
+      <div className="sheep-text" style={{ ...styles.text, transform: `translateX(${vw * 2.2 * progress}px)` }}>
         OKTAAAAAAAAAAAAAAA!!!!
       </div>
       {/* The sheep */}
-      <div className="sheep-run" style={styles.sheep}>
+      <div className="sheep-run" style={{ ...styles.sheep, left: 0, top: '45%', transform: `translate(${(vw + 120) * progress - 60}px, ${Math.sin(progress * Math.PI * 10) * 12}px)` }}>
         <div style={{ width: 1, height: 1, boxShadow: shadow, position: 'absolute', top: 0, left: 0 }} />
       </div>
     </div>
@@ -52,7 +59,6 @@ const styles = {
     position: 'absolute',
     width: 10 * PX,
     height: 8 * PX,
-    animation: 'sheepRun 4s linear forwards',
   },
   text: {
     position: 'absolute',
@@ -63,6 +69,5 @@ const styles = {
     color: '#e03030',
     textShadow: '3px 3px 0 #222',
     whiteSpace: 'nowrap',
-    animation: 'sheepTextRun 4s linear forwards',
   },
 };

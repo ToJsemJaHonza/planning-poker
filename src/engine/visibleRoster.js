@@ -35,7 +35,7 @@ export function buildVisibleRoster(players, pmRoulette) {
 
   const outgoingId = pmRoulette?.outgoingLeaderId;
   const outgoingData = pmRoulette?.outgoingLeaderLastData;
-  if (!outgoingId || !outgoingData) return entries;
+  if (!outgoingId || !outgoingData || outgoingData.role === 'pm') return entries;
   if (entries.some(([id]) => id === outgoingId)) return entries;
 
   const rawPlayer = players?.[outgoingId];
