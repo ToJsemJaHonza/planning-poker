@@ -32,7 +32,7 @@ describe('room reliability', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(firebase, 'get').mockRejectedValueOnce(new Error('Permission denied'));
     const { result } = renderHook(() => useRoom('REVIEW', 'me', 'Alex'));
-    await waitFor(() => expect(result.current.connectionError).toMatch(/Could not connect/));
+    await waitFor(() => expect(result.current.connectionError).toMatch(/access was denied/));
     expect(result.current.connected).toBe(false);
     expect(result.current.players).toEqual({});
   });

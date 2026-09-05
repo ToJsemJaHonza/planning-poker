@@ -9,6 +9,7 @@ import {
 } from '../events/slotMachine';
 import { computeStats, roundToCard } from '../components/resultModal.utils';
 import { normalizeUrl } from '../components/urls.utils';
+import { connectionErrorMessage } from '../engine/connectionError';
 
 // Important events are mutually exclusive cinematics — once one is playing
 // in a room, nothing (not even another important event) can overwrite it
@@ -259,7 +260,7 @@ export function useRoom(roomCode, playerId, playerName, role = 'player', initial
       })().catch((err) => {
         if (!isCurrent()) return;
         console.error('[useRoom] connection setup failed', err);
-        setConnectionError('Could not connect to this room. Check your connection and try again.');
+        setConnectionError(connectionErrorMessage(err));
       });
     });
 
