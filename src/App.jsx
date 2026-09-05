@@ -4,7 +4,7 @@ import Landing from './components/Landing';
 import Room from './components/Room';
 import FigureGallery from './components/FigureGallery';
 import ErrorBoundary from './components/ErrorBoundary';
-import { readPreference, savePreference } from './engine/storage';
+import { readPreference } from './engine/storage';
 
 // Room codes are strictly 6 uppercase alphanumerics (see generateRoomCode).
 // We validate here to prevent a crafted `?room=FOO/bar/..` from being
@@ -51,7 +51,9 @@ export default function App() {
   );
   const [playerId] = useState(getOrCreatePlayerId);
   const [roomCode, setRoomCode] = useState(() => getRoomFromURL());
-  const [role, setRole] = useState(() => readPreference('poker-role', 'player'));
+  // Invitations always join as players. On refresh, Room restores the role
+  // from this session's roster entry instead of another room's preference.
+  const [role, setRole] = useState('player');
   // Initial grooming backlog seeded by the Landing Manager flow. Empty
   // for joiners and for Manager sessions where the user hit Skip. Read
   // once by useRoom during the first-join bootstrap (see `setupPlayer`
@@ -65,7 +67,6 @@ export default function App() {
   const handleJoinRoom = (code, selectedRole, tasksForSeed = []) => {
     if (selectedRole) {
       setRole(selectedRole);
-      savePreference('poker-role', selectedRole);
     }
     setInitialTasks(Array.isArray(tasksForSeed) ? tasksForSeed : []);
     setRoomCode(code);
@@ -77,6 +78,8 @@ export default function App() {
   // Handle browser back/forward
   useEffect(() => {
     const handlePop = () => {
+      setRole('player');
+      setInitialTasks([]);
       setRoomCode(getRoomFromURL());
     };
     window.addEventListener('popstate', handlePop);

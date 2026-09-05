@@ -49,6 +49,19 @@ During development, the new motion/roster/crown tests were also run against
 the selected original implementations from `5690bad`: 11 regressions failed
 there and all 30 tests in those files passed with the fixes restored.
 
+## Room reliability checks
+
+1. In Manager view, use **Everyone votes**, close QA controls, add two tasks and
+   save. The new active task must start at zero votes. Vote again, edit the list
+   and remove the active task: its replacement must also start at zero votes.
+2. In Player view, choose a card, then use **Toggle connection** twice. The first
+   click now executes the mock's one-shot disconnect handler as well as changing
+   socket state. The reconnect banner clears on return, the avatar reappears and
+   the chosen card remains. Repeat to check that disconnect was rearmed.
+3. Opening a room by invitation in the full App fixture must show voting cards.
+   The fixture uses a fresh in-memory database on reload, so Manager role
+   restoration across reloads is covered by component/hook tests.
+
 ## Scope and limitations
 
 The QA fixture does **not** connect to a production room or test live Firebase

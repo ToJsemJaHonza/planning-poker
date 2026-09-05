@@ -40,10 +40,11 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
     syncedEvent, fireSyncedEvent,
     pmRoulette, resolvePmRoulettePromotion, clearPmRoulette,
     roomStartCrowning, roomStartCrowned, shameTimer, setShameTimer, roomDeleted,
-    isLeader, connected, leaderChangedAt, createdAt,
+    isLeader, connected, connectionError, leaderChangedAt, createdAt,
     castVote, castVoteFe, castVoteBe,
     toggleSplit, revealCards, newRound, updateTask,
   } = useRoom(roomCode, playerId, playerName, role, initialTasks);
+  const effectiveRole = players[playerId]?.role || role;
 
   // --- Unified character stage ---
   // The PM (and, after later phases, players and entering cinematics) live
@@ -72,7 +73,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
   // --- Room-start mini-ceremony ---
   const roomStartState = useRoomStartCrowning({
     stage,
-    roomCode, playerId, role, connected, isLeader,
+    roomCode, playerId, role: effectiveRole, connected, isLeader,
     players, roomStartCrowning, pmRoulette,
     ceremonyStartPos,
     roomStartCrowned,
@@ -122,7 +123,7 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
   roomStartStateRef.current = roomStartState;
 
   // --- Derived state ---
-  const isPM = role === 'pm';
+  const isPM = effectiveRole === 'pm';
   const canControl = isLeader;
   const me = players[playerId];
   const myVote = me?.vote || null;
@@ -285,7 +286,10 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
   if (!connected && !wasEverConnectedRef.current) {
     return (
       <div style={styles.loading}>
-        <p>Connecting to room {roomCode}...</p>
+        {connectionError ? <>
+          <p role="alert">{connectionError}</p>
+          <button style={styles.backBtn} onClick={() => window.location.reload()}>Retry connection</button>
+        </> : <p>Connecting to room {roomCode}...</p>}
       </div>
     );
   }
@@ -299,7 +303,8 @@ export default function Room({ roomCode, playerId, playerName, role = 'player', 
     <div data-room style={{ ...styles.container, paddingBottom }}>
       {!connected && (
         <div role="status" style={styles.reconnectBanner} data-reconnect-banner>
-          Reconnecting to Firebase…
+          {connectionError || 'Reconnecting to Firebase…'}
+          {connectionError && <button style={{ ...styles.backBtn, marginTop: 0, marginLeft: 12 }} onClick={() => window.location.reload()}>Retry connection</button>}
         </div>
       )}
 

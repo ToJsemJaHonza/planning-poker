@@ -48,7 +48,11 @@ function QA() {
         <button onClick={() => update(ref(db, `rooms/${code}/meta`), { phase: 'revealed' })}>Reveal from leader</button>
         <button onClick={() => set(ref(db, `rooms/${code}/players/guest`), { name: 'Guest', joinedAt: Date.now(), role: 'player' })}>Join guest</button>
         <button onClick={() => __mock.removePlayer(code, 'guest')}>Leave guest</button>
-        <button onClick={() => { __mock.setConnectedState(!connected); setConnected(!connected); }}>Toggle connection</button>
+        <button onClick={() => {
+          __mock.setConnectedState(!connected);
+          if (connected) __mock.triggerDisconnect(`rooms/${code}/players/qa-${viewer}`);
+          setConnected(!connected);
+        }}>Toggle connection</button>
         <button onClick={() => entrance('train', 'qa-3')}>Train entrance</button>
         <button disabled={!players['qa-4']} onClick={() => entrance('dbbPipeline', 'qa-4')}>Pipe entrance</button>
         <button onClick={() => update(ref(db, `rooms/${code}/players/qa-0`), { disconnected: true })}>Leader leaves</button>
