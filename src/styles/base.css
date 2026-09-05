@@ -15,6 +15,35 @@ body {
   min-height: 100vh;
 }
 
+@keyframes taskMaterialize {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); filter: brightness(1.8); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+.task-row-enter { animation: taskMaterialize 360ms ease-out both; }
+@keyframes gauntletSnap {
+  0% { transform: translateY(5px) rotate(-20deg); }
+  35% { transform: translateY(-4px) rotate(12deg); }
+  65% { transform: translateY(-2px) rotate(-8deg); }
+  100% { transform: none; }
+}
+.task-gauntlet-snap { animation: gauntletSnap 400ms ease-out both; transform-origin: center bottom; }
+
+html { scrollbar-gutter: stable; }
+button, a { touch-action: manipulation; }
+.results-open {
+  position: fixed; bottom: 48px; left: 50%; z-index: 60;
+  transform: translateX(-50%); padding: 8px 12px;
+  font: inherit; font-size: 0.6rem; color: #2a2a3a;
+  background: #f5f0e4; border: 2px solid #d4a853; cursor: pointer;
+}
+.result-dialog { animation: dialogEnter 180ms ease-out both; }
+@keyframes dialogEnter {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+[data-room] { min-height: 100vh; }
+[data-player-id] { flex-shrink: 0; }
+
 @keyframes float {
   0%, 100% { transform: translateX(-50%) translateY(0); }
   50% { transform: translateX(-50%) translateY(-6px); }
@@ -85,14 +114,19 @@ input:focus:not(:focus-visible) {
 .card-flip-container {
   perspective: 800px;
 }
+.card-flip-container > div {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform-origin: center;
+}
 .card-flip-out {
-  animation: cardFlipOut 250ms steps(5, end) forwards;
+  animation: cardFlipOut 250ms ease-in both;
 }
 .card-flip-in {
-  animation: cardFlipIn 250ms steps(5, end) forwards;
+  animation: cardFlipIn 250ms ease-out both;
 }
 .card-flip-bounce {
-  animation: cardFlipBounce 200ms steps(3, end) forwards;
+  animation: cardFlipBounce 200ms ease-out both;
 }
 
 @keyframes cardFlipOut {

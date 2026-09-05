@@ -12,6 +12,7 @@
 import { useMemo } from 'react';
 import PmSprite from './PmSprite';
 import PlayerFigure from './PlayerFigure';
+import { InfinityGauntlet } from './room/TaskMagic';
 import { SPRITE_W, SPRITE_H } from '../engine/characterLayout';
 
 /**
@@ -21,6 +22,9 @@ import { SPRITE_W, SPRITE_H } from '../engine/characterLayout';
  * wrapper wants.
  */
 function toPmModel(character) {
+  const vw = typeof window === 'undefined' ? 1440 : window.innerWidth;
+  const bubbleWidth = Math.min(320, vw - 24);
+  const bubbleCenter = Math.max(bubbleWidth / 2 + 12, Math.min(vw - bubbleWidth / 2 - 12, character.position.x));
   // character.pose accepts: 'walk' | 'walk1' | 'walk2' | 'cast' | 'think'.
   // walk1/walk2 pin the sprite to a specific frame (used by ceremony phase
   // state). Bare 'walk' defers to character.walkFrame (used by idle, which
@@ -41,6 +45,9 @@ function toPmModel(character) {
     showSparkles: false,
     bubble: character.bubble?.text ?? '',
     showBubble: !!character.bubble,
+    bubbleOpacity: character.bubble?.opacity ?? 1,
+    bubbleWidth,
+    bubbleOffset: (bubbleCenter - character.position.x) * (character.facingLeft ? -1 : 1),
     facingLeft: !!character.facingLeft,
     position: null,
   };
@@ -63,6 +70,8 @@ export default function CharacterSprite({ character }) {
       character.walkFrame,
       character.facingLeft,
       character.bubble?.text,
+      character.bubble?.opacity,
+      character.position.x,
     ],
   );
 
@@ -70,6 +79,7 @@ export default function CharacterSprite({ character }) {
     <div
       data-character-id={character.id}
       data-character-sprite={sprite}
+      data-motion={character.action?.type === 'walkTo' ? 'walking' : 'idle'}
       style={{
         position: 'fixed',
         left: 0,
@@ -83,10 +93,9 @@ export default function CharacterSprite({ character }) {
       }}
     >
       {sprite === 'pm' ? (
-        <PmSprite model={pmModel} />
+        <><PmSprite model={pmModel} /><InfinityGauntlet /></>
       ) : (
         <div
-          className={character.className || undefined}
           style={{
             width: SPRITE_W,
             height: SPRITE_H,
@@ -94,13 +103,17 @@ export default function CharacterSprite({ character }) {
             transformOrigin: 'center center',
           }}
         >
-          <PlayerFigure
-            name={character.name || 'anon'}
-            walkFrame={character.walkFrame}
-            pose={character.pose === 'walk1' || character.pose === 'walk2' ? null : character.pose}
-            fukEyes={!!character.fukEyes}
-            stressStage={character.stressStage || 0}
-          />
+          <div className={character.className || undefined}>
+            <div data-pixel-gait>
+            <PlayerFigure
+              name={character.name || 'anon'}
+              walkFrame={character.walkFrame}
+              pose={character.pose === 'walk1' || character.pose === 'walk2' ? null : character.pose}
+              fukEyes={!!character.fukEyes}
+              stressStage={character.stressStage || 0}
+            />
+            </div>
+          </div>
         </div>
       )}
     </div>

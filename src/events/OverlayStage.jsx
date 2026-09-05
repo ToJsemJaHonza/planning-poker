@@ -23,7 +23,7 @@ export default function OverlayStage({ syncedEvent }) {
       {overlays.map(({ event, payload }) => {
         const Component = event.Component;
         if (!Component) return null;
-        return <Component key={event.type} {...payload} />;
+        return <Component key={`${event.type}:${payload.timestamp ?? ''}`} {...payload} />;
       })}
     </>
   );

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import PixelSpark from './PixelSpark';
 import { spriteToBoxShadow, PX, SPRITE_PIXEL_STYLE } from '../engine/sprite';
 
 const _ = null;
@@ -60,7 +61,7 @@ export default function Crown({
     // Crown always renders below voting card (z-index 1 vs card z-index 2)
     zIndex: anchorMode === 'head' ? 1 : undefined,
     // Gold glow during crown transport
-    boxShadow: glowing ? '0 0 8px 2px #f5c542' : undefined,
+    boxShadow: glowing ? '0 0 0 2px #f5c54255' : undefined,
     ...style,
   };
 
@@ -72,6 +73,10 @@ export default function Crown({
       data-cm-crown-anchor={anchorMode}
     >
       <div style={{ ...SPRITE_PIXEL_STYLE, boxShadow: shadow }} />
+      {glowing && <>
+        <PixelSpark size={10} className="pixel-crown-spark" style={{ left: -12, top: -4 }} />
+        <PixelSpark size={7} className="pixel-crown-spark" style={{ right: -8, top: 10, animationDelay: '-550ms' }} />
+      </>}
     </div>
   );
 }

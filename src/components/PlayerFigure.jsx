@@ -17,7 +17,9 @@ export function hashName(name) {
 }
 
 function pick(hash, shift, options) {
-  return options[((hash >> shift) ^ hash) % options.length >>> 0];
+  // Shift zero must not XOR the hash with itself; normalize before modulo.
+  const mixed = shift === 0 ? hash : ((hash >> shift) ^ hash) >>> 0;
+  return options[(mixed >>> 0) % options.length];
 }
 
 const HAIR_COLORS = [
@@ -36,19 +38,25 @@ const ACCESSORIES = [
   'phone', 'badge', 'tie', 'pen', 'glasses',
 ];
 
-function generateSprite(name, poseOverride = null) {
-  const h = hashName(name);
+function hairColor(h, sk) {
   const hr = pick(h, 0, HAIR_COLORS);
-  const sk = pick(h, 3, SKIN_TONES);
   // P4: if hair luminance is too close to skin, force a high-contrast hair color
   const lum = (hex) => {
-    const n = parseInt(hex.slice(1), 16);
+    const expanded = hex.length === 4 ? '#' + [...hex.slice(1)].map(c => c + c).join('') : hex;
+    const n = parseInt(expanded.slice(1), 16);
     return ((n >> 16) & 255) * 0.299 + ((n >> 8) & 255) * 0.587 + (n & 255) * 0.114;
   };
   let hrFinal = hr;
   if (Math.abs(lum(hrFinal) - lum(sk)) < 40) {
-    hrFinal = pick(h, 30, ['#d4850a', '#f1c40f', '#daa520', '#8b4513']);
+    hrFinal = '#3a2518';
   }
+  return hrFinal;
+}
+
+function generateSprite(name, poseOverride = null) {
+  const h = hashName(name);
+  const sk = pick(h, 3, SKIN_TONES);
+  const hrFinal = hairColor(h, sk);
   const sc = pick(h, 6, SHIRT_COLORS);
   const pc = pick(h, 9, PANTS_COLORS);
   const acc = pick(h, 12, ACCESSORIES);
@@ -58,7 +66,7 @@ function generateSprite(name, poseOverride = null) {
   const haircut = pick(h, 24, [
     'short', 'neat', 'spiky', 'side', 'long', 'curly', 'mohawk', 'buzz', 'parted', 'messy',
   ]);
-  const ns = '#c09060';
+  const ns = blendColor(sk, '#4a3020', 0.24);
 
   // Hair rows based on haircut
   let h0, h1, h2;
@@ -358,6 +366,43 @@ function blendColor(c1, c2, ratio) {
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }
 
+// One-pixel material clusters, lit from the upper left like PM. Never enlarge
+// the silhouette or paint over accessories: only replace matching base colors.
+function applyDetails(grid, h, sk) {
+  const hr = hairColor(h, sk), sc = pick(h, 6, SHIRT_COLORS), pc = pick(h, 9, PANTS_COLORS);
+  const skinShadow = blendColor(sk, '#4a3020', 0.24);
+  const skinLight = blendColor(sk, '#fffdf6', 0.16);
+  const hairLight = blendColor(hr, '#f0c8a0', 0.25);
+  const shirtShade = blendColor(sc, K, 0.28);
+  const shirtLight = blendColor(sc, '#fffdf6', 0.18);
+  const pantsShade = blendColor(pc, K, 0.35);
+  const replace = (y, x, from, to) => { if (grid[y][x] === from) grid[y][x] = to; };
+  for (const x of [4, 5]) replace(1, x, hr, hairLight);
+  replace(2, 4, sk, skinLight);
+  for (const y of [3, 4, 5]) replace(y, y === 5 ? 7 : 8, sk, skinShadow);
+  replace(4, 4, sk, skinLight);
+  // Collar, cuffs, side seam and shoulder highlight stay attached in all poses.
+  for (let y = 6; y <= 9; y++) {
+    for (const x of [8, 9]) replace(y, x, sc, shirtShade);
+  }
+  for (const x of [3, 4]) replace(7, x, sc, shirtLight);
+  for (const x of [4, 7]) replace(6, x, sc, '#f5f0e4');
+  const outfit = pick(h, 15, ['tee', 'jacket', 'polo']);
+  if (outfit === 'jacket') {
+    for (let y = 7; y <= 9; y++) replace(y, 5, sc, '#f5f0e4');
+    for (const y of [7, 9]) replace(y, 6, sc, '#b8922e');
+  } else if (outfit === 'polo') {
+    replace(7, 5, sc, '#f5f0e4');
+    replace(8, 5, sc, shirtShade);
+  } else {
+    replace(7, 7, sc, shirtLight); // small chest pocket
+  }
+  for (const x of [3, 4, 5, 6, 7, 8]) replace(10, x, pc, pantsShade);
+  replace(10, 5, pantsShade, '#b8922e'); // belt buckle, same muted gold as PM
+  for (const x of [7, 8, 9]) replace(11, x, pc, pantsShade);
+  for (let x = 0; x < COLS; x++) replace(12, x, K, '#34495e');
+}
+
 /** Apply stress visual modifications to sprite grid */
 function applyStress(grid, stressStage, sk) {
   if (stressStage <= 0) return;
@@ -382,11 +427,12 @@ function applyStress(grid, stressStage, sk) {
     if (grid[1]) grid[1][10] = sweat;
     // Tint skin toward red
     const tintRatio = stressStage >= 5 ? 0.6 : stressStage >= 4 ? 0.5 : 0.3;
+    const skinColors = [sk, blendColor(sk, '#4a3020', 0.24), blendColor(sk, '#fffdf6', 0.16)];
     for (let row = 3; row <= 5; row++) {
       if (!grid[row]) continue;
       for (let col = 0; col < grid[row].length; col++) {
-        if (grid[row][col] === sk) {
-          grid[row][col] = blendColor(sk, '#ff6b6b', tintRatio);
+        if (skinColors.includes(grid[row][col])) {
+          grid[row][col] = blendColor(grid[row][col], '#ff6b6b', tintRatio);
         }
       }
     }
@@ -413,11 +459,11 @@ export function computePlayerShadow(
   name,
   { holdingCard = false, fukEyes = false, walkFrame = null, pose = null, stressStage = 0 } = {}
 ) {
+  const h = hashName(name || 'default');
+  const sk = pick(h, 3, SKIN_TONES);
   if (fukEyes) {
-    const h = hashName(name || 'default');
-    const hr = pick(h, 0, HAIR_COLORS);
-    const sk = pick(h, 3, SKIN_TONES);
-    const ns = '#c09060';
+    const hr = hairColor(h, sk);
+    const ns = blendColor(sk, '#4a3020', 0.24);
     const hasGlasses = (h >> 12) % 3 === 0;
     const e4 = hasGlasses ? '#4a90d9' : O;
     const empty = [_,_,_,_,_,_,_,_,_,_,_,_];
@@ -435,25 +481,21 @@ export function computePlayerShadow(
   const grid = generateSprite(name || 'default', pose);
 
   if (holdingCard) {
-    const h = hashName(name || 'default');
-    const sk = pick(h, 3, SKIN_TONES);
     const sc = pick(h, 6, SHIRT_COLORS);
     grid[7] = [_,_,sc,sc,sc,sc,sc,sc,sc,sk,sk,_];
     grid[8] = [_,_,sc,sk,sc,sc,sc,sc,sc,sc,sk,_];
   }
 
   if (walkFrame === 0 || walkFrame === 1) {
-    const h = hashName(name || 'default');
-    const sk = pick(h, 3, SKIN_TONES);
     const pc = pick(h, 9, PANTS_COLORS);
     const sc = pick(h, 6, SHIRT_COLORS);
     applyWalkFrame(grid, pc, sk, sc, walkFrame);
   }
 
-  // Apply stress effects (sweat, eyes, skin tint, fire, panic)
+  applyDetails(grid, h, sk);
+
+  // Apply stress effects last so decorative highlights cannot erase sweat/fire.
   if (stressStage > 0) {
-    const h = hashName(name || 'default');
-    const sk = pick(h, 3, SKIN_TONES);
     applyStress(grid, stressStage, sk);
   }
 

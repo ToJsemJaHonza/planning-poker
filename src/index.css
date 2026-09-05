@@ -1,4 +1,5 @@
 /* Feature-scoped CSS modules — each file owns one concern. */
+@import '@fontsource/press-start-2p/400.css';
 @import './styles/base.css';
 @import './styles/pm.css';
 /* walk.css (player-walk-in / -out keyframes) deleted — player motion is
@@ -6,4 +7,5 @@
 @import './styles/events.css';
 @import './styles/ceremony.css';
 @import './styles/shame.css';
+@import './styles/motion-polish.css';
 @import './styles/responsive.css';

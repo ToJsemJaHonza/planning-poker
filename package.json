@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:qa": "vite --config qa/vite.config.js",
+    "test:browser": "playwright test",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -12,12 +14,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fontsource/press-start-2p": "^5.3.0",
     "firebase": "^12.11.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { generateRoomCode } from '../hooks/useRoom';
 import { pixel } from './room/styles';
+import { savePreference } from '../engine/storage';
 import { normalizeTaskRows } from './landing.utils';
 import TaskRowsEditor from './room/TaskRowsEditor';
 
@@ -153,7 +154,7 @@ export default function Landing({ playerName, onJoinRoom }) {
 
       <button
         onClick={() => {
-          localStorage.removeItem('poker-player-name');
+          savePreference('poker-player-name', null);
           window.location.reload();
         }}
         style={styles.changeName}

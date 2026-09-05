@@ -2,6 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { buildVisibleRoster } from './visibleRoster';
 
 describe('buildVisibleRoster', () => {
+  it('never injects a departing manager as a voting player during succession', () => {
+    const players = { p1: { name: 'Alice', role: 'player', joinedAt: 2 } };
+    expect(buildVisibleRoster(players, {
+      outgoingLeaderId: 'manager', outgoingLeaderLastData: { name: 'PM', role: 'pm' },
+    }).map(([id]) => id)).toEqual(['p1']);
+  });
   it('returns non-PM players sorted by joinedAt', () => {
     const players = {
       p2: { name: 'Cara', role: 'player', joinedAt: 3000 },

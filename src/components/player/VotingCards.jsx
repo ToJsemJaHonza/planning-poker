@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { pixel } from '../room/styles';
+import { useMotionMode } from '../../engine/useMotionMode';
+import { cardStagger } from '../../engine/cardReveal';
 
 const hiddenPattern = {
   background: `
@@ -41,7 +43,7 @@ const cardStyles = {
     color: '#2a2a3a',
     boxShadow: '2px 2px 0 #b8922e',
   },
-  splitCardRow: { display: 'flex', gap: '4px', marginBottom: '4px' },
+  splitCardRow: { display: 'flex', gap: '4px', height: '80px', marginBottom: '4px' },
   splitSlot: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' },
   splitLabel: { fontSize: '0.35rem', fontFamily: pixel, color: '#888' },
   splitCard: { ...cardBase, width: '36px', height: '50px', fontSize: '0.75rem' },
@@ -65,45 +67,41 @@ const cardStyles = {
  * idle → flip-out (250ms) → flip-in (250ms) → bounce (200ms) → done
  */
 function useCardFlip(phase, staggerMs) {
+  const motionMode = useMotionMode();
   // If mounted with phase=revealed (late join, tests), skip directly to 'done'
   const [flipStage, setFlipStage] = useState(phase === 'revealed' ? 'done' : 'idle');
-  const prevPhaseRef = useRef(phase);
-  const timersRef = useRef([]);
+  const initiallyRevealed = useRef(phase === 'revealed');
+  const staggerRef = useRef(staggerMs);
+  staggerRef.current = staggerMs;
 
   useEffect(() => {
-    // Clear any running timers
-    return () => timersRef.current.forEach(clearTimeout);
-  }, []);
-
-  useEffect(() => {
-    const prev = prevPhaseRef.current;
-    prevPhaseRef.current = phase;
-
-    if (prev === 'voting' && phase === 'revealed') {
-      // Start flip sequence after stagger delay
-      const t1 = setTimeout(() => {
-        setFlipStage('flip-out');
-        const t2 = setTimeout(() => {
-          setFlipStage('flip-in');
-          const t3 = setTimeout(() => {
-            setFlipStage('bounce');
-            const t4 = setTimeout(() => {
-              setFlipStage('done');
-            }, 200);
-            timersRef.current.push(t4);
-          }, 250);
-          timersRef.current.push(t3);
-        }, 250);
-        timersRef.current.push(t2);
-      }, staggerMs);
-      timersRef.current.push(t1);
-    } else if (phase === 'voting') {
-      // New round — reset
-      timersRef.current.forEach(clearTimeout);
-      timersRef.current = [];
+    if (phase !== 'revealed') {
+      initiallyRevealed.current = false;
       setFlipStage('idle');
+      return;
     }
-  }, [phase, staggerMs]);
+    if (initiallyRevealed.current || motionMode !== 'full') {
+      setFlipStage('done');
+      return;
+    }
+    const origin = Date.now();
+    const delay = staggerRef.current;
+    const update = (deadline = 0) => {
+      const elapsed = Math.max(deadline, Date.now() - origin) - delay;
+      setFlipStage(elapsed < 0 ? 'idle' : elapsed < 250 ? 'flip-out' : elapsed < 500 ? 'flip-in' : elapsed < 700 ? 'bounce' : 'done');
+    };
+    update();
+    // Absolute deadlines avoid accumulating timer throttling between stages.
+    // Firefox can fire a timer slightly before its requested wall-clock deadline.
+    // The final callback must still reach 'done', with no later timer to rescue it.
+    const timers = [delay, delay + 250, delay + 500, delay + 700].map(ms => setTimeout(() => update(ms), ms));
+    const onVisibility = () => update();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      timers.forEach(clearTimeout);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [phase, motionMode]);
 
   return flipStage;
 }
@@ -130,7 +128,7 @@ function showRevealed(phase, flipStage) {
 /** Single voting card above a player figure. */
 export function SingleCard({ data, phase, playerIndex = 0 }) {
   const hasVoted = data.vote != null;
-  const flipStage = useCardFlip(phase, playerIndex * 80);
+  const flipStage = useCardFlip(phase, cardStagger(playerIndex));
   const revealed = showRevealed(phase, flipStage);
   const cls = flipClass(flipStage);
 
@@ -155,8 +153,8 @@ export function SingleCard({ data, phase, playerIndex = 0 }) {
 export function SplitCards({ data, phase, playerIndex = 0 }) {
   const hasVotedFe = data.voteFe != null;
   const hasVotedBe = data.voteBe != null;
-  const flipStageFe = useCardFlip(phase, playerIndex * 80);
-  const flipStageBe = useCardFlip(phase, playerIndex * 80 + 100);
+  const flipStageFe = useCardFlip(phase, cardStagger(playerIndex));
+  const flipStageBe = useCardFlip(phase, cardStagger(playerIndex) + 100);
   const revealedFe = showRevealed(phase, flipStageFe);
   const revealedBe = showRevealed(phase, flipStageBe);
 

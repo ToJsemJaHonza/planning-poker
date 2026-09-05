@@ -144,6 +144,7 @@
 
 /* === Reduced motion === */
 @media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   [class*="float"], [class*="bob"], [class*="idle"],
   [class*="bubble-float"], [class*="sparkle"] { animation: none !important; }
   [class*="walk-in"], [class*="walk-out"] { animation: rm-fade-in 0.2s ease-out !important; }

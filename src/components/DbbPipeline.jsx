@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { pixel } from './room/styles';
+import { useEventTimeline, timelinePhase } from '../engine/useEventTimeline';
+import { getMotionMode } from '../engine/motionProbe';
+import { envelope } from '../engine/motionStyle';
 import {
   DBB, THICKNESS,
   horizontalSegmentStyle, verticalSegmentStyle,
@@ -99,9 +102,8 @@ export function buildPipePath(fromSide, viewport) {
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export default function DbbPipeline({ fromSide = 'top', playerId, playerName, onPlayerExit, onDone, entranceDirector }) {
-  const [phase, setPhase] = useState('hidden');
-  const [showArrivalBubble, setShowArrivalBubble] = useState(false);
+export default function DbbPipeline({ fromSide = 'top', playerId, playerName, onPlayerExit, onDone, entranceDirector, timestamp }) {
+  const fired = useRef(new Set());
   const pipeGroupRef = useRef(null);
 
   const onPlayerExitRef = useRef(onPlayerExit);
@@ -129,66 +131,43 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
   pipePathRef.current = pipePath;
   const targetKey = playerId || playerName;
 
-  useEffect(() => {
-    const timers = [];
-    // t=200: pipe starts sliding in
-    timers.push(setTimeout(() => setPhase('slideIn'), 200));
-    // t=1600: bolt bands fade in (decorative; pipe now looks bolted-down)
-    timers.push(setTimeout(() => setPhase('bolt'), 1600));
-    // t=2200: bubble appears (alone, no plate yet)
-    timers.push(setTimeout(() => setPhase('bubble'), 2200));
-    // t=3600: bubble starts fading out
-    timers.push(setTimeout(() => setPhase('bubbleOut'), 3600));
-    // t=4000: pipe rumbles — screen-local shake on the pipe group before emerge
-    timers.push(setTimeout(() => setPhase('rumble'), 4000));
-    // t=4300: packets stream through the pipe (build-up to emerge)
-    timers.push(setTimeout(() => setPhase('packetFlow'), 4300));
-    // t=4800: plate appears, emerge visual plays (character handled below)
-    timers.push(setTimeout(() => { setPhase('emerge'); }, 4800));
-    // t=5600: Tomáš steps out of the pipe — director teleports the
-    // persistent character to the pipe mouth and walks it to its grid slot.
-    timers.push(setTimeout(() => {
-      setPhase('walk');
+  const elapsed = useEventTimeline(timestamp, 10700, time => {
+    if (time >= 5600 && !fired.current.has('exit')) {
+      fired.current.add('exit');
       const mouth = pipePathRef.current?.mouth;
-      if (mouth && directorRef.current) {
-        directorRef.current.walkFromDoor({
-          playerId: targetKey,
-          door: { x: mouth.x, y: mouth.y },
-        });
-      }
-    }, 5600));
-    // t=7900: pipe starts retracting.
-    timers.push(setTimeout(() => setPhase('slideOut'), 7900));
-    // t=8100: arrival bubble + onPlayerExit fallback. In production the
-    // director's walkTo onDone has already fired markArrived; the manual
-    // call here is idempotent and keeps unit tests without a stage
-    // working.
-    timers.push(setTimeout(() => {
-      setShowArrivalBubble(true);
-      setTimeout(() => setShowArrivalBubble(false), 1600);
-      onPlayerExitRef.current?.();
-    }, 8100));
-    // t=10700: done
-    timers.push(setTimeout(() => { setPhase('done'); onDoneRef.current?.(); }, 10700));
-    return () => timers.forEach(clearTimeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      if (mouth) directorRef.current?.walkFromDoor({
+        playerId: targetKey, door: { x: mouth.x, y: mouth.y },
+        elapsed: Math.max(0, time - 5600),
+      });
+    }
+    if (time >= 8100 && !fired.current.has('arrived')) {
+      fired.current.add('arrived');
+      if (!directorRef.current) onPlayerExitRef.current?.();
+    }
+    if (time >= 10700 && !fired.current.has('done')) {
+      fired.current.add('done');
+      onDoneRef.current?.();
+    }
+  });
+  const phase = timelinePhase(elapsed, [
+    [0, 'hidden'], [200, 'slideIn'], [1600, 'bolt'], [2200, 'bubble'],
+    [3600, 'bubbleOut'], [4000, 'rumble'], [4300, 'packetFlow'],
+    [4800, 'emerge'], [5600, 'walk'], [7900, 'slideOut'], [10700, 'done'],
+  ]);
+  const showArrivalBubble = elapsed >= 8100 && elapsed < 9700;
 
   if (phase === 'done') return null;
 
   const { segments, mouth, middleSegment } = pipePath;
   const lastIdx = segments.length - 1;
 
-  const edgeOffscreen = {
-    top:    'translate(0, -120vh)',
-    bottom: 'translate(0,  120vh)',
-    left:   'translate(-120vw, 0)',
-    right:  'translate( 120vw, 0)',
-  }[fromSide];
-
-  const groupTransform = (phase === 'hidden' || phase === 'slideOut')
-    ? edgeOffscreen
-    : 'translate(0, 0)';
+  const entryProgress = Math.max(0, Math.min(1, (elapsed - 200) / 1400));
+  const exitProgress = Math.max(0, Math.min(1, (elapsed - 7900) / 1400));
+  const offset = elapsed < 7900 ? (1 - entryProgress) ** 3 : exitProgress ** 3;
+  const dx = fromSide === 'left' ? -viewport.w * 1.2 : fromSide === 'right' ? viewport.w * 1.2 : 0;
+  const dy = fromSide === 'top' ? -viewport.h * 1.2 : fromSide === 'bottom' ? viewport.h * 1.2 : 0;
+  const rumble = elapsed >= 4000 && elapsed < 4800 ? Math.sin(elapsed / 25) * 2 : 0;
+  const groupTransform = `translate(${dx * offset + rumble}px, ${dy * offset}px)`;
 
   // Decorators become visible once the pipe has landed.
   const showDecorators = !['hidden', 'slideIn', 'slideOut'].includes(phase);
@@ -223,6 +202,10 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
     top:    'translate(-50%, 0)',
     bottom: 'translate(-50%, -100%)',
   }[bubblePos.anchor];
+  const bubbleWidth = Math.min(340, viewport.w - 32);
+  const bubbleAnchorX = bubblePos.anchor === 'left' ? 0 : bubblePos.anchor === 'right' ? 1 : 0.5;
+  const bubbleLeft = Math.max(16 + bubbleWidth * bubbleAnchorX,
+    Math.min(viewport.w - 16 - bubbleWidth * (1 - bubbleAnchorX), bubblePos.left));
 
   // Collar placement:
   // First segment has a collar on its anchor-edge side.
@@ -284,12 +267,12 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
       <div
         ref={pipeGroupRef}
         data-dbb-pipe-group
-        className={isRumbling ? 'dbb-rumble' : undefined}
+        data-rumbling={isRumbling || undefined}
         style={{
           position: 'absolute',
           inset: 0,
           transform: groupTransform,
-          transition: 'transform 1.4s cubic-bezier(.2, .8, .2, 1)',
+          visibility: getMotionMode() === 'reduced' ? 'hidden' : 'visible',
           pointerEvents: 'none',
         }}
       >
@@ -410,7 +393,8 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
         <div
           style={{
             ...styles.bubble,
-            left: `${bubblePos.left}px`,
+            left: `${bubbleLeft}px`,
+            width: bubbleWidth,
             top: `${bubblePos.top}px`,
             transform: bubbleTransform,
             opacity: bubbleOpacity,
@@ -427,53 +411,48 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
           render here locally. */}
 
       {showArrivalBubble && (
-        <ArrivalBubble targetKey={targetKey} />
+        <ArrivalBubble targetKey={targetKey} elapsed={elapsed - 8100} />
       )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// ArrivalBubble (unchanged behavior — parks over the grid slot).
+// ArrivalBubble follows the grid slot and the scene's shared absolute timeline.
 // `targetKey` is the player's stable session ID (the Firebase key), which
 // is also what `data-entrance-target` is set to on the grid placeholder.
 // ---------------------------------------------------------------------------
-function ArrivalBubble({ targetKey }) {
+function ArrivalBubble({ targetKey, elapsed }) {
   const ref = useRef(null);
-  const [fading, setFading] = useState(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = ref.current;
     if (!node) return;
     const selector = `[data-entrance-target="${typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(targetKey) : targetKey}"]`;
-    requestAnimationFrame(() => {
-      const target = document.querySelector(selector);
-      if (!target) return;
-      const r = target.getBoundingClientRect();
-      node.style.left = `${r.left + r.width / 2}px`;
-      node.style.top = `${r.top - 8}px`;
-      node.style.opacity = '1';
-    });
-    const fadeTimer = setTimeout(() => setFading(true), 1600 - 250);
-    return () => clearTimeout(fadeTimer);
-  }, [targetKey]);
+    const target = document.querySelector(selector);
+    if (!target) return;
+    const r = target.getBoundingClientRect();
+    const half = node.getBoundingClientRect().width / 2;
+    node.style.left = `${Math.max(half + 16, Math.min(window.innerWidth - half - 16, r.left + r.width / 2))}px`;
+    node.style.top = `${Math.max(node.getBoundingClientRect().height + 16, r.top - 8)}px`;
+  }, [targetKey, elapsed]);
   return (
     <div
       ref={ref}
       style={{
         position: 'fixed',
         transform: 'translate(-50%, -100%)',
-        opacity: fading ? 0 : undefined,
-        transition: 'opacity 250ms steps(4, end)',
-        background: '#fff',
+        opacity: envelope(elapsed, 1600, 180, 250),
+        background: '#f5f0e4',
         border: '3px solid #0a0b11',
         padding: '6px 12px',
         fontFamily: "'Press Start 2P', monospace",
         fontSize: '0.55rem',
         color: '#0a0b11',
-        boxShadow: '4px 4px 0 #0a0b11',
+        boxShadow: '4px 4px 0 #b8922e',
         zIndex: 210,
         pointerEvents: 'none',
-        whiteSpace: 'nowrap',
+        maxWidth: 'calc(100vw - 32px)',
+        overflowWrap: 'anywhere',
       }}
     >
       merged to main
@@ -494,14 +473,16 @@ const styles = {
   },
   bubble: {
     position: 'absolute',
-    background: '#fff',
-    border: `4px solid ${DBB.outline}`,
+    background: '#f5f0e4',
+    border: '3px solid #2c3e50',
     padding: '10px 16px',
     fontSize: '0.65rem',
     fontFamily: pixel,
     color: DBB.outline,
-    boxShadow: `5px 5px 0 ${DBB.outline}`,
-    whiteSpace: 'nowrap',
+    boxShadow: '4px 4px 0 #b8922e',
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    lineHeight: 1.8,
     textAlign: 'center',
     zIndex: 200,
     pointerEvents: 'none',

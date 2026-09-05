@@ -115,7 +115,7 @@ export default function PmSprite({
   model: modelProp = null,
 }) {
   const localModel = usePmModel({
-    mode,
+    mode: modelProp ? 'ceremony' : mode,
     isLeader: !!onQuote,
     isCasting,
     externalQuote: externalQuote || '',
@@ -164,6 +164,9 @@ export default function PmSprite({
         {model.showBubble && (
           <div style={{
             ...styles.crowningBubble,
+            width: model.bubbleWidth || 'min(320px, calc(100vw - 24px))',
+            left: `calc(50% + ${model.bubbleOffset || 0}px)`,
+            opacity: model.bubbleOpacity ?? 1,
             transform: `translateX(-50%) ${model.facingLeft ? 'scaleX(-1)' : 'scaleX(1)'}`,
           }}>{model.bubble}</div>
         )}
@@ -244,7 +247,10 @@ const styles = {
     fontFamily: "'Press Start 2P', monospace",
     color: '#2a2a3a',
     boxShadow: '2px 2px 0 #b8922e',
-    whiteSpace: 'nowrap',
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    lineHeight: 1.6,
+    textAlign: 'center',
     marginBottom: 4,
     zIndex: 212,
   },

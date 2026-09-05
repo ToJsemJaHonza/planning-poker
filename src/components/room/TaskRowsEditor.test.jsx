@@ -20,6 +20,14 @@ function Harness({ initial = [{ title: '', url: '' }], onSpy }) {
 }
 
 describe('TaskRowsEditor', () => {
+  it('preserves surviving input elements and focuses a newly appended task', () => {
+    const { container } = render(<Harness initial={[{ title: 'A', url: '' }, { title: 'B', url: '' }]} />);
+    const survivor = container.querySelectorAll('[data-task-title-input]')[1];
+    fireEvent.click(container.querySelector('[data-task-row-remove]'));
+    expect(container.querySelector('[data-task-title-input]')).toBe(survivor);
+    fireEvent.click(container.querySelector('[data-task-row-add]'));
+    expect(document.activeElement).toBe(container.querySelectorAll('[data-task-title-input]')[1]);
+  });
   it('renders one input pair per row', () => {
     const { container } = render(
       <Harness initial={[{ title: 'A', url: 'https://a' }, { title: 'B', url: '' }]} />,

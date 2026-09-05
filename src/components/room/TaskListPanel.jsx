@@ -24,6 +24,8 @@ export default function TaskListPanel({
   const [editing, setEditing] = useState(false);
   const [draftRows, setDraftRows] = useState([{ title: '', url: '' }]);
   const [exportStatus, setExportStatus] = useState(null); // 'copied' | 'downloaded' | 'no-clipboard'
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   // Panel open/close: default open on desktop, collapsed on mobile, and
   // remember the user's choice across re-renders for this session.
@@ -65,9 +67,13 @@ export default function TaskListPanel({
   };
 
   const saveEdit = async () => {
+    if (saving) return;
     if (!onEdit) { setEditing(false); return; }
-    await onEdit(draftRows);
-    setEditing(false);
+    setSaving(true);
+    setSaveError('');
+    try { await onEdit(draftRows); setEditing(false); }
+    catch { setSaveError('Could not save tasks. Your draft is kept — please retry.'); }
+    finally { setSaving(false); }
   };
 
   const handleRowClick = (item) => {
@@ -110,11 +116,14 @@ export default function TaskListPanel({
         <div style={styles.body}>
           {editing ? (
             <div data-task-panel-edit>
-              <TaskRowsEditor rows={draftRows} onChange={setDraftRows} autoFocusFirst />
+              <fieldset disabled={saving} style={{ border: 0, minWidth: 0 }}>
+                <TaskRowsEditor rows={draftRows} onChange={setDraftRows} autoFocusFirst />
+              </fieldset>
+              {saveError && <p role="alert" style={{ fontSize: '0.6rem', lineHeight: 1.8, color: '#923e42' }}>{saveError}</p>}
               <div style={styles.editActions}>
-                <button type="button" onClick={cancelEdit} style={styles.cancelBtn}>Cancel</button>
-                <button type="button" data-task-panel-save onClick={saveEdit} style={styles.saveBtn}>
-                  Save
+                <button type="button" disabled={saving} onClick={cancelEdit} style={styles.cancelBtn}>Cancel</button>
+                <button type="button" disabled={saving} data-task-panel-save onClick={saveEdit} style={styles.saveBtn}>
+                  {saving ? 'Saving…' : 'Save'}
                 </button>
               </div>
             </div>
@@ -226,14 +235,13 @@ function scored(item) {
 // coherent rather than looking zoomed.
 const styles = {
   panel: {
+    // This is a floating panel: toggling it must never reflow the room.
     position: 'fixed',
-    // Sits below the TaskBar strip so the (now-taller) horizontal chip
-    // row stays fully visible on a single wrap line. With many chips
-    // wrapping to 3+ rows this panel can still occlude the tail — an
-    // accepted trade-off rather than pushing the panel fully off-screen.
     top: 180,
     right: 12,
-    zIndex: 50,
+    zIndex: 60,
+    maxHeight: 'calc(100dvh - 200px)',
+    overflowY: 'auto',
     width: 'min(420px, calc(100vw - 24px))',
     background: '#f5f0e4',
     border: '4px solid #d4a853',

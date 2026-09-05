@@ -26,7 +26,7 @@ export default function SlotMachineStage({
     && phaseState.cabinetTransform !== 'offscreen';
 
   return (
-    <div style={styles.stage} data-cm-stage>
+    <div style={styles.stage} data-cm-stage data-cm-phase={phaseState.phase} data-cm-winner={pmRoulette.winnerId}>
       {/* Backdrop dim layer */}
       <div
         style={{
@@ -110,11 +110,11 @@ const styles = {
     top: '30%',
     left: '50%',
     transform: 'translateX(-50%)',
-    fontSize: '1.1rem',
+    fontSize: 'clamp(0.55rem, 2.5vw, 0.9rem)',
     fontFamily: "'Press Start 2P', monospace",
     color: '#f5c542',
-    letterSpacing: 6,
-    textShadow: '0 0 4px #f5c542, 0 0 8px #d4a853, 0 0 16px rgba(245,197,66,0.4), 2px 2px 0 #0a0b11',
+    letterSpacing: 2,
+    textShadow: '2px 2px 0 #1a1a2e',
     zIndex: 214,
     pointerEvents: 'none',
     whiteSpace: 'nowrap',

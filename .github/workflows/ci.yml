@@ -84,9 +84,31 @@ jobs:
   # 3. BUILD — runs on PRs and master pushes. Produces the Pages artifact
   #    on master; PR builds verify the build succeeds without deploying.
   # ---------------------------------------------------------------------------
+  browser-test:
+    name: browser-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: browser-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+
   build:
     name: build
-    needs: [test, lint]
+    needs: [test, lint, browser-test]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

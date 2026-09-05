@@ -1,3 +1,5 @@
+import { useRef } from 'react';
+import { useGridLayout } from '../hooks/useGridLayout';
 import EntranceStage from '../events/EntranceStage';
 import PlayerCard from './player/PlayerCard';
 import { usePlayerModels } from '../hooks/usePlayerModels';
@@ -21,6 +23,8 @@ export default function PlayerList({
   shameTimer = null, shameStage = 0,
   allVoted = false, stage = null, roomCode = null,
 }) {
+  const gridRef = useRef(null);
+  useGridLayout(stage, gridRef);
   const {
     activePlayers,
     leavingPlayers,
@@ -49,7 +53,7 @@ export default function PlayerList({
         entranceDirector={entranceDirector}
       />
 
-      <div data-player-grid style={styles.grid}>
+      <div ref={gridRef} data-player-grid style={styles.grid}>
         {activePlayers.map((m) => (
           <PlayerCard key={m.id + m.keySuffix} model={m} />
         ))}

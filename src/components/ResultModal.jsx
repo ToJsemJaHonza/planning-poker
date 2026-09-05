@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { computeStats } from './resultModal.utils';
 import { pixel } from './room/styles';
 
@@ -80,17 +81,39 @@ function ResultHeader({ title, url }) {
   );
 }
 
-export default function ResultModal({ players, splitMode, onNewRound, taskTitle, taskUrl }) {
+export default function ResultModal({ players, splitMode, onNewRound, taskTitle, taskUrl, canControl = true, onClose }) {
+  const dialogRef = useRef(null);
+  useEffect(() => {
+    const previous = document.activeElement;
+    const dialog = dialogRef.current;
+    dialog?.focus();
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape' && onClose) { event.preventDefault(); onClose(); }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(dialog?.querySelectorAll('button, a[href]') || []);
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog)) { event.preventDefault(); first.focus(); }
+    };
+    dialog?.addEventListener('keydown', onKeyDown);
+    return () => { dialog?.removeEventListener('keydown', onKeyDown); if (previous?.isConnected) previous.focus(); };
+  }, [onClose]);
+  const activePlayers = Object.values(players).filter(p => p.role !== 'pm' && !p.disconnected);
+  const actions = <>
+    {canControl && <button onClick={onNewRound} style={styles.button}>New Round</button>}
+    {onClose && <button onClick={onClose} style={{ ...styles.button, marginLeft: 8 }}>Close</button>}
+  </>;
   // Players are keyed by stable session ID — pull the display name off the
   // entry itself so the histogram and "special" rows show human-readable
   // names instead of opaque IDs. Two same-named players are independent
   // entries here, so their votes each count separately.
   if (splitMode) {
-    const feVotes = Object.values(players)
+    const feVotes = activePlayers
       .filter((p) => p.voteFe != null)
       .map((p) => ({ name: p.name, vote: p.voteFe }));
 
-    const beVotes = Object.values(players)
+    const beVotes = activePlayers
       .filter((p) => p.voteBe != null)
       .map((p) => ({ name: p.name, vote: p.voteBe }));
 
@@ -101,6 +124,7 @@ export default function ResultModal({ players, splitMode, onNewRound, taskTitle,
       <div style={styles.overlay}>
         <div
           data-split-modal
+          ref={dialogRef} role="dialog" aria-modal="true" aria-label="Voting results" tabIndex={-1} className="result-dialog"
           style={{ ...styles.modal, width: 'min(500px, calc(100vw - 32px))' }}
         >
           <ResultHeader title={taskTitle} url={taskUrl} />
@@ -109,16 +133,14 @@ export default function ResultModal({ players, splitMode, onNewRound, taskTitle,
             <div style={styles.divider} />
             <ResultSection title="Backend" titleColor="#27ae60" stats={beStats} />
           </div>
-          <button onClick={onNewRound} style={styles.button}>
-            New Round
-          </button>
+          {actions}
         </div>
       </div>
     );
   }
 
   // Normal single mode
-  const votes = Object.values(players)
+  const votes = activePlayers
     .filter((p) => p.vote != null)
     .map((p) => ({ name: p.name, vote: p.vote }));
 
@@ -126,12 +148,10 @@ export default function ResultModal({ players, splitMode, onNewRound, taskTitle,
 
   return (
     <div style={styles.overlay}>
-      <div data-result-modal style={styles.modal}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Voting results" tabIndex={-1} className="result-dialog" data-result-modal style={styles.modal}>
         <ResultHeader title={taskTitle} url={taskUrl} />
         <ResultSection stats={stats} />
-        <button onClick={onNewRound} style={styles.button}>
-          New Round
-        </button>
+        {actions}
       </div>
     </div>
   );
@@ -153,8 +173,10 @@ const styles = {
     borderRadius: '0',
     padding: '1.5rem',
     textAlign: 'center',
-    minWidth: '320px',
+    minWidth: 'min(320px, calc(100vw - 32px))',
     maxWidth: '90vw',
+    maxHeight: 'calc(100dvh - 32px)',
+    overflowY: 'auto',
     fontFamily: pixel,
     boxShadow: '6px 6px 0 #b8922e',
   },

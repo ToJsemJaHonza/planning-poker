@@ -4,6 +4,7 @@ import Landing from './components/Landing';
 import Room from './components/Room';
 import FigureGallery from './components/FigureGallery';
 import ErrorBoundary from './components/ErrorBoundary';
+import { readPreference, savePreference } from './engine/storage';
 
 // Room codes are strictly 6 uppercase alphanumerics (see generateRoomCode).
 // We validate here to prevent a crafted `?room=FOO/bar/..` from being
@@ -46,11 +47,11 @@ function getOrCreatePlayerId() {
 
 export default function App() {
   const [playerName, setPlayerName] = useState(
-    () => localStorage.getItem('poker-player-name') || null
+    () => readPreference('poker-player-name')
   );
   const [playerId] = useState(getOrCreatePlayerId);
   const [roomCode, setRoomCode] = useState(() => getRoomFromURL());
-  const [role, setRole] = useState(() => localStorage.getItem('poker-role') || 'player');
+  const [role, setRole] = useState(() => readPreference('poker-role', 'player'));
   // Initial grooming backlog seeded by the Landing Manager flow. Empty
   // for joiners and for Manager sessions where the user hit Skip. Read
   // once by useRoom during the first-join bootstrap (see `setupPlayer`
@@ -64,7 +65,7 @@ export default function App() {
   const handleJoinRoom = (code, selectedRole, tasksForSeed = []) => {
     if (selectedRole) {
       setRole(selectedRole);
-      localStorage.setItem('poker-role', selectedRole);
+      savePreference('poker-role', selectedRole);
     }
     setInitialTasks(Array.isArray(tasksForSeed) ? tasksForSeed : []);
     setRoomCode(code);
@@ -92,6 +93,7 @@ export default function App() {
   } else {
     content = (
       <Room
+        key={roomCode}
         roomCode={roomCode}
         playerId={playerId}
         playerName={playerName}

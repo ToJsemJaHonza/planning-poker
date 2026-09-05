@@ -11,7 +11,7 @@
  * for player walk-in/out — all deleted) funnel through here.
  */
 
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef } from 'react';
 import { subscribe as subscribeMotion } from '../engine/MotionRuntime';
 import { createCharacter, tickAll } from '../engine/character';
 
@@ -24,6 +24,9 @@ export function createStageRuntime() {
   const characters = new Map();
   let version = 0;
   const listeners = new Set();
+  const slots = new Map();
+  const layoutListeners = new Set();
+  let layoutVersion = 0;
 
   const notify = () => {
     version = (version + 1) >>> 0; // stay in 32-bit positive range
@@ -46,6 +49,36 @@ export function createStageRuntime() {
     characters,
     subscribe,
     getVersion,
+    slots,
+    groundY: null,
+    getSlot(id) { return slots.get(id); },
+    subscribeLayout(listener) { layoutListeners.add(listener); return () => layoutListeners.delete(listener); },
+    getLayoutVersion() { return layoutVersion; },
+    updateLayout(nextSlots, groundY, scrollDelta = 0) {
+      let changed = groundY !== runtime.groundY || nextSlots.size !== slots.size;
+      for (const [id, point] of nextSlots) {
+        const old = slots.get(id);
+        if (!old || Math.abs(old.x - point.x) > 0.1 || Math.abs(old.y - point.y) > 0.1) changed = true;
+      }
+      if (!changed) return;
+      if (scrollDelta) {
+        for (const char of characters.values()) {
+          if (char.sprite !== 'player') continue;
+          char.position.y += scrollDelta;
+          if (char.action?.type === 'walkTo') {
+            char.action.from.y += scrollDelta;
+            char.action.y += scrollDelta;
+          }
+          for (const action of char.queue) if (action.type === 'walkTo') action.y += scrollDelta;
+        }
+      }
+      slots.clear();
+      for (const [id, point] of nextSlots) slots.set(id, point);
+      runtime.groundY = groundY;
+      layoutVersion++;
+      for (const listener of layoutListeners) listener();
+      notify();
+    },
 
     tick(now) {
       tickAll(characters, now);
@@ -110,11 +143,6 @@ export function useCharacterStage() {
       stage.tick(now);
     });
   }, [stage]);
-
-  // Expose version changes to suspense-safe consumers (CharacterStage uses
-  // its own useSyncExternalStore; this call here keeps the hosting
-  // component re-rendering on structural stage changes too).
-  useSyncExternalStore(stage.subscribe, stage.getVersion, stage.getVersion);
 
   return stage;
 }
