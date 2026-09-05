@@ -1,68 +1,27 @@
-import { pixel } from './styles';
 import { useEventTimeline } from '../../engine/useEventTimeline';
 import { useMotionMode } from '../../engine/useMotionMode';
+import { envelope, easeOut } from '../../engine/motionStyle';
+import PixelSpark from '../PixelSpark';
 
 export default function SpecialRoundOverlay({ timestamp }) {
   const mode = useMotionMode();
   const duration = mode === 'reduced' ? 600 : 2200;
   const elapsed = useEventTimeline(timestamp, duration);
   if (elapsed >= duration) return null;
-  const opacity = mode === 'reduced' ? 1 : Math.min(1, elapsed / 180, (duration - elapsed) / 300);
-  return (
-    <div style={{ ...styles.specialOverlay, opacity }}>
-      <div style={styles.specialContent}>
-        <div style={styles.specialStars}>✦ ✦ ✦</div>
-        <div style={styles.specialText}>SPECIAL</div>
-        <div style={styles.specialText2}>ROUND!</div>
-        <div style={styles.specialSub}>FE / BE</div>
-        <div style={styles.specialStars}>✦ ✦ ✦</div>
+  const quiet = mode === 'reduced';
+  const enter = quiet ? 1 : easeOut(elapsed / 360);
+  const part = quiet ? 1 : easeOut((elapsed - 160) / 600);
+  return <div data-special-round className="pixel-special-overlay" style={{ opacity: quiet ? 1 : envelope(elapsed, duration) }}>
+    <div className="pixel-special-panel" style={{ transform: `translateY(${(1 - enter) * 16}px)` }}>
+      <div className="pixel-special-eyebrow"><PixelSpark size={14} /> ROUND MODIFIER <PixelSpark size={14} /></div>
+      <div className="pixel-special-title">SPECIAL ROUND!</div>
+      <div className="pixel-special-cards">
+        <div className="pixel-special-card pixel-special-card--fe" style={{ transform: `translateX(${(1 - part) * 28}px)` }}>FE<span>FRONTEND</span></div>
+        <PixelSpark size={21} style={{ opacity: part }} />
+        <div className="pixel-special-card pixel-special-card--be" style={{ transform: `translateX(${(1 - part) * -28}px)` }}>BE<span>BACKEND</span></div>
       </div>
+      <div className="pixel-special-caption">Two perspectives. One estimate.</div>
+      {!quiet && [0, 1, 2, 3].map(i => <PixelSpark key={i} size={12} style={{ position: 'absolute', left: `${12 + i * 25}%`, top: i % 2 ? -12 : 'calc(100% + 8px)', opacity: Math.sin(Math.min(1, elapsed / 1400) * Math.PI) * 0.8, transform: `translateY(${-part * 6}px)` }} />)}
     </div>
-  );
+  </div>;
 }
-
-const styles = {
-  specialOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0,0,0,0.85)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 200,
-    pointerEvents: 'none',
-  },
-  specialContent: {
-    textAlign: 'center',
-    animation: 'specialZoom 0.6s ease-out',
-  },
-  specialStars: {
-    fontSize: '1.5rem',
-    color: '#f5c542',
-    letterSpacing: '12px',
-    margin: '0.3rem 0',
-    animation: 'specialPulse 0.8s ease-in-out infinite',
-  },
-  specialText: {
-    fontSize: 'clamp(1.4rem, 7vw, 2.5rem)',
-    fontFamily: pixel,
-    color: '#f5c542',
-    textShadow: '4px 4px 0 #b8922e, -2px -2px 0 #fff3',
-    letterSpacing: '6px',
-  },
-  specialText2: {
-    fontSize: 'clamp(1.4rem, 7vw, 2.5rem)',
-    fontFamily: pixel,
-    color: '#fff',
-    textShadow: '4px 4px 0 #333, -2px -2px 0 #fff3',
-    letterSpacing: '6px',
-  },
-  specialSub: {
-    fontSize: '1rem',
-    fontFamily: pixel,
-    color: '#3498db',
-    marginTop: '0.5rem',
-    textShadow: '2px 2px 0 #1a3a5a',
-    letterSpacing: '8px',
-  },
-};

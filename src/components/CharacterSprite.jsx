@@ -79,6 +79,7 @@ export default function CharacterSprite({ character }) {
     <div
       data-character-id={character.id}
       data-character-sprite={sprite}
+      data-motion={character.action?.type === 'walkTo' ? 'walking' : 'idle'}
       style={{
         position: 'fixed',
         left: 0,
@@ -103,13 +104,15 @@ export default function CharacterSprite({ character }) {
           }}
         >
           <div className={character.className || undefined}>
-          <PlayerFigure
-            name={character.name || 'anon'}
-            walkFrame={character.walkFrame}
-            pose={character.pose === 'walk1' || character.pose === 'walk2' ? null : character.pose}
-            fukEyes={!!character.fukEyes}
-            stressStage={character.stressStage || 0}
-          />
+            <div data-pixel-gait>
+            <PlayerFigure
+              name={character.name || 'anon'}
+              walkFrame={character.walkFrame}
+              pose={character.pose === 'walk1' || character.pose === 'walk2' ? null : character.pose}
+              fukEyes={!!character.fukEyes}
+              stressStage={character.stressStage || 0}
+            />
+            </div>
           </div>
         </div>
       )}

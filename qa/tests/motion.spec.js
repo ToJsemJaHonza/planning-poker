@@ -28,6 +28,38 @@ test('local pixel font actually loads', async ({ page }) => {
   })).toBe(true);
 });
 
+test('pixel events: mobile special round fits and animals keep stepping with CSS disabled', async ({ page }, info) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto('./?motion=none&count=6');
+  await page.getByRole('button', { name: /Split/ }).click();
+  const panel = page.locator('.pixel-special-panel');
+  await expect(panel).toBeVisible();
+  const bounds = await panel.boundingBox();
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(320);
+  await expect(page.locator('.pixel-special-card--fe')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
+  await page.screenshot({ path: info.outputPath('pixel-special-mobile.png') });
+  await expect(panel).toHaveCount(0);
+  await controls(page);
+  for (const animal of ['Chicken', 'Sheep']) {
+    await page.getByRole('button', { name: animal, exact: true }).click();
+    await controls(page);
+    const body = page.locator('[data-runner-frame]');
+    await expect(body).toBeAttached();
+    const frame = await body.getAttribute('data-runner-frame');
+    await expect.poll(() => body.getAttribute('data-runner-frame')).not.toBe(frame);
+    await expect.poll(() => page.locator('[data-pixel-runner]').evaluate(el => el.getBoundingClientRect().x)).toBeGreaterThan(60);
+    if (animal === 'Sheep') {
+      const bubble = await page.locator('.sheep-text').boundingBox();
+      expect(bubble.x).toBeGreaterThanOrEqual(0);
+      expect(bubble.x + bubble.width).toBeLessThanOrEqual(320);
+    }
+    await page.screenshot({ path: info.outputPath(`pixel-${animal.toLowerCase()}-mobile.png`) });
+    await expect(body).toHaveCount(0);
+    await controls(page);
+  }
+});
+
 test('ordinary player receives results, can close them, but cannot start a new round', async ({ page }) => {
   await page.goto('./?viewer=1&role=pm&count=6');
   await controls(page);

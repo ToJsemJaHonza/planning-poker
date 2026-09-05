@@ -37,6 +37,9 @@ resize, floating task panel stability, modal controls, blocked storage, CSS-off
 entrances, reduced motion, task particle/gauntlet cleanup, and both succession
 paths. Succession samples PM position on each animation frame and verifies one
 stage crown, no large short-frame jumps, and the successor's final head anchor.
+The pixel-art pass additionally checks the special-round panel at 320px,
+animal gait changes with CSS animations disabled, and the sheep caption staying
+inside the viewport. These scenes have saved mobile screenshots too.
 Tests retain failure traces/screenshots; selected visual checkpoints are saved
 in `test-results/`. `npx playwright show-report` opens the HTML report.
 
@@ -58,6 +61,10 @@ GitHub CI runs all three browser engines and publishes the report artifacts.
 
 ## Motion implementation notes
 
+- PM is the visual reference: ink outlines, warm paper, gold and pointer blue;
+  smooth travel with small stepped poses, pixel sparks and hard contact shadows.
+  Animal gait and dust share their existing timeline; task effects use square
+  grains and stepped portal corners. Text translates without stretching/spinning.
 - Shared `MotionRuntime` remains the only animation-frame scheduler.
 - Grid anchors are measured after layout/fonts/resize and compensated for scroll;
   decorative nod/tremble translations never become walking targets.

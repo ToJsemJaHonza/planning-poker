@@ -38,7 +38,7 @@ export default function RevealBackground({ players, splitMode }) {
   const items = useMemo(() => {
     const result = [];
     const rng = seededRandom(42);
-    const count = 30;
+    const count = 18;
 
     if (splitMode) {
       const feVal = getDisplayCard(players, 'voteFe');
@@ -53,8 +53,7 @@ export default function RevealBackground({ players, splitMode }) {
           color: isFe ? '#3498db' : '#27ae60',
           left: `${rng() * 90}%`,
           top: `${rng() * 85}%`,
-          size: 2.5 + rng() * 4,
-          rotation: -20 + rng() * 40,
+          size: 1.3 + rng() * 0.8,
           delay: rng() * 0.8,
         });
       }
@@ -68,8 +67,7 @@ export default function RevealBackground({ players, splitMode }) {
           color: '#b08030',
           left: `${rng() * 90}%`,
           top: `${rng() * 85}%`,
-          size: 2.5 + rng() * 5,
-          rotation: -25 + rng() * 50,
+          size: 1.3 + rng() * 0.8,
           delay: rng() * 0.8,
         });
       }
@@ -81,7 +79,7 @@ export default function RevealBackground({ players, splitMode }) {
   if (items.length === 0) return null;
 
   return (
-    <div style={styles.container}>
+    <div aria-hidden="true" style={styles.container}>
       {items.map((item, i) => (
         <div
           key={i}
@@ -92,7 +90,6 @@ export default function RevealBackground({ players, splitMode }) {
             top: item.top,
             fontSize: `${item.size}rem`,
             color: item.color,
-            transform: `rotate(${item.rotation}deg)`,
             animationDelay: `${item.delay}s`,
             animationName: 'revealNumberPop',
             animationDuration: '8s',
@@ -118,6 +115,13 @@ const styles = {
   },
   number: {
     position: 'absolute',
+    width: 64,
+    height: 80,
+    display: 'grid',
+    placeItems: 'center',
+    border: '3px solid currentColor',
+    boxShadow: '4px 4px 0 currentColor',
+    background: '#f5f0e4',
     fontFamily: pixel,
     fontWeight: 'bold',
     opacity: 0,

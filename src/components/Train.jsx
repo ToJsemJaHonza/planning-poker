@@ -9,6 +9,7 @@ import {
 import { trainDoorPosition } from '../events/useEntranceDirector';
 import { useEventTimeline, timelinePhase } from '../engine/useEventTimeline';
 import { getMotionMode } from '../engine/motionProbe';
+import { envelope } from '../engine/motionStyle';
 
 export default function Train({ fromRight, playerId, playerName, onPlayerExit, onDone, entranceDirector, timestamp }) {
   const fired = useRef(new Set());
@@ -104,7 +105,7 @@ export default function Train({ fromRight, playerId, playerName, onPlayerExit, o
   const showWaveFx = phase === 'wave' || phase === 'depart';
 
   return (
-    <div style={styles.container} data-testid="train-backdrop">
+    <div style={{ ...styles.container, opacity: envelope(elapsed, 13500, 400, 850) }} data-testid="train-backdrop">
       <div style={styles.trainArea}>
         {/* Trees */}
         {trees.map((tx, i) => (
@@ -200,9 +201,9 @@ export default function Train({ fromRight, playerId, playerName, onPlayerExit, o
           <div style={{
             ...styles.bubble,
             opacity: phase === 'bubble' ? 1 : 0,
-            transition: 'opacity 250ms steps(4, end)',
+            transition: 'opacity 250ms ease-out',
           }}>
-            🚄 {playerName}: Monorepo conductor has arrived 🚄
+            {playerName}: Monorepo conductor has arrived
           </div>
         )}
 
@@ -297,21 +298,21 @@ const styles = {
   train: { position: 'absolute', height: CAR_H, bottom: 16, zIndex: 2 },
   bubble: {
     position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
-    background: '#fff', border: '3px solid #dc2626', padding: '8px 16px',
+    background: '#f5f0e4', border: '3px solid #2c3e50', padding: '10px 16px',
     fontSize: '0.65rem', fontFamily: pixel, color: '#1e293b',
-    maxWidth: '80vw', textAlign: 'center', boxShadow: '4px 4px 0 #991b1b', zIndex: 10,
+    width: 'min(420px, calc(100vw - 32px))', lineHeight: 1.8, textAlign: 'center', boxShadow: '4px 4px 0 #b8922e', zIndex: 10,
   },
   hornBubble: {
     position: 'absolute',
     top: 8,
     transform: 'translateX(-50%)',
     background: '#fff',
-    border: '3px solid #dc2626',
+    border: '3px solid #2c3e50',
     padding: '4px 10px',
     fontSize: '0.6rem',
     fontFamily: pixel,
-    color: '#b91c1c',
-    boxShadow: '3px 3px 0 #7f1d1d',
+    color: '#c0392b',
+    boxShadow: '3px 3px 0 #b8922e',
     zIndex: 11,
     letterSpacing: '1px',
   },
@@ -320,12 +321,12 @@ const styles = {
     top: 12,
     transform: 'translateX(-50%)',
     background: '#fff',
-    border: '3px solid #16a34a',
+    border: '3px solid #2c3e50',
     padding: '4px 10px',
     fontSize: '0.6rem',
     fontFamily: pixel,
-    color: '#15803d',
-    boxShadow: '3px 3px 0 #14532d',
+    color: '#2c3e50',
+    boxShadow: '3px 3px 0 #b8922e',
     zIndex: 11,
   },
   doorFlash: {
@@ -333,7 +334,7 @@ const styles = {
     width: 40,
     height: 32,
     background: '#fef3c7',
-    boxShadow: '0 0 16px 8px rgba(254,243,199,0.75)',
+    boxShadow: '0 0 0 4px #f5c542',
     zIndex: 3,
   },
   rails: {

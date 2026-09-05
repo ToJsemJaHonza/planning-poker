@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { pixel } from './room/styles';
 import { useEventTimeline, timelinePhase } from '../engine/useEventTimeline';
 import { getMotionMode } from '../engine/motionProbe';
+import { envelope } from '../engine/motionStyle';
 import {
   DBB, THICKNESS,
   horizontalSegmentStyle, verticalSegmentStyle,
@@ -201,6 +202,10 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
     top:    'translate(-50%, 0)',
     bottom: 'translate(-50%, -100%)',
   }[bubblePos.anchor];
+  const bubbleWidth = Math.min(340, viewport.w - 32);
+  const bubbleAnchorX = bubblePos.anchor === 'left' ? 0 : bubblePos.anchor === 'right' ? 1 : 0.5;
+  const bubbleLeft = Math.max(16 + bubbleWidth * bubbleAnchorX,
+    Math.min(viewport.w - 16 - bubbleWidth * (1 - bubbleAnchorX), bubblePos.left));
 
   // Collar placement:
   // First segment has a collar on its anchor-edge side.
@@ -388,7 +393,8 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
         <div
           style={{
             ...styles.bubble,
-            left: `${bubblePos.left}px`,
+            left: `${bubbleLeft}px`,
+            width: bubbleWidth,
             top: `${bubblePos.top}px`,
             transform: bubbleTransform,
             opacity: bubbleOpacity,
@@ -405,53 +411,48 @@ export default function DbbPipeline({ fromSide = 'top', playerId, playerName, on
           render here locally. */}
 
       {showArrivalBubble && (
-        <ArrivalBubble targetKey={targetKey} />
+        <ArrivalBubble targetKey={targetKey} elapsed={elapsed - 8100} />
       )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// ArrivalBubble (unchanged behavior — parks over the grid slot).
+// ArrivalBubble follows the grid slot and the scene's shared absolute timeline.
 // `targetKey` is the player's stable session ID (the Firebase key), which
 // is also what `data-entrance-target` is set to on the grid placeholder.
 // ---------------------------------------------------------------------------
-function ArrivalBubble({ targetKey }) {
+function ArrivalBubble({ targetKey, elapsed }) {
   const ref = useRef(null);
-  const [fading, setFading] = useState(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = ref.current;
     if (!node) return;
     const selector = `[data-entrance-target="${typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(targetKey) : targetKey}"]`;
-    requestAnimationFrame(() => {
-      const target = document.querySelector(selector);
-      if (!target) return;
-      const r = target.getBoundingClientRect();
-      node.style.left = `${r.left + r.width / 2}px`;
-      node.style.top = `${r.top - 8}px`;
-      node.style.opacity = '1';
-    });
-    const fadeTimer = setTimeout(() => setFading(true), 1600 - 250);
-    return () => clearTimeout(fadeTimer);
-  }, [targetKey]);
+    const target = document.querySelector(selector);
+    if (!target) return;
+    const r = target.getBoundingClientRect();
+    const half = node.getBoundingClientRect().width / 2;
+    node.style.left = `${Math.max(half + 16, Math.min(window.innerWidth - half - 16, r.left + r.width / 2))}px`;
+    node.style.top = `${Math.max(node.getBoundingClientRect().height + 16, r.top - 8)}px`;
+  }, [targetKey, elapsed]);
   return (
     <div
       ref={ref}
       style={{
         position: 'fixed',
         transform: 'translate(-50%, -100%)',
-        opacity: fading ? 0 : undefined,
-        transition: 'opacity 250ms steps(4, end)',
-        background: '#fff',
+        opacity: envelope(elapsed, 1600, 180, 250),
+        background: '#f5f0e4',
         border: '3px solid #0a0b11',
         padding: '6px 12px',
         fontFamily: "'Press Start 2P', monospace",
         fontSize: '0.55rem',
         color: '#0a0b11',
-        boxShadow: '4px 4px 0 #0a0b11',
+        boxShadow: '4px 4px 0 #b8922e',
         zIndex: 210,
         pointerEvents: 'none',
-        whiteSpace: 'nowrap',
+        maxWidth: 'calc(100vw - 32px)',
+        overflowWrap: 'anywhere',
       }}
     >
       merged to main
@@ -472,14 +473,16 @@ const styles = {
   },
   bubble: {
     position: 'absolute',
-    background: '#fff',
-    border: `4px solid ${DBB.outline}`,
+    background: '#f5f0e4',
+    border: '3px solid #2c3e50',
     padding: '10px 16px',
     fontSize: '0.65rem',
     fontFamily: pixel,
     color: DBB.outline,
-    boxShadow: `5px 5px 0 ${DBB.outline}`,
-    whiteSpace: 'nowrap',
+    boxShadow: '4px 4px 0 #b8922e',
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    lineHeight: 1.8,
     textAlign: 'center',
     zIndex: 200,
     pointerEvents: 'none',

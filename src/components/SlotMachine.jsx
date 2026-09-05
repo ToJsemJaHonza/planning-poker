@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import SlotReel from './SlotReel';
+import PixelSpark from './PixelSpark';
 import { precomputeReelOrders } from '../events/slotMachine';
 import { pixel } from './room/styles';
 
@@ -141,9 +142,11 @@ export default function SlotMachine({ phaseState, ceremony, players }) {
         {phaseState.isTripleJackpot && phaseState.matchConfirmed?.isTriple && (
           [0, 1, 2].map(ri => (
             SPARKLE_POSITIONS.map((pos, si) => (
-              <span
+              <PixelSpark
                 key={`sparkle-${ri}-${si}`}
                 className="sparkle-burst"
+                size={14}
+                color={GOLD_B}
                 style={{
                   position: 'absolute',
                   top: 70 + pos.y,
@@ -157,9 +160,7 @@ export default function SlotMachine({ phaseState, ceremony, players }) {
                   '--dy': `${pos.dy}px`,
                   animationDelay: `${si * 0.05}s`,
                 }}
-              >
-                {'\u2726'}
-              </span>
+              />
             ))
           ))
         )}

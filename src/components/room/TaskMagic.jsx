@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useAnimationFrame } from '../../engine/useFrameTicker';
 import { useMotionMode } from '../../engine/useMotionMode';
 import { TaskMagicContext, useTaskMagic } from './taskMagicContext';
+import { MOTION_PALETTE as color } from '../../engine/motionStyle';
 
 const DURATION = 1800;
 const noise = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
@@ -93,15 +94,25 @@ export default function TaskMagic({ taskList, children }) {
         const p = Math.min(1, t * 2);
         const cx = rect.x + rect.width / 2, cy = rect.y + rect.height / 2;
         ctx.globalAlpha = 1 - t;
-        ctx.strokeStyle = '#a66bff'; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.ellipse(cx, cy, Math.max(1, rect.width * p * 0.6), 8 + p * 32, 0, 0, Math.PI * 2); ctx.stroke();
+        // Stepped portal corners share the PM's pixel geometry; no neon oval.
+        ctx.strokeStyle = color.gold; ctx.lineWidth = 3;
+        const rx = Math.round((rect.width / 2 + 12) * p), ry = Math.round((rect.height / 2 + 10) * p);
+        const corner = Math.min(8, rx, ry);
+        ctx.beginPath();
+        ctx.moveTo(cx - rx + corner, cy - ry); ctx.lineTo(cx + rx - corner, cy - ry);
+        ctx.lineTo(cx + rx - corner, cy - ry + corner); ctx.lineTo(cx + rx, cy - ry + corner);
+        ctx.lineTo(cx + rx, cy + ry - corner); ctx.lineTo(cx + rx - corner, cy + ry - corner);
+        ctx.lineTo(cx + rx - corner, cy + ry); ctx.lineTo(cx - rx + corner, cy + ry);
+        ctx.lineTo(cx - rx + corner, cy + ry - corner); ctx.lineTo(cx - rx, cy + ry - corner);
+        ctx.lineTo(cx - rx, cy - ry + corner); ctx.lineTo(cx - rx + corner, cy - ry + corner);
+        ctx.closePath(); ctx.stroke();
         for (let i = 0; i < 80; i++) {
           const angle = noise(i) * Math.PI * 2;
           const radius = (1 - p) * (40 + noise(i + 81) * 90);
-          ctx.fillStyle = ['#a66bff', '#4bdddf', '#ffd76a'][i % 3];
+          ctx.fillStyle = [color.gold, color.blue, color.paper][i % 3];
           const x = rect.x + noise(i + 200) * rect.width + Math.cos(angle) * radius;
           const y = rect.y + noise(i + 300) * rect.height + Math.sin(angle) * radius;
-          ctx.fillRect(x, y, 2 + noise(i + 400) * 3, 3);
+          ctx.fillRect(Math.round(x), Math.round(y), i % 3 === 0 ? 4 : 2, i % 3 === 0 ? 4 : 2);
         }
       } else {
         for (const grain of grains) {
@@ -111,7 +122,8 @@ export default function TaskMagic({ taskList, children }) {
           const lift = -p * (25 + noise(grain.seed + 100) * 100) + Math.sin(p * 8 + grain.seed) * p * 15;
           ctx.globalAlpha = 1 - p;
           ctx.fillStyle = grain.color;
-          ctx.fillRect(rect.x + grain.x * rect.width / card.width + wind, rect.y + grain.y * rect.height / card.height + lift, grain.size * (1 - p * 0.6), grain.size * (1 - p * 0.6));
+          const size = Math.max(1, Math.round(grain.size * (1 - p * 0.6)));
+          ctx.fillRect(Math.round(rect.x + grain.x * rect.width / card.width + wind), Math.round(rect.y + grain.y * rect.height / card.height + lift), size, size);
         }
       }
     }
@@ -129,7 +141,7 @@ export default function TaskMagic({ taskList, children }) {
 export function InfinityGauntlet() {
   const { snapping } = useTaskMagic();
   if (!snapping) return null;
-  return <svg className="task-gauntlet-snap" data-infinity-gauntlet aria-hidden="true" width="36" height="44" viewBox="0 0 18 22" shapeRendering="crispEdges" style={{ position: 'absolute', left: 33, top: 13, filter: 'drop-shadow(0 0 6px #b46dff)' }}>
+  return <svg className="task-gauntlet-snap" data-infinity-gauntlet aria-hidden="true" width="36" height="44" viewBox="0 0 18 22" shapeRendering="crispEdges" style={{ position: 'absolute', left: 33, top: 13, filter: 'drop-shadow(2px 2px 0 #1a1a2e)' }}>
     <path fill="#7d4b22" d="M4 21V12H2V7H5V2H8V0H11V3H14V6H17V14H14V21Z" />
     <path fill="#eebd46" d="M5 20V11H3V8H6V3H8V7H10V2H12V8H15V13H12V20Z" />
     <path fill="#ffe49b" d="M6 13H12V17H6ZM6 4H7V9H6ZM10 3H11V8H10Z" />
