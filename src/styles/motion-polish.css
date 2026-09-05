@@ -7,30 +7,6 @@
   --motion-paper: #f5f0e4;
   --motion-ease: cubic-bezier(.22, .68, .28, 1);
 }
-.pixel-special-overlay {
-  position: fixed; inset: 0; z-index: 200; pointer-events: none;
-  display: grid; place-items: center; padding: 24px;
-  background: rgba(26, 26, 46, .64);
-}
-.pixel-special-panel {
-  position: relative; width: min(460px, 100%); padding: 24px 20px;
-  background: var(--motion-navy); border: 4px solid var(--motion-gold);
-  box-shadow: 8px 8px 0 var(--motion-ink), inset 0 0 0 4px #34495e;
-  color: var(--motion-paper); text-align: center;
-}
-.pixel-special-eyebrow { display: flex; justify-content: center; align-items: center; gap: 14px; font-size: .45rem; letter-spacing: 2px; color: #f5c542; }
-.pixel-special-title { margin: 18px 0 22px; font-size: clamp(.85rem, 3.6vw, 1.35rem); line-height: 1.6; text-shadow: 3px 3px 0 #1a1a2e; }
-.pixel-special-cards { display: flex; justify-content: center; align-items: center; gap: 18px; }
-.pixel-special-card {
-  width: 100px; height: 116px; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 18px;
-  border: 3px solid #f5f0e4; box-shadow: 5px 5px 0 #1a1a2e;
-  font-size: 1.4rem; background: #2980b9;
-}
-.pixel-special-card--be { background: #356b5b; }
-.pixel-special-card span { font-size: .38rem; }
-.pixel-special-caption { margin-top: 24px; font-size: .43rem; line-height: 1.9; color: #bdcbd3; }
-
 [data-character-sprite]::before {
   content: ''; position: absolute; left: 11px; top: 68px;
   width: 28px; height: 4px; background: #1a1a2e; opacity: .16;
@@ -100,10 +76,4 @@
 @keyframes revealNumberPop {
   0% { opacity: 0; transform: translateY(12px); }
   12%, 100% { opacity: .15; transform: translateY(0); }
-}
-@media (max-width: 480px) {
-  .pixel-special-panel { padding: 20px 12px; }
-  .pixel-special-cards { gap: 12px; }
-  .pixel-special-card { width: 82px; height: 100px; }
-  .pixel-special-eyebrow { font-size: .36rem; gap: 8px; letter-spacing: 1px; }
 }

@@ -5,6 +5,7 @@ import Room from './components/Room';
 import FigureGallery from './components/FigureGallery';
 import ErrorBoundary from './components/ErrorBoundary';
 import { readPreference } from './engine/storage';
+import { getSessionIdentity } from './sessionIdentity';
 
 // Room codes are strictly 6 uppercase alphanumerics (see generateRoomCode).
 // We validate here to prevent a crafted `?room=FOO/bar/..` from being
@@ -23,33 +24,13 @@ function getGalleryMode() {
   return new URLSearchParams(window.location.search).has('gallery');
 }
 
-// Per-tab stable player identity. Two browser tabs with the same display
-// name must NOT collide inside a room — so we key each Firebase player
-// entry on an ID stored in sessionStorage (fresh per tab, preserved across
-// refreshes). localStorage would share the ID across tabs and reintroduce
-// the duplicate-name bug this was built to fix.
-function getOrCreatePlayerId() {
-  try {
-    const existing = sessionStorage.getItem('poker-player-id');
-    if (existing) return existing;
-    const id = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
-      ? crypto.randomUUID()
-      : 'p_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-    sessionStorage.setItem('poker-player-id', id);
-    return id;
-  } catch {
-    // sessionStorage unavailable (e.g. incognito with storage disabled).
-    // Fall back to an in-memory ID for this tab — still gives duplicate
-    // names independent slots within a single page lifecycle.
-    return 'p_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-  }
-}
-
+// Connection IDs are unique; the browser identity links duplicate tabs.
 export default function App() {
   const [playerName, setPlayerName] = useState(
     () => readPreference('poker-player-name')
   );
-  const [playerId] = useState(getOrCreatePlayerId);
+  const [sessionIdentity] = useState(getSessionIdentity);
+  const { playerId } = sessionIdentity;
   const [roomCode, setRoomCode] = useState(() => getRoomFromURL());
   // Invitations always join as players. On refresh, Room restores the role
   // from this session's roster entry instead of another room's preference.
@@ -102,6 +83,7 @@ export default function App() {
         playerName={playerName}
         role={role}
         initialTasks={initialTasks}
+        sessionIdentity={sessionIdentity}
       />
     );
   }

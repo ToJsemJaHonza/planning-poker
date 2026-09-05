@@ -116,7 +116,7 @@ export function usePmDirector({
     pmCharRef.current = stage.ensure({
       id: 'pm',
       sprite: 'pm',
-      position: { x: minX, y: getGroundY() },
+      position: { x: minX, y: stage.groundY ?? getGroundY() },
       facingLeft: false,
       pose: 'walk',
       zIndex: 50,

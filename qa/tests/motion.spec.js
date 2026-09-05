@@ -52,12 +52,14 @@ test('pixel events: mobile special round fits and animals keep stepping with CSS
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto('./?motion=none&count=6');
   await page.getByRole('button', { name: /Split/ }).click();
-  const panel = page.locator('.pixel-special-panel');
+  const panel = page.locator('[data-special-content]');
   await expect(panel).toBeVisible();
+  await expect(panel).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
   const bounds = await panel.boundingBox();
   expect(bounds.x).toBeGreaterThanOrEqual(0);
   expect(bounds.x + bounds.width).toBeLessThanOrEqual(320);
-  await expect(page.locator('.pixel-special-card--fe')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
+  await expect(panel.getByText('FE / BE', { exact: true })).toBeVisible();
+  await expect(page.locator('.pixel-special-panel')).toHaveCount(0);
   await page.screenshot({ path: info.outputPath('pixel-special-mobile.png') });
   await expect(panel).toHaveCount(0);
   await controls(page);

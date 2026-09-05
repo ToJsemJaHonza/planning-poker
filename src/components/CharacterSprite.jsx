@@ -50,6 +50,7 @@ function toPmModel(character) {
     bubbleOffset: (bubbleCenter - character.position.x) * (character.facingLeft ? -1 : 1),
     facingLeft: !!character.facingLeft,
     position: null,
+    hammer: character.hammer || null,
   };
 }
 
@@ -72,6 +73,7 @@ export default function CharacterSprite({ character }) {
       character.bubble?.text,
       character.bubble?.opacity,
       character.position.x,
+      character.hammer?.angle,
     ],
   );
 
@@ -84,7 +86,7 @@ export default function CharacterSprite({ character }) {
         position: 'fixed',
         left: 0,
         top: 0,
-        transform: `translate(${x}px, ${y}px)`,
+        transform: `translate(${x}px, ${y}px)${character.rotation ? ` rotate(${character.rotation}deg)` : ''}`,
         zIndex: zIndex ?? 50,
         visibility: hidden ? 'hidden' : 'visible',
         pointerEvents: 'none',

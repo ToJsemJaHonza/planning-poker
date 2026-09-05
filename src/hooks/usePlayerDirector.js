@@ -31,10 +31,9 @@ import { SPRITE_W } from '../engine/characterLayout';
 import { hashDir } from '../components/playerList.utils';
 import { buildVisibleRoster } from '../engine/visibleRoster';
 
-// Player-motion durations — deliberately slow so arrivals / departures
-// read as a proper entrance rather than a pop. 5× the old CSS-keyframe
-// pace (user feedback: "moc rychlé, zpomal je tak na 20 %").
-const JOIN_WALK_MS = 14000;
+// Fresh arrivals now move 50% faster: the former 14 s walk takes ~9.33 s.
+// Departure and reshuffle pacing remain unchanged.
+const JOIN_WALK_MS = Math.round(14000 / 1.5);
 const LEAVE_WALK_MS = 11000;
 const RESHUFFLE_MS = 500;           // short shift when the grid widens — stays snappy
 const LEADER_WALK_OFF_MS = 12500;   // outgoing leader walking off after coronation ends
@@ -244,7 +243,7 @@ export function usePlayerDirector({
       if (!currentSet.has(id)) {
         const charId = `player-${id}`;
         const char = stage.get(charId);
-        if (!char) continue;
+        if (!char || char.evictionControlled) continue;
         if (motionMode === 'reduced') { stage.remove(charId); continue; }
         const data = lastDataRef.current[id] || { name: id };
         // Outgoing leader → their walk-off is driven by the ceremony
@@ -263,15 +262,14 @@ export function usePlayerDirector({
     }
 
     // Reshuffle — grid width changed (new player, resize), active player
-    // slots moved. Walk at a constant ~100 px/s (same pace as the
-    // JOIN_WALK 14 s / ~1400 px screen) so tiny shifts are still brief
+    // slots moved. Keep their existing constant ~100 px/s pace so tiny shifts are still brief
     // but a wide resize reads as a real walk.
     const SPEED_MS_PER_PX = 10;
     for (let i = 0; i < sortedPlayers.length; i++) {
       const [id] = sortedPlayers[i];
       const charId = `player-${id}`;
       const char = stage.get(charId);
-      if (!char) continue;
+      if (!char || char.evictionControlled) continue;
       // Skip characters still walking in from offscreen; they'll land on
       // their up-to-date slot via the join walkTo above.
       const target = stage.getSlot(id) || slotCenter(i, sortedPlayers.length, vw);
@@ -326,6 +324,7 @@ export function usePlayerDirector({
       const currentSet = new Set(sortedPlayers.map(([id]) => id));
       const outgoingId = lastOutgoingLeaderIdRef.current;
       for (const char of stage.all()) {
+        if (char.evictionControlled) continue;
         if (char.sprite !== 'player') continue;
         const id = char.id.replace(/^player-/, '');
         if (currentSet.has(id)) continue;
@@ -370,7 +369,7 @@ export function usePlayerDirector({
 
     for (const [id, data] of sortedPlayers) {
       const char = stage.get(`player-${id}`);
-      if (!char) continue;
+      if (!char || char.evictionControlled) continue;
       const displayName = data?.name || id;
       const isHoldout = shameTimer?.holdoutId === id;
       const stressStage = isHoldout ? shameStage : 0;

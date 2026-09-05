@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { spriteToBoxShadow, PX, SPRITE_PIXEL_STYLE } from '../engine/sprite';
 import { usePmModel } from '../hooks/usePmModel';
+import PixelHammer from './PixelHammer';
 
 const _ = null;
 const O = '#222';     // outline (kept for sprite-edit symmetry)
@@ -140,6 +141,9 @@ export default function PmSprite({
     case 'think': shadow = st; break;
     default: shadow = model.walkFrame ? sw2 : sw1;
   }
+  // The pointer belongs to the casting pose. With a hammer, use the open
+  // walking palm instead, so he never holds two props in the same hand.
+  if (model.hammer) shadow = model.walkFrame ? sw2 : sw1;
 
   // --- CEREMONY MODE: position driven by parent ---
   // The crown is NOT rendered here anymore. It lives on <CrownStage>, which
@@ -161,9 +165,11 @@ export default function PmSprite({
         <div style={{ position: 'absolute', inset: 0 }}>
           <div style={{ ...SPRITE_PIXEL_STYLE, boxShadow: shadow }} />
         </div>
+        {model.hammer && <PixelHammer angle={model.hammer.angle} facingLeft={model.facingLeft} />}
         {model.showBubble && (
           <div style={{
             ...styles.crowningBubble,
+            bottom: model.hammer ? SPRITE_H + 100 : '100%',
             width: model.bubbleWidth || 'min(320px, calc(100vw - 24px))',
             left: `calc(50% + ${model.bubbleOffset || 0}px)`,
             opacity: model.bubbleOpacity ?? 1,
@@ -194,6 +200,7 @@ export default function PmSprite({
         transform: model.facingLeft ? 'scaleX(-1)' : 'scaleX(1)',
       }}>
         <div style={{ ...SPRITE_PIXEL_STYLE, boxShadow: shadow }} />
+        {model.hammer && <PixelHammer angle={model.hammer.angle} facingLeft={model.facingLeft} />}
         {model.showSparkles && SPARKLE_DIRS.map((d, i) => (
           <span key={i} style={{
             ...styles.sparkle,
